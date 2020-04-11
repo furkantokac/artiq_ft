@@ -7,9 +7,9 @@ edition = "2018"
 
 [features]
 target_zc706 = ["libboard_zynq/target_zc706", "libsupport_zynq/target_zc706"]
-target_cora_z7_10 = ["libboard_zynq/target_cora_z7_10", "libsupport_zynq/target_cora_z7_10"]
 default = ["target_zc706"]
 
 [dependencies]
 libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 libsupport_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
+libasync = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
