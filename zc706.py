@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import os
 
 from migen import *
 
@@ -18,7 +19,7 @@ class ZC706(SoCCore):
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        SoCCore.__init__(self, platform=platform)
+        SoCCore.__init__(self, platform=platform, ident="RTIO_ZC706")
 
         platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
         platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
@@ -67,7 +68,7 @@ def main():
         if action == "gateware":
             soc.build()
         elif action == "rustif":
-            write_csr_file(soc, "pl.rs")
+            write_csr_file(soc, os.path.join("runtime", "src", "pl.rs"))
         else:
             raise ValueError("invalid action", action)
 
