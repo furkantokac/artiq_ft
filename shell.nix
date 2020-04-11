@@ -11,12 +11,7 @@ let
     sha256 = "1hcqdz4w2vqb12rrqqcjbfs5s0w4qwjn7z45d1zh0fzncdcf6f7d";
     fetchSubmodules = true;
   };
-  zc706 = pkgs.fetchgit {
-    url = "https://git.m-labs.hk/M-Labs/zc706.git";
-    rev = "526cfe7577c189687ed1fdca512120dd1460bb80";
-    sha256 = "1gsnggp4237mn9pl6xsvfj859akbsw9w0vmc1i29famz1zzwly76";
-  };
-  rustManifest = "${zc706}/channel-rust-nightly.toml";
+  rustManifest = ./channel-rust-nightly.toml;
 
   targets = [];
   rustChannelOfTargets = _channel: _date: targets:
@@ -49,7 +44,5 @@ in
       vivado
     ];
 
-    # Set Environment Variables
-    RUST_BACKTRACE = 1;
     XARGO_RUST_SRC = "${rustcSrc}/src";
   }
