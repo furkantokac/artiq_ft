@@ -15,6 +15,9 @@ from artiq.gateware.rtio.phy import ttl_simple
 class ZC706(SoCCore):
     def __init__(self):
         platform = zc706.Platform()
+        platform.toolchain.bitstream_commands.extend([
+            "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
+        ])
         SoCCore.__init__(self, platform=platform)
 
         platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
