@@ -12,6 +12,7 @@ default = ["target_zc706"]
 [dependencies]
 num-traits = { version = "0.2", default-features = false }
 num-derive = "0.3"
+cslice = "0.3"
 libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 libsupport_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 libasync = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }

@@ -13,6 +13,7 @@ use libsupport_zynq::ram;
 
 
 mod pl;
+mod rtio;
 mod network;
 
 fn identifier_read(buf: &mut [u8]) -> &str {

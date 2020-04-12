@@ -31,6 +31,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "036b035e9ebcd705affece16319223d19f229e2358be6e3b7b094e57193312e6"
 
 [[package]]
+name = "cslice"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f8cb7306107e4b10e64994de6d3274bd08996a7c1322a27b86482392f96be0a"
+
+[[package]]
 name = "dyld"
 version = "0.1.0"
 
@@ -154,6 +160,7 @@ checksum = "bd7a31eed1591dcbc95d92ad7161908e72f4677f8fabf2a32ca49b4237cbf211"
 name = "runtime"
 version = "0.1.0"
 dependencies = [
+ "cslice",
  "dyld",
  "libasync",
  "libboard_zynq",
