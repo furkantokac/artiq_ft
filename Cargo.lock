@@ -31,6 +31,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "036b035e9ebcd705affece16319223d19f229e2358be6e3b7b094e57193312e6"
 
 [[package]]
+name = "dyld"
+version = "0.0.0"
+
+[[package]]
 name = "libasync"
 version = "0.0.0"
 source = "git+https://git.m-labs.hk/M-Labs/zc706.git#526cfe7577c189687ed1fdca512120dd1460bb80"
@@ -150,6 +154,7 @@ checksum = "bd7a31eed1591dcbc95d92ad7161908e72f4677f8fabf2a32ca49b4237cbf211"
 name = "runtime"
 version = "0.1.0"
 dependencies = [
+ "dyld",
  "libasync",
  "libboard_zynq",
  "libsupport_zynq",
