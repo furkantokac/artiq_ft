@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 set -e
-set -m
 
 TARGET_HOST=$1
 
