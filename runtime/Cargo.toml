@@ -2,7 +2,7 @@
 name = "runtime"
 description = "ARTIQ runtime on Zynq"
 version = "0.1.0"
-authors = ["Sebastien Bourdeauducq <sb@m-labs.hk>"]
+authors = ["M-Labs"]
 edition = "2018"
 
 [features]
