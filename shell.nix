@@ -36,12 +36,12 @@ in
       rustcSrc
       pkgs.cargo-xbuild
 
-      pkgs.pkgsCross.armv7l-hf-multiplatform.buildPackages.gcc
       pkgs.openocd
       pkgs.gdb
 
       (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
       vivado
+      artiqpkgs.binutils-arm
     ];
 
     XARGO_RUST_SRC = "${rustcSrc}/src";
