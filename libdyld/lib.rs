@@ -151,7 +151,7 @@ impl<'a> Library<'a> {
         Ok(())
     }
 
-    fn resolve_rela(&self, rela: &Elf32_Rela, resolve: &Fn(&[u8]) -> Option<Elf32_Word>)
+    fn resolve_rela(&self, rela: &Elf32_Rela, resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>)
             -> Result<(), Error<'a>> {
         let sym;
         if ELF32_R_SYM(rela.r_info) == 0 {
@@ -195,7 +195,7 @@ impl<'a> Library<'a> {
         self.update_rela(rela, value)
     }
 
-    pub fn load(data: &[u8], image: &'a mut [u8], resolve: &Fn(&[u8]) -> Option<Elf32_Word>)
+    pub fn load(data: &[u8], image: &'a mut [u8], resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>)
             -> Result<Library<'a>, Error<'a>> {
         #![allow(unused_assignments)]
 
@@ -208,13 +208,8 @@ impl<'a> Library<'a> {
             /* ABI version */ 0, /* padding */ 0, 0, 0, 0, 0, 0, 0
         ];
 
-        #[cfg(target_arch = "or1k")]
-        const ARCH: u16 = EM_OPENRISC;
-        #[cfg(not(target_arch = "or1k"))]
-        const ARCH: u16 = EM_NONE;
-
-        if ehdr.e_ident != IDENT || ehdr.e_type != ET_DYN || ehdr.e_machine != ARCH {
-            return Err("not a shared library for current architecture")?
+        if ehdr.e_ident != IDENT || ehdr.e_type != ET_DYN || ehdr.e_machine != EM_OPENRISC {
+            return Err("not a shared library for a supported architecture")?
         }
 
         let mut dyn_off = None;
