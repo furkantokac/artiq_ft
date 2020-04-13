@@ -15,7 +15,7 @@ use libboard_zynq::{
     },
 };
 use libsupport_zynq::alloc::{vec, vec::Vec};
-
+use libcortex_a9::sync_channel;
 use libasync::smoltcp::{Sockets, TcpStream};
 
 
@@ -118,7 +118,7 @@ async fn handle_connection(stream: TcpStream) -> Result<()> {
 const HWADDR: [u8; 6] = [0, 0x23, 0xab, 0xad, 0x1d, 0xea];
 const IPADDR: IpAddress = IpAddress::Ipv4(Ipv4Address([192, 168, 1, 52]));
 
-pub fn network_main() {
+pub fn main(mut sc_tx: sync_channel::Sender<usize>, mut sc_rx: sync_channel::Receiver<usize>) {
     let eth = zynq::eth::Eth::default(HWADDR.clone());
     const RX_LEN: usize = 8;
     let mut rx_descs = (0..RX_LEN)
