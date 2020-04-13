@@ -1,5 +1,7 @@
 use core::{mem::transmute, task::Poll};
 use core::fmt;
+use core::cmp::min;
+use core::cell::RefCell;
 
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -17,6 +19,8 @@ use libboard_zynq::{
 use libsupport_zynq::alloc::{vec, vec::Vec};
 use libcortex_a9::sync_channel;
 use libasync::smoltcp::{Sockets, TcpStream};
+
+use crate::kernel;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,14 +65,57 @@ async fn expect(stream: &TcpStream, pattern: &[u8]) -> Result<()> {
     }).await?
 }
 
-async fn read_u8(stream: &TcpStream) -> Result<u8> {
+async fn read_i8(stream: &TcpStream) -> Result<i8> {
     Ok(stream.recv(|buf| {
         if buf.len() >= 1 {
-            Poll::Ready((1, buf[0]))
+            Poll::Ready((1, buf[0] as i8))
         } else {
             Poll::Pending
         }
     }).await?)
+}
+
+async fn read_i32(stream: &TcpStream) -> Result<i32> {
+    Ok(stream.recv(|buf| {
+        if buf.len() >= 4 {
+            let value =
+                  ((buf[0] as i32) << 24)
+                | ((buf[1] as i32) << 16)
+                | ((buf[2] as i32) << 8)
+                |  (buf[3] as i32);
+            Poll::Ready((4, value))
+        } else {
+            Poll::Pending
+        }
+    }).await?)
+}
+
+async fn read_drain(stream: &TcpStream, total: usize) -> Result<()> {
+    let mut done = 0;
+    while done < total {
+        let count = stream.recv(|buf| {
+            let count = min(total - done, buf.len());
+            Poll::Ready((count, count))
+        }).await?;
+        done += count;
+    }
+    Ok(())
+}
+
+async fn read_chunk(stream: &TcpStream, destination: &mut [u8]) -> Result<()> {
+    let total = destination.len();
+    let destination = RefCell::new(destination);
+    let mut done = 0;
+    while done < total {
+        let count = stream.recv(|buf| {
+            let mut destination = destination.borrow_mut();
+            let count = min(total - done, buf.len());
+            destination[done..done + count].copy_from_slice(&buf[..count]);
+            Poll::Ready((count, count))
+        }).await?;
+        done += count;
+    }
+    Ok(())
 }
 
 #[derive(FromPrimitive, ToPrimitive)]
@@ -102,13 +149,25 @@ async fn handle_connection(stream: TcpStream) -> Result<()> {
     expect(&stream, b"ARTIQ coredev\n").await?;
     loop {
         expect(&stream, &[0x5a, 0x5a, 0x5a, 0x5a]).await?;
-        let request: Request = FromPrimitive::from_u8(read_u8(&stream).await?)
+        let request: Request = FromPrimitive::from_i8(read_i8(&stream).await?)
             .ok_or(Error::UnrecognizedPacket)?;
         match request {
             Request::SystemInfo => {
                 send_header(&stream, Reply::SystemInfo).await?;
                 stream.send("ARZQ".bytes()).await?;
             },
+            Request::LoadKernel => {
+                let length = read_i32(&stream).await? as usize;
+                let mut kernel_buffer = unsafe { &mut kernel::KERNEL_BUFFER };
+                if kernel_buffer.len() < length {
+                    read_drain(&stream, length).await?;
+                    send_header(&stream, Reply::LoadFailed).await?;
+                } else {
+                    read_chunk(&stream, &mut kernel_buffer[..length]).await?;
+                    send_header(&stream, Reply::LoadCompleted).await?;
+                }
+                println!("length={}, {:?}", length, &kernel_buffer[..256]);
+            }
             _ => return Err(Error::UnrecognizedPacket)
         }
     }
