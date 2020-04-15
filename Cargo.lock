@@ -26,9 +26,9 @@ checksum = "08c48aae112d48ed9f069b33538ea9e3e90aa263cfa3d1c24309612b1f7472de"
 
 [[package]]
 name = "compiler_builtins"
-version = "0.1.26"
+version = "0.1.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "036b035e9ebcd705affece16319223d19f229e2358be6e3b7b094e57193312e6"
+checksum = "38f18416546abfbf8d801c555a0e99524453e7214f9cc9107ad49de3d5948ccc"
 
 [[package]]
 name = "cslice"
@@ -43,7 +43,7 @@ version = "0.1.0"
 [[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#b26327e474ef224c91f704b7f513a1495a981f87"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#be35be8d381449149040938f24c124861da9860e"
 dependencies = [
  "libcortex_a9",
  "pin-utils",
@@ -53,7 +53,7 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#b26327e474ef224c91f704b7f513a1495a981f87"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#be35be8d381449149040938f24c124861da9860e"
 dependencies = [
  "bit_field",
  "libcortex_a9",
@@ -65,7 +65,7 @@ dependencies = [
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#b26327e474ef224c91f704b7f513a1495a981f87"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#be35be8d381449149040938f24c124861da9860e"
 dependencies = [
  "bit_field",
  "libregister",
@@ -74,7 +74,7 @@ dependencies = [
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#b26327e474ef224c91f704b7f513a1495a981f87"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#be35be8d381449149040938f24c124861da9860e"
 dependencies = [
  "bit_field",
  "vcell",
@@ -84,7 +84,7 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#b26327e474ef224c91f704b7f513a1495a981f87"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#be35be8d381449149040938f24c124861da9860e"
 dependencies = [
  "compiler_builtins",
  "libboard_zynq",
