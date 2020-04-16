@@ -2,6 +2,7 @@ use core::{mem::transmute, task::Poll};
 use core::fmt;
 use core::cmp::min;
 use core::cell::RefCell;
+use alloc::rc::Rc;
 
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -21,6 +22,7 @@ use libcortex_a9::sync_channel;
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
 
 use crate::kernel;
+use crate::control::KernelControl;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,7 +143,7 @@ async fn send_header(stream: &TcpStream, reply: Reply) -> Result<()> {
     Ok(())
 }
 
-async fn handle_connection(stream: TcpStream) -> Result<()> {
+async fn handle_connection(stream: TcpStream, control: Rc<RefCell<Option<KernelControl>>>) -> Result<()> {
     expect(&stream, b"ARTIQ coredev\n").await?;
     loop {
         expect(&stream, &[0x5a, 0x5a, 0x5a, 0x5a]).await?;
@@ -163,6 +165,14 @@ async fn handle_connection(stream: TcpStream) -> Result<()> {
                     send_header(&stream, Reply::LoadCompleted).await?;
                 }
                 println!("length={}, {:?}", length, &kernel_buffer[..256]);
+
+                // TODO: dyld
+
+                control.borrow_mut()
+                    .take()
+                    .map(|control| control.reset());
+
+                *control.borrow_mut() = Some(KernelControl::start(8192));
             }
             _ => return Err(Error::UnrecognizedPacket)
         }
@@ -173,7 +183,7 @@ async fn handle_connection(stream: TcpStream) -> Result<()> {
 const HWADDR: [u8; 6] = [0, 0x23, 0xab, 0xad, 0x1d, 0xea];
 const IPADDR: IpAddress = IpAddress::Ipv4(Ipv4Address([192, 168, 1, 52]));
 
-pub fn main(mut sc_tx: sync_channel::Sender<usize>, mut sc_rx: sync_channel::Receiver<usize>) {
+pub fn main() {
     let eth = zynq::eth::Eth::default(HWADDR.clone());
     const RX_LEN: usize = 8;
     let mut rx_descs = (0..RX_LEN)
@@ -209,11 +219,14 @@ pub fn main(mut sc_tx: sync_channel::Sender<usize>, mut sc_rx: sync_channel::Rec
 
     Sockets::init(32);
 
-    task::spawn(async {
+    let control: Rc<RefCell<Option<KernelControl>>> = Rc::new(RefCell::new(None));
+
+    task::spawn(async move {
         loop {
             while let stream = TcpStream::accept(1381, 2048, 2048).await.unwrap() {
+                let control = control.clone();
                 task::spawn(async {
-                    let _ = handle_connection(stream)
+                    let _ = handle_connection(stream, control)
                         .await
                         .map_err(|e| println!("Connection: {}", e));
                 });

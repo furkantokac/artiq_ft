@@ -16,6 +16,7 @@ mod comms;
 mod pl;
 mod rtio;
 mod kernel;
+mod control;
 
 
 fn identifier_read(buf: &mut [u8]) -> &str {
@@ -50,15 +51,7 @@ pub fn main_core0() {
 
     println!("Detected gateware: {}", identifier_read(&mut [0; 64]));
 
-    let core1_stack = unsafe { &mut STACK_CORE1[..] };
-    let core1 = boot::Core1::start(core1_stack);
-
-    let (mut core0_tx, core1_rx) = sync_channel(4);
-    let (core1_tx, mut core0_rx) = sync_channel(4);
-    *CHANNEL_0TO1.lock() = Some(core1_rx);
-    *CHANNEL_1TO0.lock() = Some(core1_tx);
-
-    comms::main(core0_tx, core0_rx);
+    comms::main();
 }
 
 #[no_mangle]
