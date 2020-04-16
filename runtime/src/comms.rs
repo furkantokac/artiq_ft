@@ -18,7 +18,7 @@ use libboard_zynq::{
 };
 use libsupport_zynq::alloc::{vec, vec::Vec};
 use libcortex_a9::sync_channel;
-use libasync::smoltcp::{Sockets, TcpStream};
+use libasync::{smoltcp::{Sockets, TcpStream}, task};
 
 use crate::kernel;
 
@@ -209,10 +209,16 @@ pub fn main(mut sc_tx: sync_channel::Sender<usize>, mut sc_rx: sync_channel::Rec
 
     Sockets::init(32);
 
-    TcpStream::listen(1381, 2048, 2048, 8, |stream| async {
-        let _ = handle_connection(stream)
-            .await
-            .map_err(|e| println!("Connection: {}", e));
+    task::spawn(async {
+        loop {
+            while let stream = TcpStream::accept(1381, 2048, 2048).await.unwrap() {
+                task::spawn(async {
+                    let _ = handle_connection(stream)
+                        .await
+                        .map_err(|e| println!("Connection: {}", e));
+                });
+            }
+        }
     });
 
     let mut time = 0u32;
