@@ -202,14 +202,26 @@ impl<'a> Library<'a> {
         let ehdr = read_unaligned::<Elf32_Ehdr>(data, 0)
                                   .map_err(|()| "cannot read ELF header")?;
 
-        const IDENT: [u8; EI_NIDENT] = [
+        const IDENT_OPENRISC: [u8; EI_NIDENT] = [
             ELFMAG0,    ELFMAG1,     ELFMAG2,    ELFMAG3,
             ELFCLASS32, ELFDATA2MSB, EV_CURRENT, ELFOSABI_NONE,
             /* ABI version */ 0, /* padding */ 0, 0, 0, 0, 0, 0, 0
         ];
+        const IDENT_ARM: [u8; EI_NIDENT] = [
+            ELFMAG0,    ELFMAG1,     ELFMAG2,    ELFMAG3,
+            ELFCLASS32, ELFDATA2LSB, EV_CURRENT, ELFOSABI_NONE,
+            /* ABI version */ 0, /* padding */ 0, 0, 0, 0, 0, 0, 0
+        ];
 
-        if ehdr.e_ident != IDENT || ehdr.e_type != ET_DYN || ehdr.e_machine != EM_OPENRISC {
-            return Err("not a shared library for a supported architecture")?
+        if ehdr.e_type != ET_DYN {
+            return Err("not a shared library")?
+        }
+
+        if !((ehdr.e_ident == IDENT_OPENRISC && ehdr.e_machine == EM_OPENRISC)
+                || ((ehdr.e_ident == IDENT_ARM && ehdr.e_machine == EM_ARM))) {
+            println!("e_type={}", ehdr.e_type);
+            println!("e_machine={}", ehdr.e_machine);
+            return Err("not for a supported architecture")?
         }
 
         let mut dyn_off = None;
