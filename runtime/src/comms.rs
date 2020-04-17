@@ -154,26 +154,21 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
             },
             Request::LoadKernel => {
                 let length = read_i32(&stream).await? as usize;
-                let kernel_buffer = unsafe { &mut kernel::KERNEL_BUFFER };
-                if kernel_buffer.len() < length {
+                if length < 1024*1024 {
+                    let mut buffer = vec![0; length];
+                    read_chunk(&stream, &mut buffer).await?;
+
+                    let mut control = control.borrow_mut();
+                    control.restart();
+                    control.tx.async_send(kernel::Message::LoadRequest).await;
+                    let reply = control.rx.async_recv().await;
+                    println!("core0 received: {:?}", reply);
+
+                    send_header(&stream, Reply::LoadCompleted).await?;
+                } else {
                     read_drain(&stream, length).await?;
                     send_header(&stream, Reply::LoadFailed).await?;
-                } else {
-                    read_chunk(&stream, &mut kernel_buffer[..length]).await?;
-                    send_header(&stream, Reply::LoadCompleted).await?;
                 }
-                println!("length={}, {:?}", length, &kernel_buffer[..256]);
-
-                let mut control = control.borrow_mut();
-                control.restart();
-                for i in 0..10 {
-                    control.tx.async_send(i).await;
-                    let j = control.rx.async_recv().await;
-                    println!("{} -> {}", i, j);
-                }
-
-                // TODO: dyld
-
             }
             _ => return Err(Error::UnrecognizedPacket)
         }
