@@ -134,7 +134,8 @@ impl<'a> Library<'a> {
     pub unsafe fn rebind(&self, name: &[u8], addr: Elf32_Word) -> Result<(), Error<'a>> {
         for rela in self.pltrel.iter() {
             match ELF32_R_TYPE(rela.r_info) {
-                R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT => {
+                R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT |
+                R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT => {
                     let sym = self.symtab.get(ELF32_R_SYM(rela.r_info) as usize)
                                          .ok_or("symbol out of bounds of symbol table")?;
                     let sym_name = self.name_starting_at(sym.st_name as usize)?;
@@ -163,13 +164,14 @@ impl<'a> Library<'a> {
 
         let value;
         match ELF32_R_TYPE(rela.r_info) {
-            R_OR1K_NONE =>
+            R_OR1K_NONE | R_ARM_NONE =>
                 return Ok(()),
 
-            R_OR1K_RELATIVE =>
+            R_OR1K_RELATIVE | R_ARM_RELATIVE =>
                 value = self.image_off + rela.r_addend as Elf32_Word,
 
-            R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT => {
+            R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT |
+            R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT => {
                 let sym = sym.ok_or("relocation requires an associated symbol")?;
                 let sym_name = self.name_starting_at(sym.st_name as usize)?;
 
@@ -189,7 +191,8 @@ impl<'a> Library<'a> {
                 }
             }
 
-            _ => return Err("unsupported relocation type")?
+            _ =>
+                return Err("unsupported relocation type")?,
         }
 
         self.update_rela(rela, value)
