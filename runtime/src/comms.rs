@@ -18,11 +18,9 @@ use libboard_zynq::{
     },
 };
 use libsupport_zynq::alloc::{vec, vec::Vec};
-use libcortex_a9::sync_channel;
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
 
 use crate::kernel;
-use crate::control::KernelControl;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -143,7 +141,7 @@ async fn send_header(stream: &TcpStream, reply: Reply) -> Result<()> {
     Ok(())
 }
 
-async fn handle_connection(stream: TcpStream, control: Rc<RefCell<Option<KernelControl>>>) -> Result<()> {
+async fn handle_connection(stream: TcpStream, control: Rc<RefCell<Option<kernel::Control>>>) -> Result<()> {
     expect(&stream, b"ARTIQ coredev\n").await?;
     loop {
         expect(&stream, &[0x5a, 0x5a, 0x5a, 0x5a]).await?;
@@ -172,7 +170,7 @@ async fn handle_connection(stream: TcpStream, control: Rc<RefCell<Option<KernelC
                     .take()
                     .map(|control| control.reset());
 
-                *control.borrow_mut() = Some(KernelControl::start(8192));
+                *control.borrow_mut() = Some(kernel::Control::start(8192));
             }
             _ => return Err(Error::UnrecognizedPacket)
         }
@@ -219,7 +217,7 @@ pub fn main() {
 
     Sockets::init(32);
 
-    let control: Rc<RefCell<Option<KernelControl>>> = Rc::new(RefCell::new(None));
+    let control: Rc<RefCell<Option<kernel::Control>>> = Rc::new(RefCell::new(None));
 
     task::spawn(async move {
         loop {

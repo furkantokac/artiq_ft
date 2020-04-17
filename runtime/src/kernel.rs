@@ -1,11 +1,63 @@
-use libcortex_a9::sync_channel;
+use alloc::{vec, vec::Vec};
+use libcortex_a9::{mutex::Mutex, sync_channel::{self, sync_channel}};
+use libboard_zynq::println;
+use libsupport_zynq::boot::Core1;
+
+static CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<usize>>> = Mutex::new(None);
+static CHANNEL_1TO0: Mutex<Option<sync_channel::Sender<usize>>> = Mutex::new(None);
+
+pub struct Control {
+    core1: Core1<Vec<u32>>,
+    pub tx: sync_channel::Sender<usize>,
+    pub rx: sync_channel::Receiver<usize>,
+}
+
+impl Control {
+    pub fn start(stack_size: usize) -> Self {
+        let stack = vec![0; stack_size / 4];
+        let core1 = Core1::start(stack);
+
+        let (core0_tx, core1_rx) = sync_channel(4);
+        let (core1_tx, core0_rx) = sync_channel(4);
+        *CHANNEL_0TO1.lock() = Some(core1_rx);
+        *CHANNEL_1TO0.lock() = Some(core1_tx);
+
+        Control {
+            core1,
+            tx: core0_tx,
+            rx: core0_rx,
+        }
+    }
+
+    pub fn reset(self) {
+        *CHANNEL_0TO1.lock() = None;
+        *CHANNEL_1TO0.lock() = None;
+
+        self.core1.reset();
+    }
+}
 
 pub static mut KERNEL_BUFFER: [u8; 16384] = [0; 16384];
 
-pub fn main(mut sc_tx: sync_channel::Sender<usize>, mut sc_rx: sync_channel::Receiver<usize>) {
-    for i in sc_rx {
-        sc_tx.send(*i * *i);
+#[no_mangle]
+pub fn main_core1() {
+    println!("Core1 started");
+
+    let mut core1_tx = None;
+    while core1_tx.is_none() {
+        core1_tx = CHANNEL_1TO0.lock().take();
+    }
+    let mut core1_tx = core1_tx.unwrap();
+
+    let mut core1_rx = None;
+    while core1_rx.is_none() {
+        core1_rx = CHANNEL_0TO1.lock().take();
+    }
+    let core1_rx = core1_rx.unwrap();
+
+    for i in core1_rx {
+        core1_tx.send(*i * *i);
     }
 
-	loop {}
+    loop {}
 }

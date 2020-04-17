@@ -9,14 +9,12 @@ use libboard_zynq::{
     println,
     self as zynq, clocks::Clocks, clocks::source::{ClockSource, ArmPll, IoPll},
 };
-use libsupport_zynq::{ram, boot};
-use libcortex_a9::{mutex::Mutex, sync_channel::{self, sync_channel}};
+use libsupport_zynq::ram;
 
 mod comms;
 mod pl;
 mod rtio;
 mod kernel;
-mod control;
 
 
 fn identifier_read(buf: &mut [u8]) -> &str {
@@ -31,10 +29,6 @@ fn identifier_read(buf: &mut [u8]) -> &str {
         str::from_utf8_unchecked(&buf[..len as usize])
     }
 }
-
-static mut STACK_CORE1: [u32; 512] = [0; 512];
-static CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<usize>>> = Mutex::new(None);
-static CHANNEL_1TO0: Mutex<Option<sync_channel::Sender<usize>>> = Mutex::new(None);
 
 #[no_mangle]
 pub fn main_core0() {
@@ -52,23 +46,4 @@ pub fn main_core0() {
     println!("Detected gateware: {}", identifier_read(&mut [0; 64]));
 
     comms::main();
-}
-
-#[no_mangle]
-pub fn main_core1() {
-    println!("Core1 started");
-
-    let mut core1_tx = None;
-    while core1_tx.is_none() {
-        core1_tx = CHANNEL_1TO0.lock().take();
-    }
-    let mut core1_tx = core1_tx.unwrap();
-
-    let mut core1_rx = None;
-    while core1_rx.is_none() {
-        core1_rx = CHANNEL_0TO1.lock().take();
-    }
-    let mut core1_rx = core1_rx.unwrap();
-
-    kernel::main(core1_tx, core1_rx);
 }
