@@ -154,7 +154,7 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
             },
             Request::LoadKernel => {
                 let length = read_i32(&stream).await? as usize;
-                let mut kernel_buffer = unsafe { &mut kernel::KERNEL_BUFFER };
+                let kernel_buffer = unsafe { &mut kernel::KERNEL_BUFFER };
                 if kernel_buffer.len() < length {
                     read_drain(&stream, length).await?;
                     send_header(&stream, Reply::LoadFailed).await?;
@@ -164,13 +164,16 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
                 }
                 println!("length={}, {:?}", length, &kernel_buffer[..256]);
 
+                let mut control = control.borrow_mut();
+                control.restart();
+                for i in 0..10 {
+                    control.tx.async_send(i).await;
+                    let j = control.rx.async_recv().await;
+                    println!("{} -> {}", i, j);
+                }
+
                 // TODO: dyld
 
-                control.borrow_mut()
-                    .take()
-                    .map(|control| control.reset());
-
-                *control.borrow_mut() = Some(kernel::Control::start(8192));
             }
             _ => return Err(Error::UnrecognizedPacket)
         }
@@ -217,7 +220,7 @@ pub fn main() {
 
     Sockets::init(32);
 
-    let control: Rc<RefCell<Option<kernel::Control>>> = Rc::new(RefCell::new(None));
+    let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start(8192)));
 
     task::spawn(async move {
         loop {

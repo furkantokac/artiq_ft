@@ -29,11 +29,18 @@ impl Control {
         }
     }
 
-    pub fn reset(self) {
+    pub fn restart(&mut self) {
         *CHANNEL_0TO1.lock() = None;
         *CHANNEL_1TO0.lock() = None;
 
-        self.core1.reset();
+        self.core1.restart();
+
+        let (core0_tx, core1_rx) = sync_channel(4);
+        let (core1_tx, core0_rx) = sync_channel(4);
+        *CHANNEL_0TO1.lock() = Some(core1_rx);
+        *CHANNEL_1TO0.lock() = Some(core1_tx);
+        self.tx = core0_tx;
+        self.rx = core0_rx;
     }
 }
 
