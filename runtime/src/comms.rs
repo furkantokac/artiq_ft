@@ -141,7 +141,7 @@ async fn send_header(stream: &TcpStream, reply: Reply) -> Result<()> {
     Ok(())
 }
 
-async fn handle_connection(stream: TcpStream, control: Rc<RefCell<Option<kernel::Control>>>) -> Result<()> {
+async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Control>>) -> Result<()> {
     expect(&stream, b"ARTIQ coredev\n").await?;
     loop {
         expect(&stream, &[0x5a, 0x5a, 0x5a, 0x5a]).await?;
@@ -224,9 +224,11 @@ pub fn main() {
             while let stream = TcpStream::accept(1381, 2048, 2048).await.unwrap() {
                 let control = control.clone();
                 task::spawn(async {
-                    let _ = handle_connection(stream, control)
+                    let _ = handle_connection(&stream, control)
                         .await
                         .map_err(|e| println!("Connection: {}", e));
+                    let _ = stream.flush().await;
+                    let _ = stream.abort().await;
                 });
             }
         }
