@@ -1,16 +1,19 @@
-use alloc::{vec, vec::Vec};
+use alloc::{vec, vec::Vec, sync::Arc};
 
 use libcortex_a9::{mutex::Mutex, sync_channel::{self, sync_channel}};
 use libboard_zynq::println;
 use libsupport_zynq::boot::Core1;
 
 use dyld;
+use crate::pl::csr;
+use crate::rtio;
 
 
 #[derive(Debug)]
 pub enum Message {
-    LoadRequest,
-    LoadReply,
+    LoadRequest(Arc<Vec<u8>>),
+    LoadCompleted,
+    LoadFailed,
 }
 
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<Message>>> = Mutex::new(None);
@@ -54,6 +57,40 @@ impl Control {
     }
 }
 
+macro_rules! api {
+    ($i:ident) => ({
+        extern { static $i: u8; }
+        api!($i = &$i as *const _)
+    });
+    ($i:ident, $d:item) => ({
+        $d
+        api!($i = $i)
+    });
+    ($i:ident = $e:expr) => {
+        (stringify!($i), $e as *const ())
+    }
+}
+
+fn resolve(required: &[u8]) -> Option<u32> {
+    let api = &[
+        /* proxified syscalls */
+        api!(now = csr::rtio::NOW_HI_ADDR as *const _),
+
+        api!(rtio_init = rtio::init),
+        api!(rtio_get_destination_status = rtio::get_destination_status),
+        api!(rtio_get_counter = rtio::get_counter),
+        api!(rtio_output = rtio::output),
+        api!(rtio_output_wide = rtio::output_wide),
+        api!(rtio_input_timestamp = rtio::input_timestamp),
+        api!(rtio_input_data = rtio::input_data),
+        api!(rtio_input_timestamped_data = rtio::input_timestamped_data),
+    ];
+    api.iter()
+       .find(|&&(exported, _)| exported.as_bytes() == required)
+       .map(|&(_, ptr)| ptr as u32)
+}
+
+
 #[no_mangle]
 pub fn main_core1() {
     println!("Core1 started");
@@ -70,10 +107,20 @@ pub fn main_core1() {
     }
     let core1_rx = core1_rx.unwrap();
 
+    let mut image = vec![0; 32768];
     for message in core1_rx {
-        println!("core1 received: {:?}", message);
         match *message {
-            Message::LoadRequest => core1_tx.send(Message::LoadReply),
+            Message::LoadRequest(data) => {
+                match dyld::Library::load(&data, &mut image, &resolve) {
+                    Ok(library) => {
+                        core1_tx.send(Message::LoadCompleted)
+                    },
+                    Err(error) => {
+                        println!("failed to load shared library: {}", error);
+                        core1_tx.send(Message::LoadFailed)
+                    }
+                }
+            },
             _ => println!("Core1 received unexpected message: {:?}", message),
         }
     }

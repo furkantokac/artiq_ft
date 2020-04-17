@@ -19,6 +19,7 @@ use libboard_zynq::{
 };
 use libsupport_zynq::alloc::{vec, vec::Vec};
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
+use alloc::sync::Arc;
 
 use crate::kernel;
 
@@ -136,7 +137,22 @@ enum Reply {
     ClockFailure = 15,
 }
 
-async fn send_header(stream: &TcpStream, reply: Reply) -> Result<()> {
+async fn write_i32(stream: &TcpStream, value: i32) -> Result<()> {
+    stream.send([
+        (value >> 24) as u8,
+        (value >> 16) as u8,
+        (value >>  8) as u8,
+         value        as u8].iter().copied()).await?;
+    Ok(())
+}
+
+async fn write_chunk(stream: &TcpStream, chunk: &[u8]) -> Result<()> {
+    write_i32(stream, chunk.len() as i32).await?;
+    stream.send(chunk.iter().copied()).await?;
+    Ok(())
+}
+
+async fn write_header(stream: &TcpStream, reply: Reply) -> Result<()> {
     stream.send([0x5a, 0x5a, 0x5a, 0x5a, reply.to_u8().unwrap()].iter().copied()).await?;
     Ok(())
 }
@@ -149,7 +165,7 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
             .ok_or(Error::UnrecognizedPacket)?;
         match request {
             Request::SystemInfo => {
-                send_header(&stream, Reply::SystemInfo).await?;
+                write_header(&stream, Reply::SystemInfo).await?;
                 stream.send("ARZQ".bytes()).await?;
             },
             Request::LoadKernel => {
@@ -160,14 +176,24 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
 
                     let mut control = control.borrow_mut();
                     control.restart();
-                    control.tx.async_send(kernel::Message::LoadRequest).await;
+                    control.tx.async_send(kernel::Message::LoadRequest(Arc::new(buffer))).await;
                     let reply = control.rx.async_recv().await;
-                    println!("core0 received: {:?}", reply);
-
-                    send_header(&stream, Reply::LoadCompleted).await?;
+                    match *reply {
+                        kernel::Message::LoadCompleted => write_header(&stream, Reply::LoadCompleted).await?,
+                        kernel::Message::LoadFailed => {
+                            write_header(&stream, Reply::LoadFailed).await?;
+                            write_chunk(&stream, b"core1 failed to process data").await?;
+                        },
+                        _ => {
+                            println!("received unexpected message from core1: {:?}", reply);
+                            write_header(&stream, Reply::LoadFailed).await?;
+                            write_chunk(&stream, b"core1 sent unexpected reply").await?;
+                        }
+                    }
                 } else {
                     read_drain(&stream, length).await?;
-                    send_header(&stream, Reply::LoadFailed).await?;
+                    write_header(&stream, Reply::LoadFailed).await?;
+                    write_chunk(&stream, b"kernel is too large").await?;
                 }
             }
             _ => return Err(Error::UnrecognizedPacket)
