@@ -219,8 +219,6 @@ impl<'a> Library<'a> {
 
         if !((ehdr.e_ident == IDENT_OPENRISC && ehdr.e_machine == EM_OPENRISC)
                 || ((ehdr.e_ident == IDENT_ARM && ehdr.e_machine == EM_ARM))) {
-            println!("e_type={}", ehdr.e_type);
-            println!("e_machine={}", ehdr.e_machine);
             return Err("not for a supported architecture")?
         }
 
