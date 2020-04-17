@@ -245,16 +245,15 @@ pub fn main() {
 
     task::spawn(async move {
         loop {
-            while let stream = TcpStream::accept(1381, 2048, 2048).await.unwrap() {
-                let control = control.clone();
-                task::spawn(async {
-                    let _ = handle_connection(&stream, control)
-                        .await
-                        .map_err(|e| println!("Connection: {}", e));
-                    let _ = stream.flush().await;
-                    let _ = stream.abort().await;
-                });
-            }
+            let stream = TcpStream::accept(1381, 2048, 2048).await.unwrap();
+            let control = control.clone();
+            task::spawn(async {
+                let _ = handle_connection(&stream, control)
+                    .await
+                    .map_err(|e| println!("Connection: {}", e));
+                let _ = stream.flush().await;
+                let _ = stream.abort().await;
+            });
         }
     });
 
