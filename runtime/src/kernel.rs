@@ -107,7 +107,7 @@ pub fn main_core1() {
     }
     let core1_rx = core1_rx.unwrap();
 
-    let mut image = vec![0; 32768];
+    let mut image = vec![0; 1024*1024];
     for message in core1_rx {
         match *message {
             Message::LoadRequest(data) => {
