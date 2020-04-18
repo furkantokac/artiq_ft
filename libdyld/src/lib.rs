@@ -233,9 +233,11 @@ impl<'a> Library<'a> {
 
             match phdr.p_type {
                 PT_LOAD => {
-                    if (phdr.p_vaddr + phdr.p_filesz) as usize > image.len() ||
-                            (phdr.p_offset + phdr.p_filesz) as usize > data.len() {
-                        return Err("program header requests an out of bounds load")?
+                    if (phdr.p_vaddr + phdr.p_filesz) as usize > image.len() {
+                        return Err("program header requests an out of bounds load (in image)")?
+                    }
+                    if (phdr.p_offset + phdr.p_filesz) as usize > data.len() {
+                        return Err("program header requests an out of bounds load (in data)")?
                     }
                     let dst = image.get_mut(phdr.p_vaddr as usize..
                                             (phdr.p_vaddr + phdr.p_filesz) as usize)
