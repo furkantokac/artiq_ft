@@ -2,6 +2,7 @@
 #![no_main]
 
 extern crate alloc;
+extern crate log;
 
 use core::{cmp, str};
 
@@ -9,7 +10,7 @@ use libboard_zynq::{
     println,
     self as zynq, clocks::Clocks, clocks::source::{ClockSource, ArmPll, IoPll},
 };
-use libsupport_zynq::ram;
+use libsupport_zynq::{logger, ram};
 
 mod comms;
 mod pl;
@@ -33,6 +34,8 @@ fn identifier_read(buf: &mut [u8]) -> &str {
 #[no_mangle]
 pub fn main_core0() {
     println!("ARTIQ runtime starting...");
+    let _ = logger::init();
+    log::set_max_level(log::LevelFilter::Debug);
 
     const CPU_FREQ: u32 = 800_000_000;
 
