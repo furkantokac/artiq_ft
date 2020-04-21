@@ -25,6 +25,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08c48aae112d48ed9f069b33538ea9e3e90aa263cfa3d1c24309612b1f7472de"
 
 [[package]]
+name = "cfg-if"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
+
+[[package]]
 name = "compiler_builtins"
 version = "0.1.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -39,11 +45,14 @@ checksum = "0f8cb7306107e4b10e64994de6d3274bd08996a7c1322a27b86482392f96be0a"
 [[package]]
 name = "dyld"
 version = "0.1.0"
+dependencies = [
+ "libboard_zynq",
+]
 
 [[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#50667f0a13839bee519bd5e55dbad60a91b38a67"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#f8782f3f699ba0e749a639534553c9dc2599523e"
 dependencies = [
  "libcortex_a9",
  "pin-utils",
@@ -53,7 +62,7 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#50667f0a13839bee519bd5e55dbad60a91b38a67"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#f8782f3f699ba0e749a639534553c9dc2599523e"
 dependencies = [
  "bit_field",
  "libcortex_a9",
@@ -65,7 +74,7 @@ dependencies = [
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#50667f0a13839bee519bd5e55dbad60a91b38a67"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#f8782f3f699ba0e749a639534553c9dc2599523e"
 dependencies = [
  "bit_field",
  "libregister",
@@ -74,7 +83,7 @@ dependencies = [
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#50667f0a13839bee519bd5e55dbad60a91b38a67"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#f8782f3f699ba0e749a639534553c9dc2599523e"
 dependencies = [
  "bit_field",
  "vcell",
@@ -84,13 +93,14 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#50667f0a13839bee519bd5e55dbad60a91b38a67"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#f8782f3f699ba0e749a639534553c9dc2599523e"
 dependencies = [
  "compiler_builtins",
  "libboard_zynq",
  "libcortex_a9",
  "libregister",
  "linked_list_allocator",
+ "log",
  "r0",
 ]
 
@@ -99,6 +109,15 @@ name = "linked_list_allocator"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1070ea54beccbfd3a3987aca6440f94cc1e0b447c2d979d8c7f761e265417e4"
+
+[[package]]
+name = "log"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14b6052be84e6b71ab17edffc2eeabf5c2c3ae1fdb464aae35ac50c67a44e1f7"
+dependencies = [
+ "cfg-if",
+]
 
 [[package]]
 name = "managed"
