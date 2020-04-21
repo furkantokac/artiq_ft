@@ -5,6 +5,33 @@ use elf::*;
 
 pub mod elf;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Arch {
+    Arm,
+    OpenRisc,
+}
+
+impl Arch {
+    fn detect(ehdr: &Elf32_Ehdr) -> Option<Self> {
+        const IDENT_OPENRISC: [u8; EI_NIDENT] = [
+            ELFMAG0,    ELFMAG1,     ELFMAG2,    ELFMAG3,
+            ELFCLASS32, ELFDATA2MSB, EV_CURRENT, ELFOSABI_NONE,
+            /* ABI version */ 0, /* padding */ 0, 0, 0, 0, 0, 0, 0
+        ];
+        const IDENT_ARM: [u8; EI_NIDENT] = [
+            ELFMAG0,    ELFMAG1,     ELFMAG2,    ELFMAG3,
+            ELFCLASS32, ELFDATA2LSB, EV_CURRENT, ELFOSABI_NONE,
+            /* ABI version */ 0, /* padding */ 0, 0, 0, 0, 0, 0, 0
+        ];
+
+        match (ehdr.e_ident, ehdr.e_machine) {
+            (IDENT_ARM, EM_ARM) => Some(Arch::Arm),
+            (IDENT_OPENRISC, EM_OPENRISC) => Some(Arch::OpenRisc),
+            _ => None,
+        }
+    }
+}
+
 fn read_unaligned<T: Copy>(data: &[u8], offset: usize) -> Result<T, ()> {
     if data.len() < offset + mem::size_of::<T>() {
         Err(())
@@ -83,6 +110,7 @@ pub struct Library<'a> {
     pltrel:      &'a [Elf32_Rela],
     hash_bucket: &'a [Elf32_Word],
     hash_chain:  &'a [Elf32_Word],
+    arch:        Arch,
 }
 
 impl<'a> Library<'a> {
@@ -133,20 +161,24 @@ impl<'a> Library<'a> {
     // This is unsafe because it mutates global data (the PLT).
     pub unsafe fn rebind(&self, name: &[u8], addr: Elf32_Word) -> Result<(), Error<'a>> {
         for rela in self.pltrel.iter() {
-            match ELF32_R_TYPE(rela.r_info) {
-                R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT |
-                R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT => {
-                    let sym = self.symtab.get(ELF32_R_SYM(rela.r_info) as usize)
-                                         .ok_or("symbol out of bounds of symbol table")?;
-                    let sym_name = self.name_starting_at(sym.st_name as usize)?;
+            let is_rebind_type = match ELF32_R_TYPE(rela.r_info) {
+                R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT
+                    if self.arch == Arch::OpenRisc => true,
+                R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT
+                    if self.arch == Arch::Arm => true,
+                _ =>
+                    // No associated symbols for other relocation types.
+                    false,
+            };
 
-                    if sym_name == name {
-                        self.update_rela(rela, addr)?
-                    }
+            if is_rebind_type {
+                let sym = self.symtab.get(ELF32_R_SYM(rela.r_info) as usize)
+                    .ok_or("symbol out of bounds of symbol table")?;
+                let sym_name = self.name_starting_at(sym.st_name as usize)?;
+
+                if sym_name == name {
+                    self.update_rela(rela, addr)?
                 }
-
-                // No associated symbols for other relocation types.
-                _ => ()
             }
         }
         Ok(())
@@ -162,16 +194,39 @@ impl<'a> Library<'a> {
                                   .ok_or("symbol out of bounds of symbol table")?)
         }
 
+        enum RelaType {
+            None,
+            Relative,
+            Lookup,
+        };
+        let rela_type = match ELF32_R_TYPE(rela.r_info) {
+            R_OR1K_NONE if self.arch == Arch::OpenRisc =>
+                RelaType::None,
+            R_ARM_NONE if self.arch == Arch::Arm =>
+                RelaType::None,
+
+            R_OR1K_RELATIVE if self.arch == Arch::OpenRisc =>
+                RelaType::Relative,
+            R_ARM_RELATIVE if self.arch == Arch::Arm =>
+                RelaType::Relative,
+
+            R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT
+                if self.arch == Arch::OpenRisc => RelaType::Lookup,
+            R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT
+                if self.arch == Arch::Arm => RelaType::Lookup,
+
+            _ =>
+                return Err("unsupported relocation type")?,
+        };
         let value;
-        match ELF32_R_TYPE(rela.r_info) {
-            R_OR1K_NONE | R_ARM_NONE =>
+        match rela_type {
+            RelaType::None =>
                 return Ok(()),
 
-            R_OR1K_RELATIVE | R_ARM_RELATIVE =>
+            RelaType::Relative =>
                 value = self.image_off + rela.r_addend as Elf32_Word,
 
-            R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT |
-            R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT => {
+            RelaType::Lookup => {
                 let sym = sym.ok_or("relocation requires an associated symbol")?;
                 let sym_name = self.name_starting_at(sym.st_name as usize)?;
 
@@ -190,9 +245,6 @@ impl<'a> Library<'a> {
                     }
                 }
             }
-
-            _ =>
-                return Err("unsupported relocation type")?,
         }
 
         self.update_rela(rela, value)
@@ -205,25 +257,12 @@ impl<'a> Library<'a> {
         let ehdr = read_unaligned::<Elf32_Ehdr>(data, 0)
                                   .map_err(|()| "cannot read ELF header")?;
 
-        const IDENT_OPENRISC: [u8; EI_NIDENT] = [
-            ELFMAG0,    ELFMAG1,     ELFMAG2,    ELFMAG3,
-            ELFCLASS32, ELFDATA2MSB, EV_CURRENT, ELFOSABI_NONE,
-            /* ABI version */ 0, /* padding */ 0, 0, 0, 0, 0, 0, 0
-        ];
-        const IDENT_ARM: [u8; EI_NIDENT] = [
-            ELFMAG0,    ELFMAG1,     ELFMAG2,    ELFMAG3,
-            ELFCLASS32, ELFDATA2LSB, EV_CURRENT, ELFOSABI_NONE,
-            /* ABI version */ 0, /* padding */ 0, 0, 0, 0, 0, 0, 0
-        ];
-
         if ehdr.e_type != ET_DYN {
             return Err("not a shared library")?
         }
 
-        if !((ehdr.e_ident == IDENT_OPENRISC && ehdr.e_machine == EM_OPENRISC)
-                || ((ehdr.e_ident == IDENT_ARM && ehdr.e_machine == EM_ARM))) {
-            return Err("not for a supported architecture")?
-        }
+        let arch = Arch::detect(&ehdr)
+            .ok_or("not for a supported architecture")?;
 
         let mut dyn_off = None;
         for i in 0..ehdr.e_phnum {
@@ -324,11 +363,12 @@ impl<'a> Library<'a> {
         let library = Library {
             image_off:   image.as_ptr() as Elf32_Word,
             image_sz:    image.len(),
-            strtab:      strtab,
-            symtab:      symtab,
-            pltrel:      pltrel,
+            strtab,
+            symtab,
+            pltrel,
             hash_bucket: &hash[..nbucket],
             hash_chain:  &hash[nbucket..nbucket + nchain],
+            arch,
         };
 
         // If a borrow exists anywhere, the borrowed memory cannot be mutated except
