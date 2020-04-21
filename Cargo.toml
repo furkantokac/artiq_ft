@@ -1,5 +1,8 @@
 [workspace]
-members = ["runtime"]
+members = [
+  "libdyld",
+  "runtime"
+]
 
 [profile.dev]
 panic = "abort"
