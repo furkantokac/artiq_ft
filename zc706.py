@@ -46,6 +46,9 @@ class ZC706(SoCCore):
 
         self.comb += self.rtio.cri.connect(self.rtio_core.cri)
 
+        self.submodules.rtio_moninj = rtio.MonInj(rtio_channels)
+        self.csr_devices.append("rtio_moninj")
+
 
 def write_csr_file(soc, filename):
     with open(filename, "w") as f:
