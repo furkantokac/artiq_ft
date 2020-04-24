@@ -1,7 +1,7 @@
+use log::{debug, error};
 use alloc::{vec, vec::Vec, sync::Arc};
 
 use libcortex_a9::{mutex::Mutex, sync_channel::{self, sync_channel}};
-use libboard_zynq::println;
 use libsupport_zynq::boot::Core1;
 
 use dyld;
@@ -93,7 +93,7 @@ fn resolve(required: &[u8]) -> Option<u32> {
 
 #[no_mangle]
 pub fn main_core1() {
-    println!("Core1 started");
+    debug!("Core1 started");
 
     let mut core1_tx = None;
     while core1_tx.is_none() {
@@ -116,12 +116,12 @@ pub fn main_core1() {
                         core1_tx.send(Message::LoadCompleted)
                     },
                     Err(error) => {
-                        println!("failed to load shared library: {}", error);
+                        error!("failed to load shared library: {}", error);
                         core1_tx.send(Message::LoadFailed)
                     }
                 }
             },
-            _ => println!("Core1 received unexpected message: {:?}", message),
+            _ => error!("Core1 received unexpected message: {:?}", message),
         }
     }
 }

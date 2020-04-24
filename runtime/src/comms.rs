@@ -3,12 +3,12 @@ use core::fmt;
 use core::cmp::min;
 use core::cell::RefCell;
 use alloc::rc::Rc;
+use log::{warn, error};
 
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 
 use libboard_zynq::{
-    println,
     self as zynq,
     smoltcp::{
         self,
@@ -185,7 +185,7 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
                             write_chunk(&stream, b"core1 failed to process data").await?;
                         },
                         _ => {
-                            println!("received unexpected message from core1: {:?}", reply);
+                            error!("received unexpected message from core1: {:?}", reply);
                             write_header(&stream, Reply::LoadFailed).await?;
                             write_chunk(&stream, b"core1 sent unexpected reply").await?;
                         }
@@ -250,7 +250,7 @@ pub fn main() {
             task::spawn(async {
                 let _ = handle_connection(&stream, control)
                     .await
-                    .map_err(|e| println!("Connection: {}", e));
+                    .map_err(|e| warn!("Connection: {}", e));
                 let _ = stream.flush().await;
                 let _ = stream.abort().await;
             });
