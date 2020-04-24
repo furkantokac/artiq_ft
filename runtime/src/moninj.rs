@@ -59,6 +59,27 @@ async fn handle_connection(stream: &TcpStream) -> Result<()> {
         let message: HostMessage = FromPrimitive::from_i8(read_i8(&stream).await?)
             .ok_or(Error::UnrecognizedPacket)?;
         info!("{:?}", message);
+        match message {
+            HostMessage::MonitorProbe => {
+                let enable = read_bool(&stream).await?;
+                let channel = read_i32(&stream).await?;
+                let probe = read_i8(&stream).await?;
+            },
+            HostMessage::Inject => {
+                let channel = read_i32(&stream).await?;
+                let overrd = read_i8(&stream).await?;
+                let value = read_i8(&stream).await?;
+            },
+            HostMessage::GetInjectionStatus => {
+                let channel = read_i32(&stream).await?;
+                let overrd = read_i8(&stream).await?;
+            },
+            HostMessage::MonitorInjection => {
+                let enable = read_bool(&stream).await?;
+                let channel = read_i32(&stream).await?;
+                let overrd = read_i8(&stream).await?;
+            },
+        }
     }
 }
 

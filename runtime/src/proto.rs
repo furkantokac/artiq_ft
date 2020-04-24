@@ -22,6 +22,12 @@ pub async fn expect(stream: &TcpStream, pattern: &[u8]) -> Result<bool> {
     }).await?
 }
 
+pub async fn read_bool(stream: &TcpStream) -> Result<bool> {
+    Ok(stream.recv(|buf| {
+        Poll::Ready((1, buf[0] != 0))
+    }).await?)
+}
+
 pub async fn read_i8(stream: &TcpStream) -> Result<i8> {
     Ok(stream.recv(|buf| {
         Poll::Ready((1, buf[0] as i8))
