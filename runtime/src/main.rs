@@ -12,10 +12,12 @@ use libboard_zynq::{
 };
 use libsupport_zynq::{logger, ram};
 
+mod proto;
 mod comms;
 mod pl;
 mod rtio;
 mod kernel;
+mod moninj;
 
 
 fn identifier_read(buf: &mut [u8]) -> &str {

@@ -21,7 +21,9 @@ use libsupport_zynq::alloc::{vec, vec::Vec};
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
 use alloc::sync::Arc;
 
+use crate::proto::*;
 use crate::kernel;
+use crate::moninj;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,54 +53,6 @@ impl From<smoltcp::Error> for Error {
 }
 
 
-async fn expect(stream: &TcpStream, pattern: &[u8]) -> Result<()> {
-    stream.recv(|buf| {
-        for (i, b) in buf.iter().enumerate() {
-            if *b == pattern[i] {
-                if i + 1 == pattern.len() {
-                    return Poll::Ready((i + 1, Ok(())));
-                }
-            } else {
-                return Poll::Ready((i + 1, Err(Error::UnexpectedPattern)));
-            }
-        }
-        Poll::Pending
-    }).await?
-}
-
-async fn read_i8(stream: &TcpStream) -> Result<i8> {
-    Ok(stream.recv(|buf| {
-        Poll::Ready((1, buf[0] as i8))
-    }).await?)
-}
-
-async fn read_i32(stream: &TcpStream) -> Result<i32> {
-    Ok(stream.recv(|buf| {
-        if buf.len() >= 4 {
-            let value =
-                  ((buf[0] as i32) << 24)
-                | ((buf[1] as i32) << 16)
-                | ((buf[2] as i32) << 8)
-                |  (buf[3] as i32);
-            Poll::Ready((4, value))
-        } else {
-            Poll::Pending
-        }
-    }).await?)
-}
-
-async fn read_drain(stream: &TcpStream, total: usize) -> Result<()> {
-    let mut done = 0;
-    while done < total {
-        let count = stream.recv(|buf| {
-            let count = min(total - done, buf.len());
-            Poll::Ready((count, count))
-        }).await?;
-        done += count;
-    }
-    Ok(())
-}
-
 async fn read_chunk(stream: &TcpStream, destination: &mut [u8]) -> Result<()> {
     let total = destination.len();
     let destination = RefCell::new(destination);
@@ -115,7 +69,7 @@ async fn read_chunk(stream: &TcpStream, destination: &mut [u8]) -> Result<()> {
     Ok(())
 }
 
-#[derive(FromPrimitive, ToPrimitive)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
 enum Request {
     SystemInfo = 3,
     LoadKernel = 5,
@@ -124,7 +78,7 @@ enum Request {
     RPCException = 8,
 }
 
-#[derive(FromPrimitive, ToPrimitive)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
 enum Reply {
     SystemInfo = 2,
     LoadCompleted = 5,
@@ -135,15 +89,6 @@ enum Reply {
     RPCRequest = 10,
     WatchdogExpired = 14,
     ClockFailure = 15,
-}
-
-async fn write_i32(stream: &TcpStream, value: i32) -> Result<()> {
-    stream.send([
-        (value >> 24) as u8,
-        (value >> 16) as u8,
-        (value >>  8) as u8,
-         value        as u8].iter().copied()).await?;
-    Ok(())
 }
 
 async fn write_chunk(stream: &TcpStream, chunk: &[u8]) -> Result<()> {
@@ -160,7 +105,9 @@ async fn write_header(stream: &TcpStream, reply: Reply) -> Result<()> {
 async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Control>>) -> Result<()> {
     expect(&stream, b"ARTIQ coredev\n").await?;
     loop {
-        expect(&stream, &[0x5a, 0x5a, 0x5a, 0x5a]).await?;
+        if !expect(&stream, &[0x5a, 0x5a, 0x5a, 0x5a]).await? {
+            return Err(Error::UnexpectedPattern)
+        }
         let request: Request = FromPrimitive::from_i8(read_i8(&stream).await?)
             .ok_or(Error::UnrecognizedPacket)?;
         match request {
@@ -242,7 +189,6 @@ pub fn main() {
     Sockets::init(32);
 
     let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start(8192)));
-
     task::spawn(async move {
         loop {
             let stream = TcpStream::accept(1381, 2048, 2048).await.unwrap();
@@ -250,12 +196,14 @@ pub fn main() {
             task::spawn(async {
                 let _ = handle_connection(&stream, control)
                     .await
-                    .map_err(|e| warn!("Connection: {}", e));
+                    .map_err(|e| warn!("connection terminated: {}", e));
                 let _ = stream.flush().await;
                 let _ = stream.abort().await;
             });
         }
     });
+
+    moninj::start();
 
     let mut time = 0u32;
     Sockets::run(&mut iface, || {
