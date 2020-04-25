@@ -54,7 +54,7 @@ enum DeviceMessage {
     InjectionStatus = 1
 }
 
-fn read_probe(channel: i32, probe: u8) -> i32 {
+fn read_probe(channel: i32, probe: i8) -> i32 {
     unsafe {
         csr::rtio_moninj::mon_chan_sel_write(channel as _);
         csr::rtio_moninj::mon_probe_sel_write(probe as _);
@@ -149,7 +149,26 @@ async fn handle_connection(stream: &TcpStream, timer: GlobalTimer) -> Result<()>
                 }
             },
             _ = timeout_f => {
-                warn!("tick");
+                for (&(channel, probe), previous) in probe_watch_list.iter_mut() {
+                    let current = read_probe(channel, probe);
+                    if previous.is_none() || previous.unwrap() != current {
+                        write_i8(&stream, DeviceMessage::MonitorStatus.to_i8().unwrap()).await?;
+                        write_i32(&stream, channel).await?;
+                        write_i8(&stream, probe).await?;
+                        write_i32(&stream, current).await?;
+                        *previous = Some(current);
+                    }
+                }
+                for (&(channel, overrd), previous) in inject_watch_list.iter_mut() {
+                    let current = read_injection_status(channel, overrd);
+                    if previous.is_none() || previous.unwrap() != current {
+                        write_i8(&stream, DeviceMessage::InjectionStatus.to_i8().unwrap()).await?;
+                        write_i32(&stream, channel).await?;
+                        write_i8(&stream, overrd).await?;
+                        write_i8(&stream, current).await?;
+                        *previous = Some(current);
+                    }
+                }
                 next_check = next_check + Milliseconds(200);
             }
         }
