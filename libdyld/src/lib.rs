@@ -158,6 +158,16 @@ impl<'a> Library<'a> {
         Ok(unsafe { *ptr = value })
     }
 
+
+    fn update_rel(&self, rel: &Elf32_Rel, value: Elf32_Word) -> Result<(), Error<'a>> {
+        if rel.r_offset as usize + mem::size_of::<Elf32_Addr>() > self.image_sz {
+            return Err("relocation out of image bounds")?
+        }
+
+        let ptr = (self.image_off + rel.r_offset) as *mut Elf32_Addr;
+        Ok(unsafe { *ptr = value })
+    }
+
     // This is unsafe because it mutates global data (the PLT).
     pub unsafe fn rebind(&self, name: &[u8], addr: Elf32_Word) -> Result<(), Error<'a>> {
         for rela in self.pltrel.iter() {
@@ -250,6 +260,74 @@ impl<'a> Library<'a> {
         self.update_rela(rela, value)
     }
 
+    fn resolve_rel(&self, rel: &Elf32_Rel, resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>)
+            -> Result<(), Error<'a>> {
+        #[derive(Debug)]
+        enum RelType {
+            None,
+            Relative,
+            Lookup,
+        };
+        let rel_type = match ELF32_R_TYPE(rel.r_info) {
+            R_OR1K_NONE if self.arch == Arch::OpenRisc =>
+                RelType::None,
+            R_ARM_NONE if self.arch == Arch::Arm =>
+                RelType::None,
+
+            R_OR1K_RELATIVE if self.arch == Arch::OpenRisc =>
+                RelType::Relative,
+            R_ARM_RELATIVE if self.arch == Arch::Arm =>
+                RelType::Relative,
+
+            R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT
+                if self.arch == Arch::OpenRisc => RelType::Lookup,
+            R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT
+                if self.arch == Arch::Arm => RelType::Lookup,
+
+            _ =>
+                return Err("unsupported relocation type")?,
+        };
+        let value;
+        match rel_type {
+            RelType::None =>
+                return Ok(()),
+
+            RelType::Relative => {
+                let addend = unsafe {
+                    *((self.image_off + rel.r_offset) as *const Elf32_Addr)
+                };
+                value = self.image_off + addend as Elf32_Word;
+            },
+
+            RelType::Lookup => {
+                let sym;
+                if ELF32_R_SYM(rel.r_info) == 0 {
+                    return Err("relocation requires an associated symbol")?;
+                }
+                sym = self.symtab.get(ELF32_R_SYM(rel.r_info) as usize)
+                    .ok_or("symbol out of bounds of symbol table")?;
+                let sym_name = self.name_starting_at(sym.st_name as usize)?;
+
+                // First, try to resolve against itself.
+                match self.lookup(sym_name) {
+                    Some(addr) => value = addr,
+                    None => {
+                        // Second, call the user-provided function.
+                        match resolve(sym_name) {
+                            Some(addr) => value = addr,
+                            None => {
+                                // We couldn't find it anywhere.
+                                return Err(Error::Lookup(sym_name))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        self.update_rel(rel, value)
+    }
+
     pub fn load(data: &[u8], image: &'a mut [u8], resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>)
             -> Result<Library<'a>, Error<'a>> {
         #![allow(unused_assignments)]
@@ -296,10 +374,12 @@ impl<'a> Library<'a> {
 
         let (mut strtab_off, mut strtab_sz) = (0, 0);
         let (mut symtab_off, mut symtab_sz) = (0, 0);
+        let (mut rel_off,    mut rel_sz)    = (0, 0);
         let (mut rela_off,   mut rela_sz)   = (0, 0);
         let (mut pltrel_off, mut pltrel_sz) = (0, 0);
         let (mut hash_off,   mut hash_sz)   = (0, 0);
         let mut sym_ent  = 0;
+        let mut rel_ent  = 0;
         let mut rela_ent = 0;
         let mut nbucket  = 0;
         let mut nchain   = 0;
@@ -313,11 +393,13 @@ impl<'a> Library<'a> {
             let val = unsafe { dyn.d_un.d_val } as usize;
             match dyn.d_tag {
                 DT_NULL     => break,
-                DT_REL      => return Err("relocations with implicit addend are not supported")?,
                 DT_STRTAB   => strtab_off = val,
                 DT_STRSZ    => strtab_sz  = val,
                 DT_SYMTAB   => symtab_off = val,
                 DT_SYMENT   => sym_ent    = val,
+                DT_REL      => rel_off    = val,
+                DT_RELSZ    => rel_sz     = val / mem::size_of::<Elf32_Rel>(),
+                DT_RELENT   => rel_ent    = val,
                 DT_RELA     => rela_off   = val,
                 DT_RELASZ   => rela_sz    = val / mem::size_of::<Elf32_Rela>(),
                 DT_RELAENT  => rela_ent   = val,
@@ -338,6 +420,9 @@ impl<'a> Library<'a> {
         if sym_ent != mem::size_of::<Elf32_Sym>() {
             return Err("incorrect symbol entry size")?
         }
+        if rel_ent != 0 && rel_ent != mem::size_of::<Elf32_Rel>() {
+            return Err("incorrect relocation entry size")?
+        }
         if rela_ent != 0 && rela_ent != mem::size_of::<Elf32_Rela>() {
             return Err("incorrect relocation entry size")?
         }
@@ -353,6 +438,8 @@ impl<'a> Library<'a> {
                                    .map_err(|()| "cannot read string table")?;
         let symtab = get_ref_slice::<Elf32_Sym>(image, symtab_off, symtab_sz)
                                    .map_err(|()| "cannot read symbol table")?;
+        let rel   =  get_ref_slice::<Elf32_Rel>(image, rel_off, rel_sz)
+                                   .map_err(|()| "cannot read rel entries")?;
         let rela   = get_ref_slice::<Elf32_Rela>(image, rela_off, rela_sz)
                                    .map_err(|()| "cannot read rela entries")?;
         let pltrel = get_ref_slice::<Elf32_Rela>(image, pltrel_off, pltrel_sz)
@@ -382,6 +469,7 @@ impl<'a> Library<'a> {
         mem::drop(image);
 
         for r in rela   { library.resolve_rela(r, resolve)? }
+        for r in rel    { library.resolve_rel(r, resolve)? }
         for r in pltrel { library.resolve_rela(r, resolve)? }
 
         Ok(library)
