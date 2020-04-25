@@ -16,6 +16,7 @@ use libboard_zynq::{
         iface::{NeighborCache, EthernetInterfaceBuilder, Routes},
         time::Instant,
     },
+    timer::GlobalTimer,
 };
 use libsupport_zynq::alloc::{vec, vec::Vec};
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
@@ -152,7 +153,7 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
 const HWADDR: [u8; 6] = [0, 0x23, 0xab, 0xad, 0x1d, 0xea];
 const IPADDR: IpAddress = IpAddress::Ipv4(Ipv4Address([192, 168, 1, 52]));
 
-pub fn main() {
+pub fn main(timer: GlobalTimer) {
     let eth = zynq::eth::Eth::default(HWADDR.clone());
     const RX_LEN: usize = 8;
     let mut rx_descs = (0..RX_LEN)
@@ -205,9 +206,7 @@ pub fn main() {
 
     moninj::start();
 
-    let mut time = 0u32;
     Sockets::run(&mut iface, || {
-        time += 1;
-        Instant::from_millis(time)
+        Instant::from_millis(timer.get_time().0 as i32)
     });
 }

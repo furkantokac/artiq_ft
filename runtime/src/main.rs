@@ -9,6 +9,7 @@ use log::info;
 
 use libboard_zynq::{
     self as zynq, clocks::Clocks, clocks::source::{ClockSource, ArmPll, IoPll},
+    timer::GlobalTimer,
 };
 use libsupport_zynq::{logger, ram};
 
@@ -35,6 +36,7 @@ fn identifier_read(buf: &mut [u8]) -> &str {
 
 #[no_mangle]
 pub fn main_core0() {
+    let timer = GlobalTimer::start();
     let _ = logger::init();
     log::set_max_level(log::LevelFilter::Debug);
     info!("NAR3 starting...");
@@ -50,5 +52,5 @@ pub fn main_core0() {
 
     info!("Detected gateware: {}", identifier_read(&mut [0; 64]));
 
-    comms::main();
+    comms::main(timer);
 }
