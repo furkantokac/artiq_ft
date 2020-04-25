@@ -107,7 +107,7 @@ pub struct Library<'a> {
     image_sz:    usize,
     strtab:      &'a [u8],
     symtab:      &'a [Elf32_Sym],
-    pltrel:      &'a [Elf32_Rela],
+    pltrel:      &'a [Elf32_Rel],
     hash_bucket: &'a [Elf32_Word],
     hash_chain:  &'a [Elf32_Word],
     arch:        Arch,
@@ -170,8 +170,8 @@ impl<'a> Library<'a> {
 
     // This is unsafe because it mutates global data (the PLT).
     pub unsafe fn rebind(&self, name: &[u8], addr: Elf32_Word) -> Result<(), Error<'a>> {
-        for rela in self.pltrel.iter() {
-            let is_rebind_type = match ELF32_R_TYPE(rela.r_info) {
+        for rel in self.pltrel.iter() {
+            let is_rebind_type = match ELF32_R_TYPE(rel.r_info) {
                 R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT
                     if self.arch == Arch::OpenRisc => true,
                 R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT
@@ -182,12 +182,12 @@ impl<'a> Library<'a> {
             };
 
             if is_rebind_type {
-                let sym = self.symtab.get(ELF32_R_SYM(rela.r_info) as usize)
+                let sym = self.symtab.get(ELF32_R_SYM(rel.r_info) as usize)
                     .ok_or("symbol out of bounds of symbol table")?;
                 let sym_name = self.name_starting_at(sym.st_name as usize)?;
 
                 if sym_name == name {
-                    self.update_rela(rela, addr)?
+                    self.update_rel(rel, addr)?
                 }
             }
         }
@@ -404,7 +404,7 @@ impl<'a> Library<'a> {
                 DT_RELASZ   => rela_sz    = val / mem::size_of::<Elf32_Rela>(),
                 DT_RELAENT  => rela_ent   = val,
                 DT_JMPREL   => pltrel_off = val,
-                DT_PLTRELSZ => pltrel_sz  = val / mem::size_of::<Elf32_Rela>(),
+                DT_PLTRELSZ => pltrel_sz  = val / mem::size_of::<Elf32_Rel>(),
                 DT_HASH     => {
                     nbucket  = *get_ref::<Elf32_Word>(image, val + 0)
                                         .map_err(|()| "cannot read hash bucket count")? as usize;
@@ -442,7 +442,7 @@ impl<'a> Library<'a> {
                                    .map_err(|()| "cannot read rel entries")?;
         let rela   = get_ref_slice::<Elf32_Rela>(image, rela_off, rela_sz)
                                    .map_err(|()| "cannot read rela entries")?;
-        let pltrel = get_ref_slice::<Elf32_Rela>(image, pltrel_off, pltrel_sz)
+        let pltrel = get_ref_slice::<Elf32_Rel>(image, pltrel_off, pltrel_sz)
                                    .map_err(|()| "cannot read pltrel entries")?;
         let hash   = get_ref_slice::<Elf32_Word>(image, hash_off, hash_sz)
                                    .map_err(|()| "cannot read hash entries")?;
@@ -470,7 +470,10 @@ impl<'a> Library<'a> {
 
         for r in rela   { library.resolve_rela(r, resolve)? }
         for r in rel    { library.resolve_rel(r, resolve)? }
-        for r in pltrel { library.resolve_rela(r, resolve)? }
+        /// TODO: processing of pltrel has been changed from
+        /// resolve_rela() to resolve_rel(). verify if this is
+        /// specific to eg. architecture?
+        for r in pltrel { library.resolve_rel(r, resolve)? }
 
         Ok(library)
     }
