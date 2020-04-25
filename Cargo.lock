@@ -47,11 +47,23 @@ name = "dyld"
 version = "0.1.0"
 
 [[package]]
+name = "embedded-hal"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee4908a155094da7723c2d60d617b820061e3b4efcc3d9e293d206a5a76c170b"
+dependencies = [
+ "nb",
+ "void",
+]
+
+[[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#61e67520d15bbf473816927abe831d4ebadac3c5"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#aa9379463207a02ee7ca4e597054a447b9a90232"
 dependencies = [
+ "embedded-hal",
  "libcortex_a9",
+ "nb",
  "pin-utils",
  "smoltcp",
 ]
@@ -59,19 +71,22 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#61e67520d15bbf473816927abe831d4ebadac3c5"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#aa9379463207a02ee7ca4e597054a447b9a90232"
 dependencies = [
  "bit_field",
+ "embedded-hal",
  "libcortex_a9",
  "libregister",
+ "nb",
  "smoltcp",
+ "void",
  "volatile-register",
 ]
 
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#61e67520d15bbf473816927abe831d4ebadac3c5"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#aa9379463207a02ee7ca4e597054a447b9a90232"
 dependencies = [
  "bit_field",
  "libregister",
@@ -80,7 +95,7 @@ dependencies = [
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#61e67520d15bbf473816927abe831d4ebadac3c5"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#aa9379463207a02ee7ca4e597054a447b9a90232"
 dependencies = [
  "bit_field",
  "vcell",
@@ -90,7 +105,7 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#61e67520d15bbf473816927abe831d4ebadac3c5"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#aa9379463207a02ee7ca4e597054a447b9a90232"
 dependencies = [
  "compiler_builtins",
  "libboard_zynq",
@@ -121,6 +136,12 @@ name = "managed"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fdcec5e97041c7f0f1c5b7d93f12e57293c831c646f4cc7a5db59460c7ea8de6"
+
+[[package]]
+name = "nb"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1411551beb3c11dedfb0a90a0fa256b47d28b9ec2cdff34c25a2fa59e45dbdc"
 
 [[package]]
 name = "num-derive"
@@ -220,6 +241,12 @@ name = "vcell"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "876e32dcadfe563a4289e994f7cb391197f362b6315dc45e8ba4aa6f564a4b3c"
+
+[[package]]
+name = "void"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
 name = "volatile-register"
