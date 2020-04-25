@@ -61,6 +61,11 @@ pub async fn read_drain(stream: &TcpStream, total: usize) -> Result<()> {
     Ok(())
 }
 
+pub async fn write_i8(stream: &TcpStream, value: i8) -> Result<()> {
+    stream.send([value as u8].iter().copied()).await?;
+    Ok(())
+}
+
 pub async fn write_i32(stream: &TcpStream, value: i32) -> Result<()> {
     stream.send([
         (value >> 24) as u8,
