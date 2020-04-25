@@ -204,7 +204,7 @@ pub fn main(timer: GlobalTimer) {
         }
     });
 
-    moninj::start();
+    moninj::start(timer);
 
     Sockets::run(&mut iface, || {
         Instant::from_millis(timer.get_time().0 as i32)

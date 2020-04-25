@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![recursion_limit="512"]  // for futures_util::select!
 
 extern crate alloc;
 extern crate log;

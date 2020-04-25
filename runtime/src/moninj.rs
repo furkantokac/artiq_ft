@@ -1,13 +1,14 @@
 use core::fmt;
 use alloc::collections::BTreeMap;
-use log::warn;
+use log::{debug, warn};
+use void::Void;
 
-use libboard_zynq::smoltcp;
-use libasync::task;
-use libasync::smoltcp::TcpStream;
+use libboard_zynq::{smoltcp, timer::GlobalTimer, time::Milliseconds};
+use libasync::{task, smoltcp::TcpStream, block_async, nb};
 
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
+use futures::{pin_mut, select_biased, FutureExt};
 
 use crate::proto::*;
 use crate::pl::csr;
@@ -78,63 +79,89 @@ fn read_injection_status(channel: i32, overrd: i8) -> i8 {
     }
 }
 
-async fn handle_connection(stream: &TcpStream) -> Result<()> {
+async fn handle_connection(stream: &TcpStream, timer: GlobalTimer) -> Result<()> {
     if !expect(&stream, b"ARTIQ moninj\n").await? {
         return Err(Error::UnexpectedPattern);
     }
 
     let mut probe_watch_list: BTreeMap<(i32, i8), Option<i32>> = BTreeMap::new();
     let mut inject_watch_list: BTreeMap<(i32, i8), Option<i8>> = BTreeMap::new();
-
+    let mut next_check = Milliseconds(0);
     loop {
-        let message: HostMessage = FromPrimitive::from_i8(read_i8(&stream).await?)
-            .ok_or(Error::UnrecognizedPacket)?;
-        match message {
-            HostMessage::MonitorProbe => {
-                let enable = read_bool(&stream).await?;
-                let channel = read_i32(&stream).await?;
-                let probe = read_i8(&stream).await?;
-                if enable {
-                    let _ = probe_watch_list.entry((channel, probe)).or_insert(None);
-                } else {
-                    let _ = probe_watch_list.remove(&(channel, probe));
+        // TODO: we don't need fuse() here.
+        // remove after https://github.com/rust-lang/futures-rs/issues/1989 lands
+        let read_message_f = read_i8(&stream).fuse();
+        let next_check_c = next_check.clone();
+        let timeout = || -> nb::Result<(), Void> {
+            if timer.get_time() < next_check_c {
+                Err(nb::Error::WouldBlock)
+            } else {
+                Ok(())
+            }
+        };
+        let timeout_f = block_async!(timeout()).fuse();
+        pin_mut!(read_message_f, timeout_f);
+        select_biased! {
+            message = read_message_f => {
+                let message: HostMessage = FromPrimitive::from_i8(message?)
+                    .ok_or(Error::UnrecognizedPacket)?;
+                match message {
+                    HostMessage::MonitorProbe => {
+                        let enable = read_bool(&stream).await?;
+                        let channel = read_i32(&stream).await?;
+                        let probe = read_i8(&stream).await?;
+                        if enable {
+                            let _ = probe_watch_list.entry((channel, probe)).or_insert(None);
+                            debug!("START monitoring channel {}, probe {}", channel, probe);
+                        } else {
+                            let _ = probe_watch_list.remove(&(channel, probe));
+                            debug!("END monitoring channel {}, probe {}", channel, probe);
+                        }
+                    },
+                    HostMessage::MonitorInjection => {
+                        let enable = read_bool(&stream).await?;
+                        let channel = read_i32(&stream).await?;
+                        let overrd = read_i8(&stream).await?;
+                        if enable {
+                            let _ = inject_watch_list.entry((channel, overrd)).or_insert(None);
+                            debug!("START monitoring channel {}, overrd {}", channel, overrd);
+                        } else {
+                            let _ = inject_watch_list.remove(&(channel, overrd));
+                            debug!("END monitoring channel {}, overrd {}", channel, overrd);
+                        }
+                    },
+                    HostMessage::Inject => {
+                        let channel = read_i32(&stream).await?;
+                        let overrd = read_i8(&stream).await?;
+                        let value = read_i8(&stream).await?;
+                        inject(channel, overrd, value);
+                        debug!("INJECT channel {}, overrd {}, value {}", channel, overrd, value);
+                    },
+                    HostMessage::GetInjectionStatus => {
+                        let channel = read_i32(&stream).await?;
+                        let overrd = read_i8(&stream).await?;
+                        let value = read_injection_status(channel, overrd);
+                        write_i8(&stream, DeviceMessage::InjectionStatus.to_i8().unwrap()).await?;
+                        write_i32(&stream, channel).await?;
+                        write_i8(&stream, overrd).await?;
+                        write_i8(&stream, value).await?;
+                    },
                 }
             },
-            HostMessage::MonitorInjection => {
-                let enable = read_bool(&stream).await?;
-                let channel = read_i32(&stream).await?;
-                let overrd = read_i8(&stream).await?;
-                if enable {
-                    let _ = inject_watch_list.entry((channel, overrd)).or_insert(None);
-                } else {
-                    let _ = inject_watch_list.remove(&(channel, overrd));
-                }
-            },
-            HostMessage::Inject => {
-                let channel = read_i32(&stream).await?;
-                let overrd = read_i8(&stream).await?;
-                let value = read_i8(&stream).await?;
-                inject(channel, overrd, value);
-            },
-            HostMessage::GetInjectionStatus => {
-                let channel = read_i32(&stream).await?;
-                let overrd = read_i8(&stream).await?;
-                let value = read_injection_status(channel, overrd);
-                write_i8(&stream, DeviceMessage::InjectionStatus.to_i8().unwrap()).await?;
-                write_i32(&stream, channel).await?;
-                write_i8(&stream, overrd).await?;
-                write_i8(&stream, value).await?;
-            },
+            _ = timeout_f => {
+                warn!("tick");
+                next_check = next_check + Milliseconds(200);
+            }
         }
     }
 }
 
-pub fn start() {
+pub fn start(timer: GlobalTimer) {
     task::spawn(async move {
         loop {
             let stream = TcpStream::accept(1383, 2048, 2048).await.unwrap();
-            task::spawn(async {
-                let _ = handle_connection(&stream)
+            task::spawn(async move {
+                let _ = handle_connection(&stream, timer)
                     .await
                     .map_err(|e| warn!("connection terminated: {}", e));
                 let _ = stream.flush().await;
