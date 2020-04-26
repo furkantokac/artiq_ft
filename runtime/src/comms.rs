@@ -143,6 +143,10 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
                     write_header(&stream, Reply::LoadFailed).await?;
                     write_chunk(&stream, b"kernel is too large").await?;
                 }
+            },
+            Request::RunKernel => {
+                let mut control = control.borrow_mut();
+                control.tx.async_send(kernel::Message::StartRequest).await;
             }
             _ => return Err(Error::UnrecognizedPacket)
         }

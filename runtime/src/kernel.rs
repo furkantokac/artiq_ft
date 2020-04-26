@@ -1,3 +1,4 @@
+use core::{ptr, mem};
 use log::{debug, error};
 use alloc::{vec, vec::Vec, sync::Arc};
 
@@ -14,6 +15,7 @@ pub enum Message {
     LoadRequest(Arc<Vec<u8>>),
     LoadCompleted,
     LoadFailed,
+    StartRequest,
 }
 
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<Message>>> = Mutex::new(None);
@@ -84,6 +86,8 @@ fn resolve(required: &[u8]) -> Option<u32> {
         api!(rtio_input_timestamp = rtio::input_timestamp),
         api!(rtio_input_data = rtio::input_data),
         api!(rtio_input_timestamped_data = rtio::input_timestamped_data),
+
+        api!(__artiq_personality = 0), // HACK
     ];
     api.iter()
        .find(|&&(exported, _)| exported.as_bytes() == required)
@@ -108,11 +112,19 @@ pub fn main_core1() {
     let core1_rx = core1_rx.unwrap();
 
     let mut image = vec![0; 1024*1024];
+    let mut current_modinit: Option<u32> = None;
     for message in core1_rx {
         match *message {
             Message::LoadRequest(data) => {
                 match dyld::Library::load(&data, &mut image, &resolve) {
                     Ok(library) => {
+                        let __bss_start = library.lookup(b"__bss_start").unwrap();
+                        let _end = library.lookup(b"_end").unwrap();
+                        let __modinit__ = library.lookup(b"__modinit__").unwrap();
+                        unsafe {
+                            ptr::write_bytes(__bss_start as *mut u8, 0, (_end - __bss_start) as usize);
+                        }
+                        current_modinit = Some(__modinit__);
                         core1_tx.send(Message::LoadCompleted)
                     },
                     Err(error) => {
@@ -121,6 +133,15 @@ pub fn main_core1() {
                     }
                 }
             },
+            Message::StartRequest => {
+                debug!("starting");
+                if let Some(__modinit__) = current_modinit {
+                    unsafe {
+                        (mem::transmute::<u32, fn()>(__modinit__))();
+                    }
+                }
+                debug!("stopping");
+            }
             _ => error!("Core1 received unexpected message: {:?}", message),
         }
     }
