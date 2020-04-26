@@ -19,12 +19,8 @@ pub struct TimestampedData {
 }
 
 pub extern fn init() {
-    // TODO
     unsafe {
         csr::rtio_core::reset_write(1);
-        csr::rtio_core::reset_phy_write(1);
-        csr::rtio_core::reset_write(0);
-        csr::rtio_core::reset_phy_write(0);
     }
 }
 

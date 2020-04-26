@@ -53,5 +53,9 @@ pub fn main_core0() {
 
     info!("Detected gateware: {}", identifier_read(&mut [0; 64]));
 
+    unsafe {
+        pl::csr::rtio_core::reset_phy_write(1);
+    }
+
     comms::main(timer);
 }
