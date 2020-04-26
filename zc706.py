@@ -32,7 +32,7 @@ class ZC706(SoCCore):
         rtio_channels = []
         for i in range(4):
             pad = platform.request("user_led", i)
-            phy = ttl_simple.InOut(pad)
+            phy = ttl_simple.Output(pad)
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy))
         self.add_rtio(rtio_channels)

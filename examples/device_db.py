@@ -32,7 +32,7 @@ device_db = {
     "led3": {
         "type": "local",
         "module": "artiq.coredevice.ttl",
-        "class": "TTLInOut",
+        "class": "TTLOut",
         "arguments": {"channel": 3}
     },
 }
