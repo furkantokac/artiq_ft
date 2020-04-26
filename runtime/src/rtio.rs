@@ -36,6 +36,24 @@ pub extern fn get_counter() -> i64 {
     }
 }
 
+pub extern fn now_mu() -> i64 {
+    unsafe {
+        csr::rtio::now_read() as i64
+    }
+}
+
+pub extern fn at_mu(t: i64) {
+    unsafe {
+        csr::rtio::now_write(t as u64);
+    }
+}
+
+pub extern fn delay_mu(dt: i64) {
+    unsafe {
+        csr::rtio::now_write(csr::rtio::now_read() + dt as u64);
+    }
+}
+
 // writing the LSB of o_data (offset=0) triggers the RTIO write
 #[inline(always)]
 pub unsafe fn rtio_o_data_write(offset: usize, data: u32) {
@@ -52,7 +70,7 @@ pub unsafe fn rtio_i_data_read(offset: usize) -> u32 {
 
 #[inline(never)]
 unsafe fn process_exceptional_status(channel: i32, status: u8) {
-    let timestamp = *(csr::rtio::NOW_HI_ADDR as *const i64);
+    let timestamp = csr::rtio::now_read() as i64;
     if status & RTIO_O_STATUS_WAIT != 0 {
         while csr::rtio::o_status_read() & RTIO_O_STATUS_WAIT != 0 {}
     }

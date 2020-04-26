@@ -41,7 +41,7 @@ class ZC706(SoCCore):
         self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)
         self.submodules.rtio_core = rtio.Core(self.rtio_tsc, rtio_channels)
         self.csr_devices.append("rtio_core")
-        self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc)
+        self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
         self.csr_devices.append("rtio")
 
         self.comb += self.rtio.cri.connect(self.rtio_core.cri)

@@ -6,7 +6,6 @@ use libcortex_a9::{mutex::Mutex, sync_channel::{self, sync_channel}};
 use libsupport_zynq::boot::Core1;
 
 use dyld;
-use crate::pl::csr;
 use crate::rtio;
 
 
@@ -75,8 +74,9 @@ macro_rules! api {
 
 fn resolve(required: &[u8]) -> Option<u32> {
     let api = &[
-        /* proxified syscalls */
-        api!(now = csr::rtio::NOW_HI_ADDR as *const _),
+        api!(now_mu = rtio::now_mu),
+        api!(at_mu = rtio::at_mu),
+        api!(delay_mu = rtio::delay_mu),
 
         api!(rtio_init = rtio::init),
         api!(rtio_get_destination_status = rtio::get_destination_status),
