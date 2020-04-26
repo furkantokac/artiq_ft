@@ -125,6 +125,7 @@ pub fn main_core1() {
                             ptr::write_bytes(__bss_start as *mut u8, 0, (_end - __bss_start) as usize);
                         }
                         current_modinit = Some(__modinit__);
+                        debug!("kernel loaded");
                         core1_tx.send(Message::LoadCompleted)
                     },
                     Err(error) => {
@@ -134,13 +135,13 @@ pub fn main_core1() {
                 }
             },
             Message::StartRequest => {
-                debug!("starting");
+                debug!("kernel starting");
                 if let Some(__modinit__) = current_modinit {
                     unsafe {
                         (mem::transmute::<u32, fn()>(__modinit__))();
                     }
                 }
-                debug!("stopping");
+                debug!("kernel terminated");
             }
             _ => error!("Core1 received unexpected message: {:?}", message),
         }

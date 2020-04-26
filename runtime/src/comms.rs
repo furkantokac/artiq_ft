@@ -3,7 +3,7 @@ use core::fmt;
 use core::cmp::min;
 use core::cell::RefCell;
 use alloc::rc::Rc;
-use log::{warn, error};
+use log::{debug, warn, error};
 
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -105,6 +105,7 @@ async fn write_header(stream: &TcpStream, reply: Reply) -> Result<()> {
 
 async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Control>>) -> Result<()> {
     expect(&stream, b"ARTIQ coredev\n").await?;
+    debug!("received connection");
     loop {
         if !expect(&stream, &[0x5a, 0x5a, 0x5a, 0x5a]).await? {
             return Err(Error::UnexpectedPattern)
