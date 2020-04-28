@@ -34,10 +34,10 @@ in
       rustPlatform.rust.rustc
       rustPlatform.rust.cargo
       rustcSrc
+      pkgs.cacert
       pkgs.cargo-xbuild
 
-      pkgs.openocd
-      pkgs.gdb
+      pkgs.openssh pkgs.rsync
 
       (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
       vivado
