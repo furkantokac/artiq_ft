@@ -118,12 +118,15 @@ pub fn main_core1() {
             Message::LoadRequest(data) => {
                 match dyld::Library::load(&data, &mut image, &resolve) {
                     Ok(library) => {
-                        let __bss_start = library.lookup(b"__bss_start").unwrap();
-                        let _end = library.lookup(b"_end").unwrap();
-                        let __modinit__ = library.lookup(b"__modinit__").unwrap();
-                        unsafe {
-                            ptr::write_bytes(__bss_start as *mut u8, 0, (_end - __bss_start) as usize);
+                        let bss_start = library.lookup(b"__bss_start");
+                        let end = library.lookup(b"_end");
+                        if let Some(bss_start) = bss_start {
+                            let end = end.unwrap();
+                            unsafe {
+                                ptr::write_bytes(bss_start as *mut u8, 0, (end - bss_start) as usize);
+                            }
                         }
+                        let __modinit__ = library.lookup(b"__modinit__").unwrap();
                         current_modinit = Some(__modinit__);
                         debug!("kernel loaded");
                         core1_tx.send(Message::LoadCompleted)
