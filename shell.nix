@@ -41,7 +41,8 @@ in
 
       (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
       vivado
-      artiqpkgs.binutils-arm
+      pkgs.llvm_9
+      pkgs.lld_9
     ];
 
     XARGO_RUST_SRC = "${rustcSrc}/src";
