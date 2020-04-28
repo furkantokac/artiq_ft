@@ -14,8 +14,6 @@ use libboard_zynq::{
 use libsupport_zynq::{boot, logger};
 
 
-static mut STACK_CORE1: [u32; 512] = [0; 512];
-
 extern "C" {
     fn unlzma_simple(buf: *const u8, in_len: i32,
                      output: *mut u8,
@@ -49,8 +47,7 @@ pub fn main_core0() {
     if result < 0 {
         error!("decompression failed");
     } else {
-        let core1_stack = unsafe { &mut STACK_CORE1[..] };
-        boot::Core1::start(core1_stack);
+        boot::Core1::start();
         info!("executing payload");
         unsafe {
             (mem::transmute::<*mut u8, fn()>(ddr.ptr::<u8>()))();

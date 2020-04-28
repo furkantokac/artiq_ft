@@ -21,15 +21,14 @@ static CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<Message>>> = Mutex::new
 static CHANNEL_1TO0: Mutex<Option<sync_channel::Sender<Message>>> = Mutex::new(None);
 
 pub struct Control {
-    core1: Core1<Vec<u32>>,
+    core1: Core1,
     pub tx: sync_channel::Sender<Message>,
     pub rx: sync_channel::Receiver<Message>,
 }
 
 impl Control {
-    pub fn start(stack_size: usize) -> Self {
-        let stack = vec![0; stack_size / 4];
-        let core1 = Core1::start(stack);
+    pub fn start() -> Self {
+        let core1 = Core1::start();
 
         let (core0_tx, core1_rx) = sync_channel(4);
         let (core1_tx, core0_rx) = sync_channel(4);

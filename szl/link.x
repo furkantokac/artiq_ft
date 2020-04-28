@@ -1,7 +1,5 @@
 ENTRY(_boot_cores);
 
-STACK_SIZE = 0x8000;
-
 /* Provide some defaults */
 PROVIDE(Reset = _boot_cores);
 PROVIDE(UndefinedInstruction = Reset);
@@ -14,9 +12,9 @@ PROVIDE(FIQ = Reset);
 
 MEMORY
 {
-  /* 256 kB On-Chip Memory */
-  OCM : ORIGIN = 0, LENGTH = 0x30000
-  OCM3 : ORIGIN = 0xFFFF0000, LENGTH = 0x10000
+    /* 256 kB On-Chip Memory */
+    OCM : ORIGIN = 0, LENGTH = 0x30000
+    OCM3 : ORIGIN = 0xFFFF0000, LENGTH = 0x10000
 }
 
 SECTIONS
@@ -38,27 +36,34 @@ SECTIONS
         *(.data .data.*);
     } > OCM
  
-    .bss (NOLOAD) : ALIGN(0x4000)
+    .bss (NOLOAD) : ALIGN(4)
     {
-        /* Aligned to 16 kB */
+        __bss_start = .;
         KEEP(*(.bss.l1_table));
         *(.bss .bss.*);
         . = ALIGN(4);
+        __bss_end = .;
     } > OCM
-    __bss_start = ADDR(.bss);
-    __bss_end = ADDR(.bss) + SIZEOF(.bss);
 
-    .stack (NOLOAD) : ALIGN(0x1000) {
-      . += STACK_SIZE;
+    .stack1 (NOLOAD) : ALIGN(8)
+    {
+        __stack1_end = .;
+        . += 0x4000;
+        __stack1_start = .;
     } > OCM
-    __stack_end = ADDR(.stack);
-    __stack_start = ADDR(.stack) + SIZEOF(.stack);
 
-  /DISCARD/ :
-  {
-    /* Unused exception related info that only wastes space */
-    *(.ARM.exidx);
-    *(.ARM.exidx.*);
-    *(.ARM.extab.*);
-  }
+    .stack0 (NOLOAD) : ALIGN(8)
+    {
+        __stack0_end = .;
+        . += 0x4000;
+        __stack0_start = .;
+    } > OCM
+
+    /DISCARD/ :
+    {
+        /* Unused exception related info that only wastes space */
+        *(.ARM.exidx);
+        *(.ARM.exidx.*);
+        *(.ARM.extab.*);
+    }
 }

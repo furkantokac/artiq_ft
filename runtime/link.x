@@ -1,8 +1,5 @@
 ENTRY(_boot_cores);
 
-STACK_SIZE = 0x8000;
-HEAP_SIZE = 0x1000000;
-
 /* Provide some defaults */
 PROVIDE(Reset = _boot_cores);
 PROVIDE(UndefinedInstruction = Reset);
@@ -15,7 +12,7 @@ PROVIDE(FIQ = Reset);
 
 MEMORY
 {
-  SDRAM : ORIGIN = 0x00100000, LENGTH = 0x1FF00000
+    SDRAM : ORIGIN = 0x00100000, LENGTH = 0x1FF00000
 }
 
 SECTIONS
@@ -37,35 +34,41 @@ SECTIONS
         *(.data .data.*);
     } > SDRAM
  
-    .bss (NOLOAD) : ALIGN(0x4000)
+    .bss (NOLOAD) : ALIGN(4)
     {
-        /* Aligned to 16 kB */
+        __bss_start = .;
         KEEP(*(.bss.l1_table));
         *(.bss .bss.*);
         . = ALIGN(4);
+        __bss_end = .;
     } > SDRAM
-    __bss_start = ADDR(.bss);
-    __bss_end = ADDR(.bss) + SIZEOF(.bss);
 
-    .heap (NOLOAD) : ALIGN(0x1000)
+    .heap (NOLOAD) : ALIGN(8)
     {
-        . += HEAP_SIZE;
+        __heap_start = .;
+        . += 0x1000000;
+        __heap_end = .;
     } > SDRAM
-    __heap_start = ADDR(.heap);
-    __heap_end = ADDR(.heap) + SIZEOF(.heap);
 
-    .stack (NOLOAD) : ALIGN(0x1000)
+    .stack1 (NOLOAD) : ALIGN(8)
     {
-        . += STACK_SIZE;
+        __stack1_end = .;
+        . += 0x1000000;
+        __stack1_start = .;
     } > SDRAM
-    __stack_end = ADDR(.stack);
-    __stack_start = ADDR(.stack) + SIZEOF(.stack);
 
-  /DISCARD/ :
-  {
-    /* Unused exception related info that only wastes space */
-    *(.ARM.exidx);
-    *(.ARM.exidx.*);
-    *(.ARM.extab.*);
-  }
+    .stack0 (NOLOAD) : ALIGN(8)
+    {
+        __stack0_end = .;
+        . += 0x1000000;
+        __stack0_start = .;
+    } > SDRAM
+
+    /DISCARD/ :
+    {
+        /* Unused exception related info that only wastes space */
+        *(.ARM.exidx);
+        *(.ARM.exidx.*);
+        *(.ARM.extab.*);
+    }
 }

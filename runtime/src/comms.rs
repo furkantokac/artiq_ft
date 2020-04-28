@@ -194,7 +194,7 @@ pub fn main(timer: GlobalTimer) {
 
     Sockets::init(32);
 
-    let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start(8192)));
+    let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start()));
     task::spawn(async move {
         loop {
             let stream = TcpStream::accept(1381, 2048, 2048).await.unwrap();
