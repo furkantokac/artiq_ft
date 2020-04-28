@@ -1,7 +1,8 @@
 [workspace]
 members = [
   "libdyld",
-  "runtime"
+  "runtime",
+  "szl"
 ]
 
 [profile.dev]

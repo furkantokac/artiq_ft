@@ -1,0 +1,17 @@
+[package]
+name = "szl"
+description = "Simple Zynq Loader"
+version = "0.1.0"
+authors = ["M-Labs"]
+edition = "2018"
+
+[features]
+target_zc706 = ["libboard_zynq/target_zc706", "libsupport_zynq/target_zc706"]
+default = ["target_zc706"]
+
+[dependencies]
+log = "0.4"
+cstr_core = { version = "0.2", default-features = false }
+libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
+libsupport_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
+libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }

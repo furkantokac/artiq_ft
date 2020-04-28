@@ -34,6 +34,7 @@ in
       rustPlatform.rust.rustc
       rustPlatform.rust.cargo
       rustcSrc
+      pkgs.clang_9
       pkgs.cacert
       pkgs.cargo-xbuild
 

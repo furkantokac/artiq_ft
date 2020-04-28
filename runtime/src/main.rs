@@ -8,10 +8,7 @@ extern crate log;
 use core::{cmp, str};
 use log::info;
 
-use libboard_zynq::{
-    self as zynq, clocks::Clocks, clocks::source::{ClockSource, ArmPll, IoPll},
-    timer::GlobalTimer,
-};
+use libboard_zynq::timer::GlobalTimer;
 use libsupport_zynq::{logger, ram};
 
 mod proto;
@@ -42,14 +39,7 @@ pub fn main_core0() {
     log::set_max_level(log::LevelFilter::Debug);
     info!("NAR3 starting...");
 
-    const CPU_FREQ: u32 = 800_000_000;
-
-    ArmPll::setup(2 * CPU_FREQ);
-    Clocks::set_cpu_freq(CPU_FREQ);
-    IoPll::setup(1_000_000_000);
-    libboard_zynq::stdio::drop_uart(); // reinitialize UART after clocking change
-    let mut ddr = zynq::ddr::DdrRam::new();
-    ram::init_alloc(&mut ddr);
+    ram::init_alloc_linker();
 
     info!("Detected gateware: {}", identifier_read(&mut [0; 64]));
 
