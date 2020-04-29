@@ -110,12 +110,11 @@ pub fn main_core1() {
     }
     let core1_rx = core1_rx.unwrap();
 
-    let mut image = vec![0; 1024*1024];
     let mut current_modinit: Option<u32> = None;
     for message in core1_rx {
         match *message {
             Message::LoadRequest(data) => {
-                match dyld::Library::load(&data, &mut image, &resolve) {
+                match dyld::load(&data, &resolve) {
                     Ok(library) => {
                         let bss_start = library.lookup(b"__bss_start");
                         let end = library.lookup(b"_end");

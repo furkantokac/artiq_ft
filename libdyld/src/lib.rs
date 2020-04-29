@@ -1,9 +1,18 @@
 #![no_std]
 
-use core::{mem, ptr, fmt, slice, str, convert};
+extern crate alloc;
+extern crate log;
+
+use core::{mem, ptr, fmt, slice, str, convert, ops::Range};
+use alloc::string::String;
+use log::{info, trace, error};
 use elf::*;
 
 pub mod elf;
+mod file;
+mod image;
+use image::{DynamicSection, Image};
+mod reloc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Arch {
@@ -11,470 +20,116 @@ pub enum Arch {
     OpenRisc,
 }
 
-impl Arch {
-    fn detect(ehdr: &Elf32_Ehdr) -> Option<Self> {
-        const IDENT_OPENRISC: [u8; EI_NIDENT] = [
-            ELFMAG0,    ELFMAG1,     ELFMAG2,    ELFMAG3,
-            ELFCLASS32, ELFDATA2MSB, EV_CURRENT, ELFOSABI_NONE,
-            /* ABI version */ 0, /* padding */ 0, 0, 0, 0, 0, 0, 0
-        ];
-        const IDENT_ARM: [u8; EI_NIDENT] = [
-            ELFMAG0,    ELFMAG1,     ELFMAG2,    ELFMAG3,
-            ELFCLASS32, ELFDATA2LSB, EV_CURRENT, ELFOSABI_NONE,
-            /* ABI version */ 0, /* padding */ 0, 0, 0, 0, 0, 0, 0
-        ];
-
-        match (ehdr.e_ident, ehdr.e_machine) {
-            (IDENT_ARM, EM_ARM) => Some(Arch::Arm),
-            (IDENT_OPENRISC, EM_OPENRISC) => Some(Arch::OpenRisc),
-            _ => None,
-        }
-    }
-}
-
-fn read_unaligned<T: Copy>(data: &[u8], offset: usize) -> Result<T, ()> {
-    if data.len() < offset + mem::size_of::<T>() {
-        Err(())
-    } else {
-        let ptr = data.as_ptr().wrapping_offset(offset as isize) as *const T;
-        Ok(unsafe { ptr::read_unaligned(ptr) })
-    }
-}
-
-fn get_ref<T: Copy>(data: &[u8], offset: usize) -> Result<&T, ()> {
-    if data.len() < offset + mem::size_of::<T>() {
-        Err(())
-    } else if (data.as_ptr() as usize + offset) & (mem::align_of::<T>() - 1) != 0 {
-        Err(())
-    } else {
-        let ptr = data.as_ptr().wrapping_offset(offset as isize) as *const T;
-        Ok(unsafe { &*ptr })
-    }
-}
-
-fn get_ref_slice<T: Copy>(data: &[u8], offset: usize, len: usize) -> Result<&[T], ()> {
-    if data.len() < offset + mem::size_of::<T>() * len {
-        Err(())
-    } else if (data.as_ptr() as usize + offset) & (mem::align_of::<T>() - 1) != 0 {
-        Err(())
-    } else {
-        let ptr = data.as_ptr().wrapping_offset(offset as isize) as *const T;
-        Ok(unsafe { slice::from_raw_parts(ptr, len) })
-    }
-}
-
-fn elf_hash(name: &[u8]) -> u32 {
-    let mut h: u32 = 0;
-    for c in name {
-        h = (h << 4) + *c as u32;
-        let g = h & 0xf0000000;
-        if g != 0 {
-            h ^= g >> 24;
-            h &= !g;
-        }
-    }
-    h
-}
 
 #[derive(Debug)]
-pub enum Error<'a> {
+pub enum Error {
     Parsing(&'static str),
-    Lookup(&'a [u8])
+    Lookup(String)
 }
 
-impl<'a> convert::From<&'static str> for Error<'a> {
-    fn from(desc: &'static str) -> Error<'a> {
+impl convert::From<&'static str> for Error {
+    fn from(desc: &'static str) -> Error {
         Error::Parsing(desc)
     }
 }
 
-impl<'a> fmt::Display for Error<'a> {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Error::Parsing(desc) =>
                 write!(f, "parse error: {}", desc),
-            &Error::Lookup(sym) =>
-                match str::from_utf8(sym) {
-                    Ok(sym) => write!(f, "symbol lookup error: {}", sym),
-                    Err(_)  => write!(f, "symbol lookup error: {:?}", sym)
-                }
+            &Error::Lookup(ref sym) =>
+                write!(f, "symbol lookup error: {}", sym),
         }
     }
 }
 
-pub struct Library<'a> {
-    image_off:   Elf32_Addr,
-    image_sz:    usize,
-    strtab:      &'a [u8],
-    symtab:      &'a [Elf32_Sym],
-    pltrel:      &'a [Elf32_Rel],
-    hash_bucket: &'a [Elf32_Word],
-    hash_chain:  &'a [Elf32_Word],
-    arch:        Arch,
+pub struct Library {
+    image: Image,
+    dyn_range: Range<usize>,
+    dyn_section: DynamicSection<'static>,
 }
 
-impl<'a> Library<'a> {
-    pub fn lookup(&self, name: &[u8]) -> Option<Elf32_Word> {
-        let hash = elf_hash(name);
-        let mut index = self.hash_bucket[hash as usize % self.hash_bucket.len()] as usize;
+impl Library {
+    pub fn lookup(&self, name: &[u8]) -> Option<u32> {
+        self.dyn_section.lookup(name)
+            .map(|addr| self.image.ptr() as u32 + addr)
+    }
+}
 
-        loop {
-            if index == STN_UNDEF { return None }
+pub fn load(
+    data: &[u8],
+    resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>
+) -> Result<Library, Error> {
+    // validate ELF file
+    let file = file::File::new(data)
+        .ok_or("cannot read ELF header")?;
+    if file.ehdr.e_type != ET_DYN {
+        return Err("not a shared library")?
+    }
+    let arch = file.arch()
+        .ok_or("not for a supported architecture")?;
 
-            let sym = &self.symtab[index];
-            let sym_name_off = sym.st_name as usize;
-            match self.strtab.get(sym_name_off..sym_name_off + name.len()) {
-                Some(sym_name) if sym_name == name => {
-                    if ELF32_ST_BIND(sym.st_info) & STB_GLOBAL == 0 {
-                        return None
-                    }
-
-                    match sym.st_shndx {
-                        SHN_UNDEF => return None,
-                        SHN_ABS => return Some(sym.st_value),
-                        _ => return Some(self.image_off + sym.st_value)
-                    }
-                }
-                _ => (),
+    // prepare target memory
+    let image_size = file.program_headers()
+        .filter_map(|phdr| phdr.map(|phdr| phdr.p_vaddr + phdr.p_memsz))
+        .max()
+        .unwrap_or(0) as usize;
+    let image_align = file.program_headers()
+        .filter_map(|phdr| phdr.and_then(|phdr| {
+            if phdr.p_type == PT_LOAD {
+                Some(phdr.p_align)
+            } else {
+                None
             }
+        }))
+        .max()
+        .unwrap_or(4) as usize;
+    // 1 image for all segments
+    let mut image = image::Image::new(image_size, image_align)
+        .map_err(|_| "cannot allocate target image")?;
+    info!("ELF target: {} bytes, align to {:X}, allocated at {:08X}", image_size, image_align, image.ptr() as usize);
 
-            index = self.hash_chain[index] as usize;
-        }
+    // LOAD
+    for phdr in file.program_headers() {
+        let phdr = phdr.ok_or("cannot read program header")?;
+        if phdr.p_type != PT_LOAD { continue; }
+
+        trace!("Program header: {:08X}+{:08X} to {:08X}",
+              phdr.p_offset, phdr.p_filesz,
+              image.ptr() as u32
+        );
+        let src = file.get(phdr.p_offset as usize..(phdr.p_offset + phdr.p_filesz) as usize)
+            .ok_or("program header requests an out of bounds load (in file)")?;
+        let dst = image.get_mut(phdr.p_vaddr as usize..
+                                (phdr.p_vaddr + phdr.p_filesz) as usize)
+            .ok_or("program header requests an out of bounds load (in target)")?;
+        dst.copy_from_slice(src);
     }
 
-    fn name_starting_at(&self, offset: usize) -> Result<&'a [u8], Error<'a>> {
-        let size = self.strtab.iter().skip(offset).position(|&x| x == 0)
-                              .ok_or("symbol in symbol table not null-terminated")?;
-        Ok(self.strtab.get(offset..offset + size)
-                      .ok_or("cannot read symbol name")?)
+    // relocate DYNAMIC
+    let dyn_range = file.dyn_header_vaddr()
+        .ok_or("cannot find a dynamic header")?;
+    let dyn_section = image.dyn_section(dyn_range.clone())?;
+    info!("Relocating {} rela, {} rel, {} pltrel",
+          dyn_section.rela.len(), dyn_section.rel.len(), dyn_section.pltrel.len());
+
+    for rela in dyn_section.rela {
+        reloc::relocate(arch, &image, &dyn_section, rela, resolve)?;
+    }
+    for rel in dyn_section.rela {
+        reloc::relocate(arch, &image, &dyn_section, rel, resolve)?;
+    }
+    for pltrel in dyn_section.pltrel {
+        reloc::relocate(arch, &image, &dyn_section, pltrel, resolve)?;
     }
 
-    fn update_rela(&self, rela: &Elf32_Rela, value: Elf32_Word) -> Result<(), Error<'a>> {
-        if rela.r_offset as usize + mem::size_of::<Elf32_Addr>() > self.image_sz {
-            return Err("relocation out of image bounds")?
-        }
-
-        let ptr = (self.image_off + rela.r_offset) as *mut Elf32_Addr;
-        Ok(unsafe { *ptr = value })
-    }
-
-
-    fn update_rel(&self, rel: &Elf32_Rel, value: Elf32_Word) -> Result<(), Error<'a>> {
-        if rel.r_offset as usize + mem::size_of::<Elf32_Addr>() > self.image_sz {
-            return Err("relocation out of image bounds")?
-        }
-
-        let ptr = (self.image_off + rel.r_offset) as *mut Elf32_Addr;
-        Ok(unsafe { *ptr = value })
-    }
-
-    // This is unsafe because it mutates global data (the PLT).
-    pub unsafe fn rebind(&self, name: &[u8], addr: Elf32_Word) -> Result<(), Error<'a>> {
-        for rel in self.pltrel.iter() {
-            let is_rebind_type = match ELF32_R_TYPE(rel.r_info) {
-                R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT
-                    if self.arch == Arch::OpenRisc => true,
-                R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT
-                    if self.arch == Arch::Arm => true,
-                _ =>
-                    // No associated symbols for other relocation types.
-                    false,
-            };
-
-            if is_rebind_type {
-                let sym = self.symtab.get(ELF32_R_SYM(rel.r_info) as usize)
-                    .ok_or("symbol out of bounds of symbol table")?;
-                let sym_name = self.name_starting_at(sym.st_name as usize)?;
-
-                if sym_name == name {
-                    self.update_rel(rel, addr)?
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn resolve_rela(&self, rela: &Elf32_Rela, resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>)
-            -> Result<(), Error<'a>> {
-        let sym;
-        if ELF32_R_SYM(rela.r_info) == 0 {
-            sym = None;
-        } else {
-            sym = Some(self.symtab.get(ELF32_R_SYM(rela.r_info) as usize)
-                                  .ok_or("symbol out of bounds of symbol table")?)
-        }
-
-        enum RelaType {
-            None,
-            Relative,
-            Lookup,
-        };
-        let rela_type = match ELF32_R_TYPE(rela.r_info) {
-            R_OR1K_NONE if self.arch == Arch::OpenRisc =>
-                RelaType::None,
-            R_ARM_NONE if self.arch == Arch::Arm =>
-                RelaType::None,
-
-            R_OR1K_RELATIVE if self.arch == Arch::OpenRisc =>
-                RelaType::Relative,
-            R_ARM_RELATIVE if self.arch == Arch::Arm =>
-                RelaType::Relative,
-
-            R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT
-                if self.arch == Arch::OpenRisc => RelaType::Lookup,
-            R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT
-                if self.arch == Arch::Arm => RelaType::Lookup,
-
-            _ =>
-                return Err("unsupported relocation type")?,
-        };
-        let value;
-        match rela_type {
-            RelaType::None =>
-                return Ok(()),
-
-            RelaType::Relative =>
-                value = self.image_off + rela.r_addend as Elf32_Word,
-
-            RelaType::Lookup => {
-                let sym = sym.ok_or("relocation requires an associated symbol")?;
-                let sym_name = self.name_starting_at(sym.st_name as usize)?;
-
-                // First, try to resolve against itself.
-                match self.lookup(sym_name) {
-                    Some(addr) => value = addr,
-                    None => {
-                        // Second, call the user-provided function.
-                        match resolve(sym_name) {
-                            Some(addr) => value = addr,
-                            None => {
-                                // We couldn't find it anywhere.
-                                return Err(Error::Lookup(sym_name))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        self.update_rela(rela, value)
-    }
-
-    fn resolve_rel(&self, rel: &Elf32_Rel, resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>)
-            -> Result<(), Error<'a>> {
-        #[derive(Debug)]
-        enum RelType {
-            None,
-            Relative,
-            Lookup,
-        };
-        let rel_type = match ELF32_R_TYPE(rel.r_info) {
-            R_OR1K_NONE if self.arch == Arch::OpenRisc =>
-                RelType::None,
-            R_ARM_NONE if self.arch == Arch::Arm =>
-                RelType::None,
-
-            R_OR1K_RELATIVE if self.arch == Arch::OpenRisc =>
-                RelType::Relative,
-            R_ARM_RELATIVE if self.arch == Arch::Arm =>
-                RelType::Relative,
-
-            R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT
-                if self.arch == Arch::OpenRisc => RelType::Lookup,
-            R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT
-                if self.arch == Arch::Arm => RelType::Lookup,
-
-            _ =>
-                return Err("unsupported relocation type")?,
-        };
-        let value;
-        match rel_type {
-            RelType::None =>
-                return Ok(()),
-
-            RelType::Relative => {
-                let addend = unsafe {
-                    *((self.image_off + rel.r_offset) as *const Elf32_Addr)
-                };
-                value = self.image_off + addend as Elf32_Word;
-            },
-
-            RelType::Lookup => {
-                let sym;
-                if ELF32_R_SYM(rel.r_info) == 0 {
-                    return Err("relocation requires an associated symbol")?;
-                }
-                sym = self.symtab.get(ELF32_R_SYM(rel.r_info) as usize)
-                    .ok_or("symbol out of bounds of symbol table")?;
-                let sym_name = self.name_starting_at(sym.st_name as usize)?;
-
-                // First, try to resolve against itself.
-                match self.lookup(sym_name) {
-                    Some(addr) => value = addr,
-                    None => {
-                        // Second, call the user-provided function.
-                        match resolve(sym_name) {
-                            Some(addr) => value = addr,
-                            None => {
-                                // We couldn't find it anywhere.
-                                return Err(Error::Lookup(sym_name))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        self.update_rel(rel, value)
-    }
-
-    pub fn load(data: &[u8], image: &'a mut [u8], resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>)
-            -> Result<Library<'a>, Error<'a>> {
-        #![allow(unused_assignments)]
-
-        let ehdr = read_unaligned::<Elf32_Ehdr>(data, 0)
-                                  .map_err(|()| "cannot read ELF header")?;
-
-        if ehdr.e_type != ET_DYN {
-            return Err("not a shared library")?
-        }
-
-        let arch = Arch::detect(&ehdr)
-            .ok_or("not for a supported architecture")?;
-
-        let mut dyn_off = None;
-        for i in 0..ehdr.e_phnum {
-            let phdr_off = ehdr.e_phoff as usize + mem::size_of::<Elf32_Phdr>() * i as usize;
-            let phdr = read_unaligned::<Elf32_Phdr>(data, phdr_off)
-                                      .map_err(|()| "cannot read program header")?;
-
-            match phdr.p_type {
-                PT_LOAD => {
-                    if (phdr.p_vaddr + phdr.p_filesz) as usize > image.len() {
-                        return Err("program header requests an out of bounds load (in image)")?
-                    }
-                    if (phdr.p_offset + phdr.p_filesz) as usize > data.len() {
-                        return Err("program header requests an out of bounds load (in data)")?
-                    }
-                    let dst = image.get_mut(phdr.p_vaddr as usize..
-                                            (phdr.p_vaddr + phdr.p_filesz) as usize)
-                                   .ok_or("cannot write to program header destination")?;
-                    let src = data.get(phdr.p_offset as usize..
-                                       (phdr.p_offset + phdr.p_filesz) as usize)
-                                  .ok_or("cannot read from program header source")?;
-                    dst.copy_from_slice(src);
-                }
-
-                PT_DYNAMIC =>
-                    dyn_off = Some(phdr.p_vaddr),
-
-                _ => ()
-            }
-        }
-
-        let (mut strtab_off, mut strtab_sz) = (0, 0);
-        let (mut symtab_off, mut symtab_sz) = (0, 0);
-        let (mut rel_off,    mut rel_sz)    = (0, 0);
-        let (mut rela_off,   mut rela_sz)   = (0, 0);
-        let (mut pltrel_off, mut pltrel_sz) = (0, 0);
-        let (mut hash_off,   mut hash_sz)   = (0, 0);
-        let mut sym_ent  = 0;
-        let mut rel_ent  = 0;
-        let mut rela_ent = 0;
-        let mut nbucket  = 0;
-        let mut nchain   = 0;
-
-        let dyn_off = dyn_off.ok_or("cannot find a dynamic header")?;
-        for i in 0.. {
-            let dyn_off = dyn_off as usize + i * mem::size_of::<Elf32_Dyn>();
-            let dyn = get_ref::<Elf32_Dyn>(image, dyn_off)
-                              .map_err(|()| "cannot read dynamic header")?;
-
-            let val = unsafe { dyn.d_un.d_val } as usize;
-            match dyn.d_tag {
-                DT_NULL     => break,
-                DT_STRTAB   => strtab_off = val,
-                DT_STRSZ    => strtab_sz  = val,
-                DT_SYMTAB   => symtab_off = val,
-                DT_SYMENT   => sym_ent    = val,
-                DT_REL      => rel_off    = val,
-                DT_RELSZ    => rel_sz     = val / mem::size_of::<Elf32_Rel>(),
-                DT_RELENT   => rel_ent    = val,
-                DT_RELA     => rela_off   = val,
-                DT_RELASZ   => rela_sz    = val / mem::size_of::<Elf32_Rela>(),
-                DT_RELAENT  => rela_ent   = val,
-                DT_JMPREL   => pltrel_off = val,
-                DT_PLTRELSZ => pltrel_sz  = val / mem::size_of::<Elf32_Rel>(),
-                DT_HASH     => {
-                    nbucket  = *get_ref::<Elf32_Word>(image, val + 0)
-                                        .map_err(|()| "cannot read hash bucket count")? as usize;
-                    nchain   = *get_ref::<Elf32_Word>(image, val + 4)
-                                        .map_err(|()| "cannot read hash chain count")? as usize;
-                    hash_off = val + 8;
-                    hash_sz  = nbucket + nchain;
-                }
-                _ => ()
-            }
-        }
-
-        if sym_ent != mem::size_of::<Elf32_Sym>() {
-            return Err("incorrect symbol entry size")?
-        }
-        if rel_ent != 0 && rel_ent != mem::size_of::<Elf32_Rel>() {
-            return Err("incorrect relocation entry size")?
-        }
-        if rela_ent != 0 && rela_ent != mem::size_of::<Elf32_Rela>() {
-            return Err("incorrect relocation entry size")?
-        }
-
-        // These are the same--there are as many chains as buckets, and the chains only contain
-        // the symbols that overflowed the bucket.
-        symtab_sz = nchain;
-
-        // Drop the mutability. See also the comment below.
-        let image = &*image;
-
-        let strtab = get_ref_slice::<u8>(image, strtab_off, strtab_sz)
-                                   .map_err(|()| "cannot read string table")?;
-        let symtab = get_ref_slice::<Elf32_Sym>(image, symtab_off, symtab_sz)
-                                   .map_err(|()| "cannot read symbol table")?;
-        let rel   =  get_ref_slice::<Elf32_Rel>(image, rel_off, rel_sz)
-                                   .map_err(|()| "cannot read rel entries")?;
-        let rela   = get_ref_slice::<Elf32_Rela>(image, rela_off, rela_sz)
-                                   .map_err(|()| "cannot read rela entries")?;
-        let pltrel = get_ref_slice::<Elf32_Rel>(image, pltrel_off, pltrel_sz)
-                                   .map_err(|()| "cannot read pltrel entries")?;
-        let hash   = get_ref_slice::<Elf32_Word>(image, hash_off, hash_sz)
-                                   .map_err(|()| "cannot read hash entries")?;
-
-        let library = Library {
-            image_off:   image.as_ptr() as Elf32_Word,
-            image_sz:    image.len(),
-            strtab,
-            symtab,
-            pltrel,
-            hash_bucket: &hash[..nbucket],
-            hash_chain:  &hash[nbucket..nbucket + nchain],
-            arch,
-        };
-
-        // If a borrow exists anywhere, the borrowed memory cannot be mutated except
-        // through that pointer or it's UB. However, we need to retain pointers
-        // to the symbol tables and relocations, and at the same time mutate the code
-        // to resolve the relocations.
-        //
-        // To avoid invoking UB, we drop the only pointer to the entire area (which is
-        // unique since it's a &mut); we retain pointers to the various tables, but
-        // we never write to the memory they refer to, so it's safe.
-        mem::drop(image);
-
-        for r in rela   { library.resolve_rela(r, resolve)? }
-        for r in rel    { library.resolve_rel(r, resolve)? }
-        /// TODO: processing of pltrel has been changed from
-        /// resolve_rela() to resolve_rel(). verify if this is
-        /// specific to eg. architecture?
-        for r in pltrel { library.resolve_rel(r, resolve)? }
-
-        Ok(library)
-    }
+    let dyn_section = unsafe {
+        core::mem::transmute(dyn_section)
+    };
+    Ok(Library {
+        image,
+        dyn_range,
+        dyn_section,
+    })
 }
