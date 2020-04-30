@@ -1,6 +1,6 @@
 use core::{ptr, mem};
 use log::{debug, error};
-use alloc::{vec, vec::Vec, sync::Arc};
+use alloc::{vec::Vec, sync::Arc};
 
 use libcortex_a9::{mutex::Mutex, sync_channel::{self, sync_channel}};
 use libsupport_zynq::boot::Core1;
