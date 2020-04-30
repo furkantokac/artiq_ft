@@ -39,7 +39,6 @@ SECTIONS
     .bss (NOLOAD) : ALIGN(4)
     {
         __bss_start = .;
-        KEEP(*(.bss.l1_table));
         *(.bss .bss.*);
         . = ALIGN(4);
         __bss_end = .;
