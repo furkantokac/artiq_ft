@@ -39,7 +39,7 @@ pub fn main_core0() {
     libboard_zynq::stdio::drop_uart(); // reinitialize UART after clocking change
     let mut ddr = zynq::ddr::DdrRam::new();
 
-    let payload = include_bytes!(concat!(env!("OUT_DIR"), "/payload.bin.lzma"));
+    let payload = include_bytes!("payload.bin.lzma");
     info!("decompressing payload");
     let result = unsafe {
         unlzma_simple(payload.as_ptr(), payload.len() as i32, ddr.ptr(), lzma_error)

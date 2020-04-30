@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import argparse
-import os
 
 from migen import *
 
@@ -71,7 +70,7 @@ def main():
         if action == "gateware":
             soc.build()
         elif action == "rustif":
-            write_csr_file(soc, os.path.join("runtime", "src", "pl.rs"))
+            write_csr_file(soc, "pl.rs")
         else:
             raise ValueError("invalid action", action)
 

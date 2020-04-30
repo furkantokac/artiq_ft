@@ -5,20 +5,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 fn main() {
-    // FIXME: this is dirty and unreliable. How to depend on the output of the runtime build?
-    let payload = "../target/armv7-none-eabihf/release/runtime";
-
     let out = env::var("OUT_DIR").unwrap();
     let out_dir = &PathBuf::from(&out);
-    let status = Command::new("llvm-objcopy")
-                              .args(&["-O", "binary", payload, &format!("{}/payload.bin", out)])
-                              .status().unwrap();
-    assert!(status.success());
-    let status = Command::new("lzma")
-                              .args(&["--keep", "-f", &format!("{}/payload.bin", out)])
-                              .status().unwrap();
-    assert!(status.success());
-    println!("cargo:rerun-if-changed={}", payload);
 
     let status = Command::new("clang")
                               .args(&["-target", "armv7-unknown-linux", "-fno-stack-protector",
