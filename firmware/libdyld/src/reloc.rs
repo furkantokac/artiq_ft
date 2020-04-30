@@ -4,7 +4,8 @@ use super::{
     Arch,
     elf::*,
     Error,
-    image::{DynamicSection, Image},
+    image::Image,
+    Library,
 };
 
 pub trait Relocatable {
@@ -87,16 +88,16 @@ fn format_sym_name(sym_name: &[u8]) -> String {
         .unwrap_or(String::from("<invalid symbol name>"))
 }
 
-pub fn relocate<'a, R: Relocatable>(
-    arch: Arch, image: &'a Image, dynamic_section: &'a DynamicSection<'a>,
-    rel: &'a R, resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>
+pub fn relocate<R: Relocatable>(
+    arch: Arch, lib: &Library,
+    rel: &R, resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>
 ) -> Result<(), Error> {
     // debug!("rel r_offset={:08X} r_info={:08X} r_addend={:08X}", rel.offset(), rel.r_info, rela.r_addend);
     let sym;
     if rel.sym_info() == 0 {
         sym = None;
     } else {
-        sym = Some(dynamic_section.symtab.get(rel.sym_info() as usize)
+        sym = Some(lib.symtab().get(rel.sym_info() as usize)
                    .ok_or("symbol out of bounds of symbol table")?)
     }
 
@@ -108,18 +109,18 @@ pub fn relocate<'a, R: Relocatable>(
             return Ok(()),
 
         RelType::Relative => {
-            let addend = rel.addend(image);
-            value = image.ptr().wrapping_offset(addend as isize) as Elf32_Word;
+            let addend = rel.addend(&lib.image);
+            value = lib.image.ptr().wrapping_offset(addend as isize) as Elf32_Word;
         }
 
         RelType::Lookup => {
             let sym = sym.ok_or("relocation requires an associated symbol")?;
-            let sym_name = dynamic_section.name_starting_at(sym.st_name as usize)?;
+            let sym_name = lib.name_starting_at(sym.st_name as usize)?;
 
-            if let Some(addr) = dynamic_section.lookup(sym_name) {
+            if let Some(addr) = lib.lookup(sym_name) {
                 // First, try to resolve against itself.
                 trace!("looked up symbol {} in image", format_sym_name(sym_name));
-                value = image.ptr() as u32 + addr;
+                value = lib.image.ptr() as u32 + addr;
             } else if let Some(addr) = resolve(sym_name) {
                 // Second, call the user-provided function.
                 trace!("resolved symbol {:?}", format_sym_name(sym_name));
@@ -132,5 +133,5 @@ pub fn relocate<'a, R: Relocatable>(
     }
 
     debug!("rel_type={:?} write at {:08X} value {:08X}", rel_type, rel.offset(), value);
-    image.write(rel.offset(), value)
+    lib.image.write(rel.offset(), value)
 }

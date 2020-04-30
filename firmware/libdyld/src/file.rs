@@ -1,4 +1,4 @@
-use core::{mem, ptr, fmt, slice, str, convert, ops::{Deref, Range}};
+use core::{mem, ptr, ops::{Deref, Range}};
 use super::{
     Arch,
     elf::*,

@@ -3,9 +3,9 @@
 extern crate alloc;
 extern crate log;
 
-use core::{mem, ptr, fmt, slice, str, convert, ops::Range};
+use core::{fmt, str, convert};
 use alloc::string::String;
-use log::{info, trace, error};
+use log::{info, trace};
 use elf::*;
 
 pub mod elf;
@@ -44,16 +44,90 @@ impl fmt::Display for Error {
     }
 }
 
+fn elf_hash(name: &[u8]) -> u32 {
+    let mut h: u32 = 0;
+    for c in name {
+        h = (h << 4) + *c as u32;
+        let g = h & 0xf0000000;
+        if g != 0 {
+            h ^= g >> 24;
+            h &= !g;
+        }
+    }
+    h
+}
+
 pub struct Library {
     image: Image,
-    dyn_range: Range<usize>,
-    dyn_section: DynamicSection<'static>,
+    dyn_section: DynamicSection,
 }
 
 impl Library {
-    pub fn lookup(&self, name: &[u8]) -> Option<u32> {
-        self.dyn_section.lookup(name)
-            .map(|addr| self.image.ptr() as u32 + addr)
+    fn strtab(&self) -> &[u8] {
+        self.image.get_ref_slice_unchecked(&self.dyn_section.strtab)
+    }
+
+    fn symtab(&self) -> &[Elf32_Sym] {
+        self.image.get_ref_slice_unchecked(&self.dyn_section.symtab)
+    }
+
+    fn hash(&self) -> &[Elf32_Word] {
+        self.image.get_ref_slice_unchecked(&self.dyn_section.hash)
+    }
+
+    fn hash_bucket(&self) -> &[Elf32_Word] {
+        &self.hash()[self.dyn_section.hash_bucket.clone()]
+    }
+
+    fn hash_chain(&self) -> &[Elf32_Word] {
+        &self.hash()[self.dyn_section.hash_chain.clone()]
+    }
+
+    fn rel(&self) -> &[Elf32_Rel] {
+        self.image.get_ref_slice_unchecked(&self.dyn_section.rel)
+    }
+
+    fn rela(&self) -> &[Elf32_Rela] {
+        self.image.get_ref_slice_unchecked(&self.dyn_section.rela)
+    }
+
+    fn pltrel(&self) -> &[Elf32_Rel] {
+        self.image.get_ref_slice_unchecked(&self.dyn_section.pltrel)
+    }
+
+    pub fn lookup(&self, name: &[u8]) -> Option<Elf32_Word> {
+        let hash = elf_hash(name);
+        let mut index = self.hash_bucket()[hash as usize % self.hash_bucket().len()] as usize;
+
+        loop {
+            if index == STN_UNDEF { return None }
+
+            let sym = &self.symtab()[index];
+            let sym_name_off = sym.st_name as usize;
+            match self.strtab().get(sym_name_off..sym_name_off + name.len()) {
+                Some(sym_name) if sym_name == name => {
+                    if ELF32_ST_BIND(sym.st_info) & STB_GLOBAL == 0 {
+                        return None
+                    }
+
+                    match sym.st_shndx {
+                        SHN_UNDEF => return None,
+                        SHN_ABS => return Some(self.image.ptr() as u32 + sym.st_value),
+                        _ => return Some(self.image.ptr() as u32 + sym.st_value)
+                    }
+                }
+                _ => (),
+            }
+
+            index = self.hash_chain()[index] as usize;
+        }
+    }
+
+    pub fn name_starting_at(&self, offset: usize) -> Result<&[u8], Error> {
+        let size = self.strtab().iter().skip(offset).position(|&x| x == 0)
+                              .ok_or("symbol in symbol table not null-terminated")?;
+        Ok(self.strtab().get(offset..offset + size)
+           .ok_or("cannot read symbol name")?)
     }
 }
 
@@ -113,23 +187,20 @@ pub fn load(
     let dyn_section = image.dyn_section(dyn_range.clone())?;
     info!("Relocating {} rela, {} rel, {} pltrel",
           dyn_section.rela.len(), dyn_section.rel.len(), dyn_section.pltrel.len());
-
-    for rela in dyn_section.rela {
-        reloc::relocate(arch, &image, &dyn_section, rela, resolve)?;
-    }
-    for rel in dyn_section.rela {
-        reloc::relocate(arch, &image, &dyn_section, rel, resolve)?;
-    }
-    for pltrel in dyn_section.pltrel {
-        reloc::relocate(arch, &image, &dyn_section, pltrel, resolve)?;
-    }
-
-    let dyn_section = unsafe {
-        core::mem::transmute(dyn_section)
-    };
-    Ok(Library {
+    let lib = Library {
         image,
-        dyn_range,
         dyn_section,
-    })
+    };
+
+    for rela in lib.rela() {
+        reloc::relocate(arch, &lib, rela, resolve)?;
+    }
+    for rel in lib.rel() {
+        reloc::relocate(arch, &lib, rel, resolve)?;
+    }
+    for pltrel in lib.pltrel() {
+        reloc::relocate(arch, &lib, pltrel, resolve)?;
+    }
+
+    Ok(lib)
 }
