@@ -8,6 +8,7 @@ let
   rustPlatform = (import ./rustPlatform.nix { inherit pkgs; });
   artiqpkgs = import "${artiq-fast}/default.nix" { inherit pkgs; };
   vivado = import "${artiq-fast}/vivado.nix" { inherit pkgs; };
+  mkbootimage = (import ./mkbootimage.nix { inherit pkgs; });
 in
   rec {
     zc706-szl = rustPlatform.buildRustPackage rec {
@@ -58,5 +59,30 @@ in
         mkdir $out
         ln -s ${zc706-szl}/szl.elf $out
         ln -s ${zc706-gateware}/top.bit $out
+      '';
+    zc706-sd = pkgs.runCommand "zc706-sd"
+      {
+        buildInputs = [ mkbootimage ];
+      }
+      ''
+      bif=`mktemp`
+      cat > $bif << EOF
+      the_ROM_image:
+      {
+        [bootloader]${zc706-szl}/szl.elf
+      }
+      EOF
+      mkdir $out
+      mkbootimage $bif $out/boot.bin
+      ln -s ${zc706-gateware}/top.bit $out
+      '';
+    zc706-sd-zip = pkgs.runCommand "zc706-sd-zip"
+      {
+        buildInputs = [ pkgs.zip ];
+      }
+      ''
+        mkdir -p $out $out/nix-support
+        zip -j $out/sd.zip ${zc706-sd}/*
+        echo file binary-dist $out/sd.zip >> $out/nix-support/hydra-build-products
       '';
   }
