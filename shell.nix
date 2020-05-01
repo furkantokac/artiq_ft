@@ -22,6 +22,8 @@ in
       vivado
       pkgs.llvm_9
       pkgs.lld_9
+
+      (import ./mkbootimage.nix { inherit pkgs; })
     ];
 
     XARGO_RUST_SRC = "${rustPlatform.rust.rustc.src}/src";
