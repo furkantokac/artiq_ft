@@ -33,7 +33,7 @@ in
 
       installPhase = ''
         mkdir -p $out $out/nix-support
-        cp target/armv7-none-eabihf/release/szl $out/$szl.elf
+        cp target/armv7-none-eabihf/release/szl $out/szl.elf
         echo file binary-dist $out/szl.elf >> $out/nix-support/hydra-build-products
       '';
 
@@ -56,7 +56,7 @@ in
     zc706-jtag = pkgs.runCommand "zc706-jtag" {}
       ''
         mkdir $out
-        ln -s ${zc706-szl}/szl $out
+        ln -s ${zc706-szl}/szl.elf $out
         ln -s ${zc706-gateware}/top.bit $out
       '';
   }
