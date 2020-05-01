@@ -2,12 +2,29 @@
 
 set -e
 
-TARGET_HOST=$1
+target_host="rpi-4.m-labs.hk"
+impure=0
 
-TARGET_FOLDER=/tmp/zynq-\$USER
+while getopts "h:i" opt; do
+    case "$opt" in
+    \?) exit 0
+        ;;
+    h)  target_host=$OPTARG
+        ;;
+    i)  impure=1
+        ;;
+    esac
+done
 
-ssh $TARGET_HOST "mkdir -p $TARGET_FOLDER"
-rsync openocd/* $TARGET_HOST:$TARGET_FOLDER
-rsync result/szl $TARGET_HOST:$TARGET_FOLDER
-rsync result/top.bit $TARGET_HOST:$TARGET_FOLDER
-ssh $TARGET_HOST "cd $TARGET_FOLDER; openocd -f zc706.cfg -c 'pld load 0 top.bit; load_image szl; resume 0; exit'"
+target_folder=/tmp/zynq-\$USER
+
+ssh $target_host "mkdir -p $target_folder"
+rsync openocd/* $target_host:$target_folder
+if [ $impure -eq 1 ]; then
+    rsync src/target/armv7-none-eabihf/release/szl $target_host:$target_folder
+    rsync src/build/top.bit $target_host:$target_folder
+else
+    rsync result/szl $target_host:$target_folder
+    rsync result/top.bit $target_host:$target_folder
+fi
+ssh $target_host "cd $target_folder; openocd -f zc706.cfg -c 'pld load 0 top.bit; load_image szl; resume 0; exit'"

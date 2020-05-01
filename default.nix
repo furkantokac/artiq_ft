@@ -6,59 +6,49 @@ let
   pkgs = import <nixpkgs> { overlays = [ mozillaOverlay ]; };
   artiq-fast = <artiq-fast>;
   rustPlatform = (import ./rustPlatform.nix { inherit pkgs; });
-  buildFirmware = { name, src }:
-    rustPlatform.buildRustPackage rec {
-      inherit name;
+  artiqpkgs = import "${artiq-fast}/default.nix" { inherit pkgs; };
+  vivado = import "${artiq-fast}/vivado.nix" { inherit pkgs; };
+in
+  rec {
+    zc706-szl = rustPlatform.buildRustPackage rec {
+      name = "szl";
       version = "0.1.0";
 
-      inherit src;
-      cargoSha256 = (import "${src}/cargosha256.nix");
+      src = ./src;
+      cargoSha256 = "199qfs7fbbj8kxkyb0dcns6hdq9hvlppk7l3pnz204j9zkd7dkcp";
 
-      nativeBuildInputs = [ pkgs.cargo-xbuild pkgs.llvm_9 pkgs.clang_9 ];
+      nativeBuildInputs = [
+        pkgs.gnumake
+        (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
+        pkgs.cargo-xbuild
+        pkgs.llvm_9
+        pkgs.clang_9
+      ];
       buildPhase = ''
         export XARGO_RUST_SRC="${rustPlatform.rust.rustc.src}/src"
         export CARGO_HOME=$(mktemp -d cargo-home.XXX)
-        cargo xbuild --release -p ${name}
+        make clean
+        make
+      '';
+
+      installPhase = ''
+        mkdir -p $out $out/nix-support
+        cp target/armv7-none-eabihf/release/szl $out/$szl.elf
+        echo file binary-dist $out/szl.elf >> $out/nix-support/hydra-build-products
       '';
 
       doCheck = false;
-      installPhase = ''
-        mkdir -p $out $out/nix-support
-        cp target/armv7-none-eabihf/release/${name} $out/${name}.elf
-        echo file binary-dist $out/${name}.elf >> $out/nix-support/hydra-build-products
-      '';
       dontFixup = true;
     };
-
-    artiqpkgs = import "${artiq-fast}/default.nix" { inherit pkgs; };
-    vivado = import "${artiq-fast}/vivado.nix" { inherit pkgs; };
-in
-  rec {
-    zc706-runtime-src = pkgs.runCommand "zc706-runtime-src"
-      { buildInputs = [ 
-        (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
-      ]; }
-      ''
-        cp --no-preserve=mode,ownership -R ${./firmware} $out
-        cd $out/runtime/src
-        python ${./zc706.py} rustif
-      '';
-    zc706-runtime = buildFirmware { name = "runtime"; src = zc706-runtime-src; };
-    zc706-szl-src = pkgs.runCommand "zc706-szl-src"
-      { nativeBuildInputs = [ pkgs.llvm_9 ]; }
-      ''
-        cp --no-preserve=mode,ownership -R ${./firmware} $out
-        llvm-objcopy -O binary ${zc706-runtime}/runtime.elf $out/szl/src/payload.bin
-        lzma $out/szl/src/payload.bin
-      '';
-    zc706-szl = buildFirmware { name = "szl"; src = zc706-szl-src; };
     zc706-gateware = pkgs.runCommand "zc706-gateware"
-      { buildInputs = [ 
-        (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
-        vivado
-      ]; }
+      {
+        nativeBuildInputs = [ 
+          (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
+          vivado
+        ];
+      }
       ''
-        python ${./zc706.py} gateware
+        python ${./src/zc706.py} -g
         mkdir -p $out $out/nix-support
         cp build/top.bit $out
         echo file binary-dist $out/top.bit >> $out/nix-support/hydra-build-products

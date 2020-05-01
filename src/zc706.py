@@ -58,21 +58,19 @@ def write_csr_file(soc, filename):
 def main():
     parser = argparse.ArgumentParser(
         description="ARTIQ port to the ZC706 Zynq development kit")
-    parser.add_argument("action", metavar="ACTION", nargs="*",
-                        default="gateware rustif".split(),
-                        help="actions to perform, default: %(default)s")
+    parser.add_argument("-r", default=None,
+        help="build Rust interface into the specified file")
+    parser.add_argument("-g", action="store_true",
+        help="build gateware")
     args = parser.parse_args()
 
     soc = ZC706()
     soc.finalize()
 
-    for action in args.action:
-        if action == "gateware":
-            soc.build()
-        elif action == "rustif":
-            write_csr_file(soc, "pl.rs")
-        else:
-            raise ValueError("invalid action", action)
+    if args.g:
+        soc.build()
+    if args.r is not None:
+        write_csr_file(soc, args.r)
 
 
 if __name__ == "__main__":
