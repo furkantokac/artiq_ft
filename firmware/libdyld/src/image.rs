@@ -79,16 +79,16 @@ impl Image {
 
     pub fn dyn_section(&self, range: Range<usize>) -> Result<DynamicSection, Error> {
         let (mut strtab_off, mut strtab_sz) = (0, 0);
-        let (mut symtab_off, mut symtab_sz) = (0, 0);
         let (mut rel_off,    mut rel_sz)    = (0, 0);
         let (mut rela_off,   mut rela_sz)   = (0, 0);
         let (mut pltrel_off, mut pltrel_sz) = (0, 0);
         let (mut hash_off,   mut hash_sz)   = (0, 0);
-        let mut sym_ent  = 0;
-        let mut rel_ent  = 0;
-        let mut rela_ent = 0;
-        let mut nbucket  = 0;
-        let mut nchain   = 0;
+        let mut symtab_off = 0;
+        let mut sym_ent    = 0;
+        let mut rel_ent    = 0;
+        let mut rela_ent   = 0;
+        let mut nbucket    = 0;
+        let mut nchain     = 0;
 
         for dyn_header in self.dyn_headers(range) {
             let val = unsafe { dyn_header.d_un.d_val } as usize;
@@ -112,11 +112,15 @@ impl Image {
                     nchain   = *self.get_ref::<Elf32_Word>(val + 4)
                         .ok_or("cannot read hash chain count")? as usize;
                     hash_off = val + 8;
-                    hash_sz  = nbucket + nchain;
+                    hash_sz  = (nbucket + nchain) * mem::size_of::<Elf32_Word>();
                 }
                 _ => ()
             }
         }
+
+        // These are the same--there are as many chains as buckets, and the chains only contain
+        // the symbols that overflowed the bucket.
+        let symtab_sz = nchain * mem::size_of::<Elf32_Sym>();
 
         if strtab_off + strtab_sz > self.data.len() {
             return Err("invalid strtab offset/size")?
@@ -142,10 +146,6 @@ impl Image {
         if pltrel_off + pltrel_sz > self.data.len() {
             return Err("invalid pltrel offset/size")?
         }
-
-        // These are the same--there are as many chains as buckets, and the chains only contain
-        // the symbols that overflowed the bucket.
-        symtab_sz = nchain;
 
         Ok(DynamicSection {
             strtab: strtab_off..strtab_off + strtab_sz,
