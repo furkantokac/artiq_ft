@@ -9,9 +9,10 @@ use cstr_core::CStr;
 
 use libboard_zynq::{
     self as zynq, clocks::Clocks, clocks::source::{ClockSource, ArmPll, IoPll},
+    logger,
     timer::GlobalTimer,
 };
-use libsupport_zynq::{boot, logger};
+use libsupport_zynq::boot;
 
 
 extern "C" {

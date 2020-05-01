@@ -8,8 +8,8 @@ extern crate log;
 use core::{cmp, str};
 use log::info;
 
-use libboard_zynq::timer::GlobalTimer;
-use libsupport_zynq::{logger, ram};
+use libboard_zynq::{logger, timer::GlobalTimer};
+use libsupport_zynq::ram;
 
 mod proto;
 mod comms;
