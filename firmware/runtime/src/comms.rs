@@ -107,8 +107,15 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
     expect(&stream, b"ARTIQ coredev\n").await?;
     debug!("received connection");
     loop {
-        if !expect(&stream, &[0x5a, 0x5a, 0x5a, 0x5a]).await? {
-            return Err(Error::UnexpectedPattern)
+        match expect(&stream, &[0x5a, 0x5a, 0x5a, 0x5a]).await {
+            Ok(true) => {}
+            Ok(false) =>
+                return Err(Error::UnexpectedPattern),
+            // peer has closed the connection
+            Err(smoltcp::Error::Illegal) =>
+                return Ok(()),
+            Err(e) =>
+                return Err(e)?,
         }
         let request: Request = FromPrimitive::from_i8(read_i8(&stream).await?)
             .ok_or(Error::UnrecognizedPacket)?;
