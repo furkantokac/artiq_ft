@@ -112,7 +112,7 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
             Ok(false) =>
                 return Err(Error::UnexpectedPattern),
             // Peer has closed the connection.
-            // Closing here is a normal condition so do not reported an error.
+            // Closing here is a normal condition so do not report an error.
             // An error is still reported if the connection is unexpectedly closed elsewhere.
             Err(smoltcp::Error::Illegal) =>
                 return Ok(()),
