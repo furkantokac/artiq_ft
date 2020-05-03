@@ -4,10 +4,9 @@
 
 let
   pkgs = import <nixpkgs> { overlays = [ mozillaOverlay ]; };
-  artiq-fast = <artiq-fast>;
   rustPlatform = (import ./rustPlatform.nix { inherit pkgs; });
-  artiqpkgs = import "${artiq-fast}/default.nix" { inherit pkgs; };
-  vivado = import "${artiq-fast}/vivado.nix" { inherit pkgs; };
+  artiqpkgs = import <artiq-fast/default.nix> { inherit pkgs; };
+  vivado = import <artiq-fast/vivado.nix> { inherit pkgs; };
   mkbootimage = (import ./mkbootimage.nix { inherit pkgs; });
 in
   rec {
