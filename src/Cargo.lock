@@ -153,7 +153,7 @@ dependencies = [
 [[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#d86f69a2539a9b76575caee0f665829c488ea962"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#27094da9ff66881eff3367c25e358ccf79ebaa93"
 dependencies = [
  "embedded-hal",
  "libcortex_a9",
@@ -165,7 +165,7 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#d86f69a2539a9b76575caee0f665829c488ea962"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#27094da9ff66881eff3367c25e358ccf79ebaa93"
 dependencies = [
  "bit_field",
  "embedded-hal",
@@ -181,7 +181,7 @@ dependencies = [
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#d86f69a2539a9b76575caee0f665829c488ea962"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#27094da9ff66881eff3367c25e358ccf79ebaa93"
 dependencies = [
  "bit_field",
  "libregister",
@@ -190,7 +190,7 @@ dependencies = [
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#d86f69a2539a9b76575caee0f665829c488ea962"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#27094da9ff66881eff3367c25e358ccf79ebaa93"
 dependencies = [
  "bit_field",
  "vcell",
@@ -200,7 +200,7 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#d86f69a2539a9b76575caee0f665829c488ea962"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#27094da9ff66881eff3367c25e358ccf79ebaa93"
 dependencies = [
  "compiler_builtins",
  "libboard_zynq",
@@ -283,18 +283,18 @@ checksum = "8e946095f9d3ed29ec38de908c22f95d9ac008e424c7bcae54c75a79c527c694"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.10"
+version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df246d292ff63439fea9bc8c0a270bed0e390d5ebd4db4ba15aba81111b5abe3"
+checksum = "8872cf6f48eee44265156c111456a700ab3483686b3f96df4cf5481c89157319"
 dependencies = [
  "unicode-xid",
 ]
 
 [[package]]
 name = "quote"
-version = "1.0.3"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bdc6c187c65bca4260c9011c9e3132efe4909da44726bad24cf7572ae338d7f"
+checksum = "4c1f4b0efa5fc5e8ceb705136bfee52cfdb6a4e3509f770b478cd6ed434232a7"
 dependencies = [
  "proc-macro2",
 ]
