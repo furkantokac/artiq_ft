@@ -28,9 +28,9 @@ extern fn lzma_error(message: *const u8) {
 #[no_mangle]
 pub fn main_core0() {
     GlobalTimer::start();
-    let _ = logger::init();
+    logger::init().unwrap();
     log::set_max_level(log::LevelFilter::Debug);
-    info!("Simple Zynq Loader starting");
+    info!("Simple Zynq Loader starting...");
 
     const CPU_FREQ: u32 = 800_000_000;
 
