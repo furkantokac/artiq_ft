@@ -8,7 +8,7 @@ extern crate log;
 use core::{cmp, str};
 use log::info;
 
-use libboard_zynq::{logger, timer::GlobalTimer};
+use libboard_zynq::{timer::GlobalTimer, logger, devc};
 use libsupport_zynq::ram;
 
 mod proto;
@@ -41,7 +41,16 @@ pub fn main_core0() {
 
     ram::init_alloc_linker();
 
-    info!("Detected gateware: {}", identifier_read(&mut [0; 64]));
+    let devc = devc::DevC::new();
+    if devc.is_done() {
+        info!("gateware already loaded");
+        // Do not load again: assume that the gateware already present
+        // (e.g. configured via JTAG before PS startup) is what we want.
+    } else {
+        info!("loading gateware");
+        unimplemented!("gateware loading");
+    }
+    info!("detected gateware: {}", identifier_read(&mut [0; 64]));
 
     unsafe {
         pl::csr::rtio_core::reset_phy_write(1);

@@ -153,7 +153,7 @@ dependencies = [
 [[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#27094da9ff66881eff3367c25e358ccf79ebaa93"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#ce844f1b026b15f77432de0e24942ff220add283"
 dependencies = [
  "embedded-hal",
  "libcortex_a9",
@@ -165,7 +165,7 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#27094da9ff66881eff3367c25e358ccf79ebaa93"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#ce844f1b026b15f77432de0e24942ff220add283"
 dependencies = [
  "bit_field",
  "embedded-hal",
@@ -181,7 +181,7 @@ dependencies = [
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#27094da9ff66881eff3367c25e358ccf79ebaa93"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#ce844f1b026b15f77432de0e24942ff220add283"
 dependencies = [
  "bit_field",
  "libregister",
@@ -190,7 +190,7 @@ dependencies = [
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#27094da9ff66881eff3367c25e358ccf79ebaa93"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#ce844f1b026b15f77432de0e24942ff220add283"
 dependencies = [
  "bit_field",
  "vcell",
@@ -200,7 +200,7 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#27094da9ff66881eff3367c25e358ccf79ebaa93"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#ce844f1b026b15f77432de0e24942ff220add283"
 dependencies = [
  "compiler_builtins",
  "libboard_zynq",
@@ -212,9 +212,9 @@ dependencies = [
 
 [[package]]
 name = "linked_list_allocator"
-version = "0.8.3"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6b60501dd4c850950bb43f970d544f6ce04e0ca021da2db2538fbe9d923f19e"
+checksum = "e70e46c13c0e8374c26cec5752e3347ca1087d9711de8f45aa513a7700efd73d"
 
 [[package]]
 name = "log"
