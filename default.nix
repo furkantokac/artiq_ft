@@ -68,15 +68,19 @@ in
         buildInputs = [ mkbootimage ];
       }
       ''
-      bif=`mktemp`
-      cat > $bif << EOF
+      # Do not use "long" paths in boot.bif, because embedded developers
+      # can't write software (mkbootimage will segfault).
+      bifdir=`mktemp -d`
+      cd $bifdir
+      ln -s ${zc706-firmware}/szl.elf szl.elf
+      cat > boot.bif << EOF
       the_ROM_image:
       {
-        [bootloader]${zc706-firmware}/szl.elf
+        [bootloader]szl.elf
       }
       EOF
       mkdir $out
-      mkbootimage $bif $out/boot.bin
+      mkbootimage boot.bif $out/boot.bin
       ln -s ${zc706-gateware}/top.bit $out
       '';
     zc706-sd-zip = pkgs.runCommand "zc706-sd-zip"
@@ -96,8 +100,6 @@ in
         buildInputs = [ mkbootimage ];
       }
       ''
-      # Do not use "long" paths in boot.bif, because embedded developers
-      # can't write software (mkbootimage will segfault).
       # TODO: use self-built fsbl
       bifdir=`mktemp -d`
       cd $bifdir
