@@ -96,17 +96,24 @@ in
         buildInputs = [ mkbootimage ];
       }
       ''
-      bif=`mktemp`
-      cat > $bif << EOF
+      # Do not use "long" paths in boot.bif, because embedded developers
+      # can't write software (mkbootimage will segfault).
+      # TODO: use self-built fsbl
+      bifdir=`mktemp -d`
+      cd $bifdir
+      ln -s ${./fsbl.elf} fsbl.elf
+      ln -s ${zc706-gateware}/top.bit top.bit
+      ln -s ${zc706-firmware}/runtime.elf runtime.elf
+      cat > boot.bif << EOF
       the_ROM_image:
       {
-        [bootloader]${zc706-fsbl}/fsbl.elf
-        ${zc706-gateware}/top.bit
-        ${zc706-firmware}/runtime.elf
+        [bootloader]fsbl.elf
+        top.bit
+        runtime.elf
       }
       EOF
       mkdir $out $out/nix-support
-      mkbootimage $bif $out/boot.bin
+      mkbootimage boot.bif $out/boot.bin
       echo file binary-dist $out/boot.bin >> $out/nix-support/hydra-build-products
       '';
   }
