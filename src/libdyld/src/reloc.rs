@@ -1,5 +1,5 @@
 use alloc::string::String;
-use log::{debug, trace};
+use log::trace;
 use super::{
     Arch,
     elf::*,
@@ -92,7 +92,6 @@ pub fn relocate<R: Relocatable>(
     arch: Arch, lib: &Library,
     rel: &R, resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>
 ) -> Result<(), Error> {
-    // debug!("rel r_offset={:08X} r_info={:08X} r_addend={:08X}", rel.offset(), rel.r_info, rela.r_addend);
     let sym;
     if rel.sym_info() == 0 {
         sym = None;
@@ -132,6 +131,5 @@ pub fn relocate<R: Relocatable>(
         }
     }
 
-    debug!("rel_type={:?} write at {:08X} value {:08X}", rel_type, rel.offset(), value);
     lib.image.write(rel.offset(), value)
 }

@@ -155,7 +155,7 @@ impl Image {
             hash_chain: nbucket..nbucket + nchain,
             rel: rel_off..rel_off + rel_sz,
             rela: rela_off..rela_off + rela_sz,
-            pltrel: pltrel_off..pltrel_off + rela_sz,
+            pltrel: pltrel_off..pltrel_off + pltrel_sz,
         })
     }
 
