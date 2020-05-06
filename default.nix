@@ -84,4 +84,6 @@ in
         zip -j $out/sd.zip ${zc706-sd}/*
         echo file binary-dist $out/sd.zip >> $out/nix-support/hydra-build-products
       '';
+
+    zc706-fsbl = import ./fsbl.nix { inherit pkgs; };
   }
