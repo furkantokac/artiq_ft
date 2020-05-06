@@ -28,7 +28,7 @@ pub struct Control {
 
 impl Control {
     pub fn start() -> Self {
-        let core1 = Core1::start();
+        let core1 = Core1::start(true);
 
         let (core0_tx, core1_rx) = sync_channel(4);
         let (core1_tx, core0_rx) = sync_channel(4);

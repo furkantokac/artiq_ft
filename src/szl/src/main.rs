@@ -12,7 +12,7 @@ use libboard_zynq::{
     logger,
     timer::GlobalTimer,
 };
-use libsupport_zynq::boot;
+use libsupport_zynq as _;
 
 
 extern "C" {
@@ -48,7 +48,7 @@ pub fn main_core0() {
     if result < 0 {
         error!("decompression failed");
     } else {
-        boot::Core1::start();
+        // Start core0 only, for compatibility with FSBL.
         info!("executing payload");
         unsafe {
             (mem::transmute::<*mut u8, fn()>(ddr.ptr::<u8>()))();
@@ -60,7 +60,5 @@ pub fn main_core0() {
 
 #[no_mangle]
 pub fn main_core1() {
-    unsafe {
-        (mem::transmute::<u32, fn()>(0x00100000))();
-    }
+    panic!("core1 started but should not have");
 }
