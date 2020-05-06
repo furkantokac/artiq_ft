@@ -10,8 +10,8 @@ let
   mkbootimage = (import ./mkbootimage.nix { inherit pkgs; });
 in
   rec {
-    zc706-szl = rustPlatform.buildRustPackage rec {
-      name = "szl";
+    zc706-firmware = rustPlatform.buildRustPackage rec {
+      name = "zc706-firmware";
       version = "0.1.0";
 
       src = ./src;
@@ -33,7 +33,9 @@ in
 
       installPhase = ''
         mkdir -p $out $out/nix-support
+        cp target/armv7-none-eabihf/release/runtime $out/runtime.elf
         cp target/armv7-none-eabihf/release/szl $out/szl.elf
+        echo file binary-dist $out/runtime.elf >> $out/nix-support/hydra-build-products
         echo file binary-dist $out/szl.elf >> $out/nix-support/hydra-build-products
       '';
 
@@ -53,10 +55,12 @@ in
         cp build/top.bit $out
         echo file binary-dist $out/top.bit >> $out/nix-support/hydra-build-products
       '';
+
+    # SZL startup
     zc706-jtag = pkgs.runCommand "zc706-jtag" {}
       ''
         mkdir $out
-        ln -s ${zc706-szl}/szl.elf $out
+        ln -s ${zc706-firmware}/szl.elf $out
         ln -s ${zc706-gateware}/top.bit $out
       '';
     zc706-sd = pkgs.runCommand "zc706-sd"
@@ -68,7 +72,7 @@ in
       cat > $bif << EOF
       the_ROM_image:
       {
-        [bootloader]${zc706-szl}/szl.elf
+        [bootloader]${zc706-firmware}/szl.elf
       }
       EOF
       mkdir $out
@@ -85,5 +89,24 @@ in
         echo file binary-dist $out/sd.zip >> $out/nix-support/hydra-build-products
       '';
 
+    # FSBL startup
     zc706-fsbl = import ./fsbl.nix { inherit pkgs; };
+    zc706-fsbl-sd = pkgs.runCommand "zc706-fsbl-sd"
+      {
+        buildInputs = [ mkbootimage ];
+      }
+      ''
+      bif=`mktemp`
+      cat > $bif << EOF
+      the_ROM_image:
+      {
+        [bootloader]${zc706-fsbl}/fsbl.elf
+        ${zc706-gateware}/top.bit
+        ${zc706-firmware}/runtime.elf
+      }
+      EOF
+      mkdir $out $out/nix-support
+      mkbootimage $bif $out/boot.bin
+      echo file binary-dist $out/boot.bin >> $out/nix-support/hydra-build-products
+      '';
   }
