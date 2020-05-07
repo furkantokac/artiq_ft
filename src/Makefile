@@ -1,23 +1,18 @@
-all: target/armv7-none-eabihf/release/szl
+all: ../build/firmware/armv7-none-eabihf/release/szl
 
-clean:
-	rm -f runtime/src/pl.rs
-	rm -f szl/src/payload.bin
-	rm -f szl/src/payload.bin.lzma
-	rm -rf target
-
-.PHONY: all clean
+.PHONY: all
 
 
-runtime/src/pl.rs: zc706.py
-	python zc706.py -r runtime/src/pl.rs
+../build/pl.rs: zc706.py
+	mkdir -p ../build
+	python zc706.py -r ../build/pl.rs
 
-target/armv7-none-eabihf/release/runtime: .cargo/* armv7-none-eabihf.json Cargo.lock Cargo.toml libdyld/* libdyld/src/* runtime/* runtime/src/* runtime/src/pl.rs
-	cargo xbuild --release -p runtime
+../build/firmware/armv7-none-eabihf/release/runtime: .cargo/* armv7-none-eabihf.json Cargo.lock Cargo.toml libdyld/* libdyld/src/* runtime/* runtime/src/* ../build/pl.rs
+	cargo xbuild --release -p runtime --target-dir ../build/firmware
 
-szl/src/payload.bin.lzma: target/armv7-none-eabihf/release/runtime
-	llvm-objcopy -O binary target/armv7-none-eabihf/release/runtime szl/src/payload.bin
-	lzma --keep -f szl/src/payload.bin
+../build/szl-payload.bin.lzma: ../build/firmware/armv7-none-eabihf/release/runtime
+	llvm-objcopy -O binary ../build/firmware/armv7-none-eabihf/release/runtime ../build/szl-payload.bin
+	lzma --keep -f ../build/szl-payload.bin
 
-target/armv7-none-eabihf/release/szl: .cargo/* armv7-none-eabihf.json Cargo.lock Cargo.toml szl/* szl/src/* szl/src/payload.bin.lzma
-	cargo xbuild --release -p szl
+../build/firmware/armv7-none-eabihf/release/szl: .cargo/* armv7-none-eabihf.json Cargo.lock Cargo.toml szl/* szl/src/* ../build/szl-payload.bin.lzma
+	cargo xbuild --release -p szl --target-dir ../build/firmware

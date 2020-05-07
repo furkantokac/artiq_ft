@@ -21,8 +21,8 @@ target_folder=/tmp/zynq-\$USER
 ssh $target_host "mkdir -p $target_folder"
 rsync openocd/* $target_host:$target_folder
 if [ $impure -eq 1 ]; then
-    rsync src/target/armv7-none-eabihf/release/szl $target_host:$target_folder/szl.elf
-    rsync src/build/top.bit $target_host:$target_folder
+    rsync build/firmware/armv7-none-eabihf/release/szl $target_host:$target_folder/szl.elf
+    rsync build/gateware/top.bit $target_host:$target_folder
 else
     rsync -L result/szl.elf $target_host:$target_folder
     rsync -L result/top.bit $target_host:$target_folder

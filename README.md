@@ -17,8 +17,8 @@ Impure incremental build:
 ```shell
 nix-shell
 cd src
-./zc706.py -g  # build gateware
-make           # build firmware
+./zc706.py -g ../build/gateware  # build gateware
+make                             # build firmware
 cd ..
 ./remote_run.sh -i
 ```

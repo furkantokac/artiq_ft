@@ -27,14 +27,13 @@ in
       buildPhase = ''
         export XARGO_RUST_SRC="${rustPlatform.rust.rustc.src}/src"
         export CARGO_HOME=$(mktemp -d cargo-home.XXX)
-        make clean
         make
       '';
 
       installPhase = ''
         mkdir -p $out $out/nix-support
-        cp target/armv7-none-eabihf/release/runtime $out/runtime.elf
-        cp target/armv7-none-eabihf/release/szl $out/szl.elf
+        cp ../build/firmware/armv7-none-eabihf/release/runtime $out/runtime.elf
+        cp ../build/firmware/armv7-none-eabihf/release/szl $out/szl.elf
         echo file binary-dist $out/runtime.elf >> $out/nix-support/hydra-build-products
         echo file binary-dist $out/szl.elf >> $out/nix-support/hydra-build-products
       '';
@@ -50,7 +49,7 @@ in
         ];
       }
       ''
-        python ${./src/zc706.py} -g
+        python ${./src/zc706.py} -g build
         mkdir -p $out $out/nix-support
         cp build/top.bit $out
         echo file binary-dist $out/top.bit >> $out/nix-support/hydra-build-products

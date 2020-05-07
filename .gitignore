@@ -2,7 +2,4 @@ result
 examples/*.elf
 __pycache__
 
-src/runtime/src/pl.rs
-src/szl/src/payload.bin
-src/szl/src/payload.bin.lzma
-src/target
+build

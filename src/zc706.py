@@ -60,15 +60,15 @@ def main():
         description="ARTIQ port to the ZC706 Zynq development kit")
     parser.add_argument("-r", default=None,
         help="build Rust interface into the specified file")
-    parser.add_argument("-g", action="store_true",
-        help="build gateware")
+    parser.add_argument("-g", default=None,
+        help="build gateware into the specified directory")
     args = parser.parse_args()
 
     soc = ZC706()
     soc.finalize()
 
-    if args.g:
-        soc.build()
+    if args.g is not None:
+        soc.build(build_dir=args.g)
     if args.r is not None:
         write_csr_file(soc, args.r)
 
