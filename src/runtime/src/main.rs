@@ -37,15 +37,16 @@ pub fn main_core0() {
     let timer = GlobalTimer::start();
     let _ = logger::init();
     log::set_max_level(log::LevelFilter::Debug);
-    info!("NAR3 starting...");
+    info!("NAR3/Zynq7000 starting...");
 
     ram::init_alloc_linker();
 
     let devc = devc::DevC::new();
     if devc.is_done() {
         info!("gateware already loaded");
-        // Do not load again: assume that the gateware already present
-        // (e.g. configured via JTAG before PS startup) is what we want.
+        // Do not load again: assume that the gateware already present is
+        // what we want (e.g. gateware configured via JTAG before PS
+        // startup, or by FSBL).
     } else {
         info!("loading gateware");
         unimplemented!("gateware loading");
