@@ -82,7 +82,7 @@ class NIST_CLOCK(ZC706):
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=512))
 
-        phy = ttl_simple.Output(platform.request("user_led", 2))
+        phy = ttl_simple.Output(platform.request("user_led", 1))
         self.submodules += phy
         rtio_channels.append(rtio.Channel.from_phy(phy))
 
@@ -131,7 +131,7 @@ class NIST_QC2(ZC706):
             self.submodules += phy
             clock_generators.append(rtio.Channel.from_phy(phy))
 
-        phy = ttl_simple.Output(platform.request("user_led", 2))
+        phy = ttl_simple.Output(platform.request("user_led", 1))
         self.submodules += phy
         rtio_channels.append(rtio.Channel.from_phy(phy))
 
