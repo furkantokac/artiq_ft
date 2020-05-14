@@ -1,3 +1,5 @@
+VARIANT := simple
+
 all: ../build/firmware/armv7-none-eabihf/release/szl
 
 .PHONY: all
@@ -5,7 +7,7 @@ all: ../build/firmware/armv7-none-eabihf/release/szl
 
 ../build/pl.rs: zc706.py
 	mkdir -p ../build
-	python zc706.py -r ../build/pl.rs
+	python zc706.py -r ../build/pl.rs -V $(VARIANT)
 
 ../build/firmware/armv7-none-eabihf/release/runtime: .cargo/* armv7-none-eabihf.json Cargo.lock Cargo.toml libdyld/* libdyld/src/* runtime/* runtime/src/* ../build/pl.rs
 	XBUILD_SYSROOT_PATH=`pwd`/../build/sysroot cargo xbuild --release -p runtime --target-dir ../build/firmware

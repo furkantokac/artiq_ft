@@ -7,11 +7,11 @@ let
   rustPlatform = (import ./rustPlatform.nix { inherit pkgs; });
   artiqpkgs = import <artiq-fast/default.nix> { inherit pkgs; };
   vivado = import <artiq-fast/vivado.nix> { inherit pkgs; };
+  zc706-fsbl = import ./fsbl.nix { inherit pkgs; };
   mkbootimage = (import ./mkbootimage.nix { inherit pkgs; });
-in
-  rec {
-    zc706-firmware = rustPlatform.buildRustPackage rec {
-      name = "zc706-firmware";
+  build-zc706 = { variant }: let
+    firmware = rustPlatform.buildRustPackage rec {
+      name = "zc706-${variant}-firmware";
       version = "0.1.0";
 
       src = ./src;
@@ -27,7 +27,7 @@ in
       buildPhase = ''
         export XARGO_RUST_SRC="${rustPlatform.rust.rustc.src}/src"
         export CARGO_HOME=$(mktemp -d cargo-home.XXX)
-        make
+        make VARIANT=${variant}
       '';
 
       installPhase = ''
@@ -41,7 +41,7 @@ in
       doCheck = false;
       dontFixup = true;
     };
-    zc706-gateware = pkgs.runCommand "zc706-gateware"
+    gateware = pkgs.runCommand "zc706-${variant}-gateware"
       {
         nativeBuildInputs = [ 
           (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
@@ -49,20 +49,20 @@ in
         ];
       }
       ''
-        python ${./src/zc706.py} -g build
+        python ${./src/zc706.py} -g build -V ${variant}
         mkdir -p $out $out/nix-support
         cp build/top.bit $out
         echo file binary-dist $out/top.bit >> $out/nix-support/hydra-build-products
       '';
 
     # SZL startup
-    zc706-jtag = pkgs.runCommand "zc706-jtag" {}
+    jtag = pkgs.runCommand "zc706-${variant}-jtag" {}
       ''
         mkdir $out
-        ln -s ${zc706-firmware}/szl.elf $out
-        ln -s ${zc706-gateware}/top.bit $out
+        ln -s ${firmware}/szl.elf $out
+        ln -s ${gateware}/top.bit $out
       '';
-    zc706-sd = pkgs.runCommand "zc706-sd"
+    sd = pkgs.runCommand "zc706-${variant}-sd"
       {
         buildInputs = [ mkbootimage ];
       }
@@ -71,7 +71,7 @@ in
       # can't write software (mkbootimage will segfault).
       bifdir=`mktemp -d`
       cd $bifdir
-      ln -s ${zc706-firmware}/szl.elf szl.elf
+      ln -s ${firmware}/szl.elf szl.elf
       cat > boot.bif << EOF
       the_ROM_image:
       {
@@ -80,21 +80,20 @@ in
       EOF
       mkdir $out
       mkbootimage boot.bif $out/boot.bin
-      ln -s ${zc706-gateware}/top.bit $out
+      ln -s ${gateware}/top.bit $out
       '';
-    zc706-sd-zip = pkgs.runCommand "zc706-sd-zip"
+    sd-zip = pkgs.runCommand "zc706-${variant}-sd-zip"
       {
         buildInputs = [ pkgs.zip ];
       }
       ''
         mkdir -p $out $out/nix-support
-        zip -j $out/sd.zip ${zc706-sd}/*
+        zip -j $out/sd.zip ${sd}/*
         echo file binary-dist $out/sd.zip >> $out/nix-support/hydra-build-products
       '';
 
     # FSBL startup
-    zc706-fsbl = import ./fsbl.nix { inherit pkgs; };
-    zc706-fsbl-sd = pkgs.runCommand "zc706-fsbl-sd"
+    fsbl-sd = pkgs.runCommand "zc706-${variant}-fsbl-sd"
       {
         buildInputs = [ mkbootimage ];
       }
@@ -103,8 +102,8 @@ in
       bifdir=`mktemp -d`
       cd $bifdir
       ln -s ${./fsbl.elf} fsbl.elf
-      ln -s ${zc706-gateware}/top.bit top.bit
-      ln -s ${zc706-firmware}/runtime.elf runtime.elf
+      ln -s ${gateware}/top.bit top.bit
+      ln -s ${firmware}/runtime.elf runtime.elf
       cat > boot.bif << EOF
       the_ROM_image:
       {
@@ -117,4 +116,18 @@ in
       mkbootimage boot.bif $out/boot.bin
       echo file binary-dist $out/boot.bin >> $out/nix-support/hydra-build-products
       '';
-  }
+  in {
+    "zc706-${variant}-firmware" = firmware;
+    "zc706-${variant}-gateware" = gateware;
+    "zc706-${variant}-jtag" = jtag;
+    "zc706-${variant}-sd" = sd;
+    "zc706-${variant}-sd-zip" = sd-zip;
+    "zc706-${variant}-fsbl-sd" = fsbl-sd;
+  };
+in
+  (
+    (build-zc706 { variant = "simple"; }) //
+    (build-zc706 { variant = "nist_clock"; }) //
+    (build-zc706 { variant = "nist_qc2"; }) //
+    { inherit zc706-fsbl; }
+  )
