@@ -1,6 +1,5 @@
-use core::{mem::transmute, task::Poll};
+use core::mem::transmute;
 use core::fmt;
-use core::cmp::min;
 use core::cell::RefCell;
 use alloc::rc::Rc;
 use log::{debug, warn, error};
@@ -51,23 +50,6 @@ impl From<smoltcp::Error> for Error {
     fn from(error: smoltcp::Error) -> Self {
         Error::NetworkError(error)
     }
-}
-
-
-async fn read_chunk(stream: &TcpStream, destination: &mut [u8]) -> Result<()> {
-    let total = destination.len();
-    let destination = RefCell::new(destination);
-    let mut done = 0;
-    while done < total {
-        let count = stream.recv(|buf| {
-            let mut destination = destination.borrow_mut();
-            let count = min(total - done, buf.len());
-            destination[done..done + count].copy_from_slice(&buf[..count]);
-            Poll::Ready((count, count))
-        }).await?;
-        done += count;
-    }
-    Ok(())
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]

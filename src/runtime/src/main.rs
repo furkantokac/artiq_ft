@@ -13,6 +13,7 @@ use libsupport_zynq::ram;
 
 mod proto;
 mod comms;
+mod rpc;
 #[path = "../../../build/pl.rs"]
 mod pl;
 mod rtio;
