@@ -123,3 +123,14 @@ pub async fn write_i64(stream: &TcpStream, value: i64) -> Result<()> {
          value        as u8].iter().copied()).await?;
     Ok(())
 }
+
+pub async fn write_bytes(stream: &TcpStream, value: &[u8]) -> Result<()> {
+    write_i32(stream, value.len() as i32).await?;
+    stream.send(value.iter().copied()).await?;
+    Ok(())
+}
+
+pub async fn write_string(stream: &TcpStream, value: &str) -> Result<()> {
+    write_bytes(stream, value.as_bytes()).await?;
+    Ok(())
+}

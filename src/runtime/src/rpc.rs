@@ -119,10 +119,8 @@ async unsafe fn send_value(stream: &TcpStream, tag: Tag<'_>, data: &mut *const (
             consume_value!(i64, |ptr|
                 write_i64(stream, *ptr).await),
         Tag::String =>
-            //consume_value!(CSlice<u8>, |ptr|
-            //    writer.write_string(str::from_utf8((*ptr).as_ref()).unwrap())),
-            // TODO
-            unimplemented!(),
+            consume_value!(CSlice<u8>, |ptr|
+                write_string(stream, str::from_utf8((*ptr).as_ref()).unwrap()).await),
         Tag::Bytes | Tag::ByteArray =>
             consume_value!(CSlice<u8>, |ptr|
                 stream.send((*ptr).as_ref().iter().copied()).await),
@@ -157,7 +155,7 @@ async unsafe fn send_value(stream: &TcpStream, tag: Tag<'_>, data: &mut *const (
         Tag::Keyword(it) => {
             struct Keyword<'a> { name: CSlice<'a, u8> };
             consume_value!(Keyword, |ptr| {
-                //TODO writer.write_string(str::from_utf8((*ptr).name.as_ref()).unwrap())?;
+                write_string(stream, str::from_utf8((*ptr).name.as_ref()).unwrap()).await?;
                 let tag = it.clone().next().expect("truncated tag");
                 let mut data = ptr.offset(1) as *const ();
                 // TODO send_value(stream, tag, &mut data).await
