@@ -3,7 +3,6 @@
 #![recursion_limit="1024"]  // for futures_util::select!
 
 extern crate alloc;
-extern crate log;
 
 use core::{cmp, str};
 use log::info;
