@@ -152,6 +152,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "io"
+version = "0.1.0"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "libasync"
 version = "0.0.0"
 source = "git+https://git.m-labs.hk/M-Labs/zc706.git#0c48dd934eb65e1cbd0124200ae2e08c7049c903"
@@ -333,6 +340,7 @@ dependencies = [
  "cslice",
  "dyld",
  "futures",
+ "io",
  "libasync",
  "libboard_zynq",
  "libcortex_a9",

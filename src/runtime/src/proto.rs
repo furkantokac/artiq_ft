@@ -5,6 +5,7 @@ use core::cell::RefCell;
 use libboard_zynq::smoltcp;
 use libasync::smoltcp::TcpStream;
 
+// TODO: use byteorder, make it more like libio
 
 pub type Result<T> = core::result::Result<T, smoltcp::Error>;
 

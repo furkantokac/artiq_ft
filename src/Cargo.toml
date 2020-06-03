@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "libdyld",
+  "libio",
   "runtime",
   "szl"
 ]
