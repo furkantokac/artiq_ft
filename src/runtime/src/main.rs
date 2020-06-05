@@ -10,7 +10,8 @@ use log::info;
 use libboard_zynq::{timer::GlobalTimer, logger, devc};
 use libsupport_zynq::ram;
 
-mod proto;
+mod proto_core_io;
+mod proto_async;
 mod comms;
 mod rpc;
 #[path = "../../../build/pl.rs"]

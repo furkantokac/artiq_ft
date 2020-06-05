@@ -7,7 +7,6 @@ use libcortex_a9::{mutex::Mutex, sync_channel::{self, sync_channel}};
 use libsupport_zynq::boot::Core1;
 
 use dyld;
-use io;
 use crate::rpc;
 use crate::rtio;
 
@@ -68,22 +67,16 @@ static mut KERNEL_CHANNEL_1TO0: *mut () = ptr::null_mut();
 extern fn rpc_send(service: u32, tag: &CSlice<u8>, data: *const *const ()) {
     let core1_rx: &mut sync_channel::Receiver<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_0TO1) };
     let core1_tx: &mut sync_channel::Sender<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_1TO0) };
-    let mut buffer = Arc::new(Vec::<u8>::new());
-    {
-        let mut writer = io::Cursor::new(Arc::get_mut(&mut buffer).unwrap());
-        rpc::send_args(&mut writer, service, tag.as_ref(), data).expect("RPC encoding failed");
-    }
-    core1_tx.send(Message::RpcSend { is_async: false, data: buffer })
+    let mut buffer = Vec::<u8>::new();
+    rpc::send_args(&mut buffer, service, tag.as_ref(), data).expect("RPC encoding failed");
+    core1_tx.send(Message::RpcSend { is_async: false, data: Arc::new(buffer) })
 }
 
 extern fn rpc_send_async(service: u32, tag: &CSlice<u8>, data: *const *const ()) {
     let core1_tx: &mut sync_channel::Sender<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_1TO0) };
-    let mut buffer = Arc::new(Vec::<u8>::new());
-    {
-        let mut writer = io::Cursor::new(Arc::get_mut(&mut buffer).unwrap());
-        rpc::send_args(&mut writer, service, tag.as_ref(), data).expect("RPC encoding failed");
-    }
-    core1_tx.send(Message::RpcSend { is_async: true, data: buffer })
+    let mut buffer = Vec::<u8>::new();
+    rpc::send_args(&mut buffer, service, tag.as_ref(), data).expect("RPC encoding failed");
+    core1_tx.send(Message::RpcSend { is_async: true, data: Arc::new(buffer) })
 }
 
 extern fn rpc_recv(slot: *mut ()) -> usize {

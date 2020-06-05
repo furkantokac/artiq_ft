@@ -21,7 +21,7 @@ use libsupport_zynq::alloc::{vec, vec::Vec};
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
 use alloc::sync::Arc;
 
-use crate::proto::*;
+use crate::proto_async::*;
 use crate::kernel;
 use crate::moninj;
 

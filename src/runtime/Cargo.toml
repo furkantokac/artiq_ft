@@ -14,6 +14,8 @@ num-traits = { version = "0.2", default-features = false }
 num-derive = "0.3"
 cslice = "0.3"
 log = "0.4"
+core_io = { version = "0.1", features = ["alloc", "collections"] }
+byteorder = { version = "1.3", default-features = false }
 void = { version = "1", default-features = false }
 futures = { version = "0.3", default-features = false, features = ["async-await"] }
 libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
@@ -21,4 +23,3 @@ libsupport_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 libasync = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 dyld = { path = "../libdyld" }
-io = { path = "../libio", features = ["alloc"] }

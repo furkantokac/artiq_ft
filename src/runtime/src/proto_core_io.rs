@@ -1,13 +1,10 @@
-#[cfg(feature = "alloc")]
 use core::str::Utf8Error;
 use byteorder::{ByteOrder, NetworkEndian};
-#[cfg(feature = "alloc")]
 use alloc::vec;
 use alloc::string::String;
 
-use ::{Read, Write, Error as IoError};
+use core_io::{Read, Write, Error as IoError};
 
-#[cfg(feature = "alloc")]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReadStringError<T> {
     Utf8(Utf8Error),
@@ -52,7 +49,6 @@ pub trait ProtoRead {
         Ok(self.read_u8()? != 0)
     }
 
-    #[cfg(feature = "alloc")]
     #[inline]
     fn read_bytes(&mut self) -> Result<::alloc::vec::Vec<u8>, Self::ReadError> {
         let length = self.read_u32()?;
@@ -61,7 +57,6 @@ pub trait ProtoRead {
         Ok(value)
     }
 
-    #[cfg(feature = "alloc")]
     #[inline]
     fn read_string(&mut self) -> Result<::alloc::string::String, ReadStringError<Self::ReadError>> {
         let bytes = self.read_bytes().map_err(ReadStringError::Other)?;
@@ -146,7 +141,7 @@ pub trait ProtoWrite {
 }
 
 impl<T> ProtoRead for T where T: Read + ?Sized {
-    type ReadError = IoError<T::ReadError>;
+    type ReadError = IoError;
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::ReadError> {
         T::read_exact(self, buf)
@@ -154,7 +149,7 @@ impl<T> ProtoRead for T where T: Read + ?Sized {
 }
 
 impl<T> ProtoWrite for T where T: Write + ?Sized {
-    type WriteError = IoError<T::WriteError>;
+    type WriteError = IoError;
 
     fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::WriteError> {
         T::write_all(self, buf)

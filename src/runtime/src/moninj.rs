@@ -10,7 +10,7 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use futures::{pin_mut, select_biased, FutureExt};
 
-use crate::proto::*;
+use crate::proto_async::*;
 use crate::pl::csr;
 
 

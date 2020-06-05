@@ -1,7 +1,7 @@
 [workspace]
 members = [
   "libdyld",
-  "libio",
+  "libcoreio",
   "runtime",
   "szl"
 ]
@@ -17,3 +17,6 @@ debug = true
 # turn off if you get unusable debug symbols.
 lto = true
 opt-level = 'z'  # Optimize for size.
+
+[patch.crates-io]
+core_io = { path = "./libcoreio" }
