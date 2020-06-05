@@ -16,6 +16,7 @@ in
       pkgs.cacert
       pkgs.cargo-xbuild
 
+      pkgs.openocd
       pkgs.openssh pkgs.rsync
 
       (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
