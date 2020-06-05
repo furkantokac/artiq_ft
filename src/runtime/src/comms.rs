@@ -139,6 +139,21 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
             Request::RunKernel => {
                 let mut control = control.borrow_mut();
                 control.tx.async_send(kernel::Message::StartRequest).await;
+                loop {
+                    let reply = control.rx.async_recv().await;
+                    match *reply {
+                        kernel::Message::KernelFinished => {
+                            write_header(&stream, Reply::KernelFinished).await?;
+                            break;
+                        },
+                        kernel::Message::RpcSend { is_async, data } => {
+                            debug!("RPC: is_async={} data={:?}", is_async, data);
+                        },
+                        _ => {
+                            error!("received unexpected message from core1 while kernel was running: {:?}", reply);
+                        }
+                    }
+                }
             }
             _ => return Err(Error::UnrecognizedPacket)
         }

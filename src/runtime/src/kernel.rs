@@ -1,11 +1,14 @@
 use core::{ptr, mem};
 use log::{debug, error};
 use alloc::{vec::Vec, sync::Arc};
+use cslice::CSlice;
 
 use libcortex_a9::{mutex::Mutex, sync_channel::{self, sync_channel}};
 use libsupport_zynq::boot::Core1;
 
 use dyld;
+use io;
+use crate::rpc;
 use crate::rtio;
 
 
@@ -15,6 +18,8 @@ pub enum Message {
     LoadCompleted,
     LoadFailed,
     StartRequest,
+    KernelFinished,
+    RpcSend { is_async: bool, data: Arc<Vec<u8>> },
 }
 
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<Message>>> = Mutex::new(None);
@@ -57,6 +62,34 @@ impl Control {
     }
 }
 
+static mut KERNEL_CHANNEL_0TO1: *mut () = ptr::null_mut();
+static mut KERNEL_CHANNEL_1TO0: *mut () = ptr::null_mut();
+
+extern fn rpc_send(service: u32, tag: &CSlice<u8>, data: *const *const ()) {
+    let core1_rx: &mut sync_channel::Receiver<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_0TO1) };
+    let core1_tx: &mut sync_channel::Sender<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_1TO0) };
+    let mut buffer = Arc::new(Vec::<u8>::new());
+    {
+        let mut writer = io::Cursor::new(Arc::get_mut(&mut buffer).unwrap());
+        rpc::send_args(&mut writer, service, tag.as_ref(), data).expect("RPC encoding failed");
+    }
+    core1_tx.send(Message::RpcSend { is_async: false, data: buffer })
+}
+
+extern fn rpc_send_async(service: u32, tag: &CSlice<u8>, data: *const *const ()) {
+    let core1_tx: &mut sync_channel::Sender<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_1TO0) };
+    let mut buffer = Arc::new(Vec::<u8>::new());
+    {
+        let mut writer = io::Cursor::new(Arc::get_mut(&mut buffer).unwrap());
+        rpc::send_args(&mut writer, service, tag.as_ref(), data).expect("RPC encoding failed");
+    }
+    core1_tx.send(Message::RpcSend { is_async: true, data: buffer })
+}
+
+extern fn rpc_recv(slot: *mut ()) -> usize {
+    unimplemented!();
+}
+
 macro_rules! api {
     ($i:ident) => ({
         extern { static $i: u8; }
@@ -76,6 +109,10 @@ fn resolve(required: &[u8]) -> Option<u32> {
         api!(now_mu = rtio::now_mu),
         api!(at_mu = rtio::at_mu),
         api!(delay_mu = rtio::delay_mu),
+
+        api!(rpc_send = rpc_send),
+        api!(rpc_send_async = rpc_send_async),
+        api!(rpc_recv = rpc_recv),
 
         api!(rtio_init = rtio::init),
         api!(rtio_get_destination_status = rtio::get_destination_status),
@@ -108,10 +145,11 @@ pub fn main_core1() {
     while core1_rx.is_none() {
         core1_rx = CHANNEL_0TO1.lock().take();
     }
-    let core1_rx = core1_rx.unwrap();
+    let mut core1_rx = core1_rx.unwrap();
 
     let mut current_modinit: Option<u32> = None;
-    for message in core1_rx {
+    loop {
+        let message = core1_rx.recv();
         match *message {
             Message::LoadRequest(data) => {
                 match dyld::load(&data, &resolve) {
@@ -127,11 +165,11 @@ pub fn main_core1() {
                         let __modinit__ = library.lookup(b"__modinit__").unwrap();
                         current_modinit = Some(__modinit__);
                         debug!("kernel loaded");
-                        core1_tx.send(Message::LoadCompleted)
+                        core1_tx.send(Message::LoadCompleted);
                     },
                     Err(error) => {
                         error!("failed to load shared library: {}", error);
-                        core1_tx.send(Message::LoadFailed)
+                        core1_tx.send(Message::LoadFailed);
                     }
                 }
             },
@@ -139,10 +177,15 @@ pub fn main_core1() {
                 debug!("kernel starting");
                 if let Some(__modinit__) = current_modinit {
                     unsafe {
+                        KERNEL_CHANNEL_0TO1 = mem::transmute(&mut core1_rx);
+                        KERNEL_CHANNEL_1TO0 = mem::transmute(&mut core1_tx);
                         (mem::transmute::<u32, fn()>(__modinit__))();
+                        KERNEL_CHANNEL_0TO1 = ptr::null_mut();
+                        KERNEL_CHANNEL_1TO0 = ptr::null_mut();
                     }
                 }
-                debug!("kernel terminated");
+                debug!("kernel finished");
+                core1_tx.send(Message::KernelFinished);
             }
             _ => error!("Core1 received unexpected message: {:?}", message),
         }
