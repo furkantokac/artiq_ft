@@ -2,15 +2,18 @@ use core::str;
 use cslice::{CSlice, CMutSlice};
 use log::debug;
 
+use core_io::{Write, Error};
 use libboard_zynq::smoltcp;
 use libasync::smoltcp::TcpStream;
-use core_io::{Write, Error};
+use alloc::boxed::Box;
+use async_recursion::async_recursion;
 
 use crate::proto_core_io::ProtoWrite;
 use crate::proto_async;
 use self::tag::{Tag, TagIterator, split_tag};
 
-async unsafe fn recv_value(stream: &TcpStream, tag: Tag<'_>, data: &mut *mut (),
+#[async_recursion(?Send)]
+async unsafe fn recv_value(stream: &TcpStream, tag: Tag<'async_recursion>, data: &mut *mut (),
                            alloc: &dyn Fn(usize) -> *mut ())
                           -> Result<(), smoltcp::Error>
 {
@@ -51,7 +54,7 @@ async unsafe fn recv_value(stream: &TcpStream, tag: Tag<'_>, data: &mut *mut (),
             let mut it = it.clone();
             for _ in 0..arity {
                 let tag = it.next().expect("truncated tag");
-                //TODO: recv_value(reader, tag, data, alloc)?
+                recv_value(stream, tag, data, alloc).await?;
             }
             Ok(())
         }
@@ -65,16 +68,16 @@ async unsafe fn recv_value(stream: &TcpStream, tag: Tag<'_>, data: &mut *mut (),
 
                 let mut data = (*ptr).elements;
                 for _ in 0..(*ptr).length as usize {
-                    //TODO: recv_value(reader, tag, &mut data, alloc).await?
+                    recv_value(stream, tag, &mut data, alloc).await?
                 }
                 Ok(())
             })
         }
         Tag::Range(it) => {
             let tag = it.clone().next().expect("truncated tag");
-            /*TODO: recv_value(reader, tag, data, alloc).await?;
-            recv_value(reader, tag, data, alloc).await?;
-            recv_value(reader, tag, data, alloc).await?;*/
+            recv_value(stream, tag, data, alloc).await?;
+            recv_value(stream, tag, data, alloc).await?;
+            recv_value(stream, tag, data, alloc).await?;
             Ok(())
         }
         Tag::Keyword(_) => unreachable!(),
