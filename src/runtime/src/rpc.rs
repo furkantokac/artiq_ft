@@ -1,5 +1,6 @@
 use core::str;
 use cslice::{CSlice, CMutSlice};
+use log::debug;
 
 use core_io::{Read, Write, Error};
 
@@ -84,7 +85,6 @@ pub fn recv_return<R, E>(reader: &mut R, tag_bytes: &[u8], data: *mut (),
           E: From<Error>
 {
     let mut it = TagIterator::new(tag_bytes);
-    #[cfg(feature = "log")]
     debug!("recv ...->{}", it);
 
     let tag = it.next().expect("truncated tag");
@@ -178,11 +178,8 @@ pub fn send_args<W>(writer: &mut W, service: u32, tag_bytes: &[u8], data: *const
     let (arg_tags_bytes, return_tag_bytes) = split_tag(tag_bytes);
 
     let mut args_it = TagIterator::new(arg_tags_bytes);
-    #[cfg(feature = "log")]
-    {
-        let return_it = TagIterator::new(return_tag_bytes);
-        debug!("send<{}>({})->{}", service, args_it, return_it);
-    }
+    let return_it = TagIterator::new(return_tag_bytes);
+    debug!("send<{}>({})->{}", service, args_it, return_it);
 
     writer.write_u32(service)?;
     for index in 0.. {
