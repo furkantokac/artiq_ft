@@ -84,6 +84,11 @@ pub async fn write_i8(stream: &TcpStream, value: i8) -> Result<()> {
     Ok(())
 }
 
+pub async fn write_bool(stream: &TcpStream, value: bool) -> Result<()> {
+    stream.send([value as u8].iter().copied()).await?;
+    Ok(())
+}
+
 pub async fn write_i32(stream: &TcpStream, value: i32) -> Result<()> {
     stream.send([
         (value >> 24) as u8,

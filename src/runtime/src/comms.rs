@@ -147,7 +147,9 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
                             break;
                         },
                         kernel::Message::RpcSend { is_async, data } => {
-                            debug!("RPC: is_async={} data={:?}", is_async, data);
+                            write_header(&stream, Reply::RPCRequest).await?;
+                            write_bool(&stream, is_async).await?;
+                            stream.send(data.iter().copied()).await?;
                         },
                         _ => {
                             error!("received unexpected message from core1 while kernel was running: {:?}", reply);
