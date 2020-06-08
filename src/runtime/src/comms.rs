@@ -87,7 +87,7 @@ async fn write_header(stream: &TcpStream, reply: Reply) -> Result<()> {
 }
 
 async fn read_request(stream: &TcpStream, allow_close: bool) -> Result<Option<Request>> {
-    match expect(&stream, &[0x5a, 0x5a, 0x5a, 0x5a]).await {
+    match expect(stream, &[0x5a, 0x5a, 0x5a, 0x5a]).await {
         Ok(true) => {}
         Ok(false) =>
             return Err(Error::UnexpectedPattern),
@@ -112,14 +112,14 @@ async fn handle_run_kernel(stream: &TcpStream, control: &mut kernel::Control) ->
         let reply = control.rx.async_recv().await;
         match *reply {
             kernel::Message::RpcSend { is_async, data } => {
-                write_header(&stream, Reply::RPCRequest).await?;
-                write_bool(&stream, is_async).await?;
+                write_header(stream, Reply::RPCRequest).await?;
+                write_bool(stream, is_async).await?;
                 stream.send(data.iter().copied()).await?;
                 if !is_async {
                     let host_request = read_request(stream, false).await?.unwrap();
                     match host_request {
                         Request::RPCReply => {
-                            let tag = read_bytes(&stream, 512).await?;
+                            let tag = read_bytes(stream, 512).await?;
                             let rpc_recv_request = control.rx.async_recv().await;
                             let slot = if let kernel::Message::RpcRecvRequest(slot) = *rpc_recv_request {
                                 slot
@@ -146,7 +146,7 @@ async fn handle_run_kernel(stream: &TcpStream, control: &mut kernel::Control) ->
                 }
             },
             kernel::Message::KernelFinished => {
-                write_header(&stream, Reply::KernelFinished).await?;
+                write_header(stream, Reply::KernelFinished).await?;
                 break;
             },
             _ => {
@@ -158,7 +158,7 @@ async fn handle_run_kernel(stream: &TcpStream, control: &mut kernel::Control) ->
 }
 
 async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Control>>) -> Result<()> {
-    expect(&stream, b"ARTIQ coredev\n").await?;
+    expect(stream, b"ARTIQ coredev\n").await?;
     debug!("received connection");
     loop {
         let request = read_request(stream, true).await?;
@@ -168,25 +168,25 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
         let request = request.unwrap();
         match request {
             Request::SystemInfo => {
-                write_header(&stream, Reply::SystemInfo).await?;
+                write_header(stream, Reply::SystemInfo).await?;
                 stream.send("ARZQ".bytes()).await?;
             },
             Request::LoadKernel => {
-                let buffer = read_bytes(&stream, 1024*1024).await?;
+                let buffer = read_bytes(stream, 1024*1024).await?;
                 let mut control = control.borrow_mut();
                 control.restart();
                 control.tx.async_send(kernel::Message::LoadRequest(Arc::new(buffer))).await;
                 let reply = control.rx.async_recv().await;
                 match *reply {
-                    kernel::Message::LoadCompleted => write_header(&stream, Reply::LoadCompleted).await?,
+                    kernel::Message::LoadCompleted => write_header(stream, Reply::LoadCompleted).await?,
                     kernel::Message::LoadFailed => {
-                        write_header(&stream, Reply::LoadFailed).await?;
-                        write_chunk(&stream, b"core1 failed to process data").await?;
+                        write_header(stream, Reply::LoadFailed).await?;
+                        write_chunk(stream, b"core1 failed to process data").await?;
                     },
                     _ => {
                         error!("unexpected message from core1: {:?}", reply);
-                        write_header(&stream, Reply::LoadFailed).await?;
-                        write_chunk(&stream, b"core1 sent unexpected reply").await?;
+                        write_header(stream, Reply::LoadFailed).await?;
+                        write_chunk(stream, b"core1 sent unexpected reply").await?;
                     }
                 }
             },
