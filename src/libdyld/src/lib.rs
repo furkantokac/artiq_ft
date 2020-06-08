@@ -5,7 +5,7 @@ extern crate log;
 
 use core::{fmt, str, convert};
 use alloc::string::String;
-use log::{info, trace};
+use log::{debug, trace};
 use elf::*;
 
 pub mod elf;
@@ -162,7 +162,7 @@ pub fn load(
     // 1 image for all segments
     let mut image = image::Image::new(image_size, image_align)
         .map_err(|_| "cannot allocate target image")?;
-    info!("ELF target: {} bytes, align to {:X}, allocated at {:08X}", image_size, image_align, image.ptr() as usize);
+    debug!("ELF target: {} bytes, align to {:X}, allocated at {:08X}", image_size, image_align, image.ptr() as usize);
 
     // LOAD
     for phdr in file.program_headers() {
@@ -185,8 +185,8 @@ pub fn load(
     let dyn_range = file.dyn_header_vaddr()
         .ok_or("cannot find a dynamic header")?;
     let dyn_section = image.dyn_section(dyn_range.clone())?;
-    info!("Relocating {} rela, {} rel, {} pltrel",
-          dyn_section.rela.len(), dyn_section.rel.len(), dyn_section.pltrel.len());
+    debug!("Relocating {} rela, {} rel, {} pltrel",
+           dyn_section.rela.len(), dyn_section.rel.len(), dyn_section.pltrel.len());
     let lib = Library {
         image,
         dyn_section,
