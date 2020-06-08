@@ -1,9 +1,10 @@
 use core::mem::transmute;
 use core::fmt;
 use core::cell::RefCell;
+use core::str::Utf8Error;
 use alloc::rc::Rc;
 use alloc::sync::Arc;
-use alloc::{vec, vec::Vec};
+use alloc::{vec, vec::Vec, string::String};
 use log::{debug, warn, error};
 
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -32,7 +33,8 @@ pub enum Error {
     NetworkError(smoltcp::Error),
     UnexpectedPattern,
     UnrecognizedPacket,
-
+    BufferExhausted,
+    Utf8Error(Utf8Error),
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -43,6 +45,8 @@ impl fmt::Display for Error {
             &Error::NetworkError(error) => write!(f, "network error: {}", error),
             &Error::UnexpectedPattern   => write!(f, "unexpected pattern"),
             &Error::UnrecognizedPacket  => write!(f, "unrecognized packet"),
+            &Error::BufferExhausted     => write!(f, "buffer exhausted"),
+            &Error::Utf8Error(error)    => write!(f, "UTF-8 error: {}", error),
         }
     }
 }
@@ -106,6 +110,21 @@ async fn read_request(stream: &TcpStream, allow_close: bool) -> Result<Option<Re
     Ok(Some(FromPrimitive::from_i8(read_i8(&stream).await?).ok_or(Error::UnrecognizedPacket)?))
 }
 
+async fn read_bytes(stream: &TcpStream, max_length: usize) -> Result<Vec<u8>> {
+    let length = read_i32(&stream).await? as usize;
+    if length > max_length {
+        return Err(Error::BufferExhausted);
+    }
+    let mut buffer = vec![0; length];
+    read_chunk(&stream, &mut buffer).await?;
+    Ok(buffer)
+}
+
+async fn read_string(stream: &TcpStream, max_length: usize) -> Result<String> {
+    let bytes = read_bytes(stream, max_length).await?;
+    Ok(String::from_utf8(bytes).map_err(|err| Error::Utf8Error(err.utf8_error()))?)
+}
+
 async fn handle_run_kernel(stream: &TcpStream, control: &mut kernel::Control) -> Result<()> {
     control.tx.async_send(kernel::Message::StartRequest).await;
     loop {
@@ -137,7 +156,24 @@ async fn handle_run_kernel(stream: &TcpStream, control: &mut kernel::Control) ->
                             }).await?;
                             control.tx.async_send(kernel::Message::RpcRecvReply(Ok(0))).await;
                         },
-                        Request::RPCException => unimplemented!(),
+                        Request::RPCException => {
+                            let rpc_recv_request = control.rx.async_recv().await;
+                            match *rpc_recv_request {
+                                kernel::Message::RpcRecvRequest(_) => (),
+                                _ => panic!(
+                                    "expected (ignored) root value slot from kernel CPU, not {:?}", rpc_recv_request),
+                            }
+                            let name =     read_string(stream, 16384).await?;
+                            let message =  read_string(stream, 16384).await?;
+                            let param =    [read_i64(stream).await?,
+                                            read_i64(stream).await?,
+                                            read_i64(stream).await?];
+                            let file =     read_string(stream, 16384).await?;
+                            let line =     read_i32(stream).await?;
+                            let column =   read_i32(stream).await?;
+                            let function = read_string(stream, 16384).await?;
+                            control.tx.async_send(kernel::Message::RpcRecvReply(Err(()))).await;
+                        },
                         _ => {
                             error!("unexpected RPC request from host: {:?}", host_request);
                             return Err(Error::UnrecognizedPacket)
