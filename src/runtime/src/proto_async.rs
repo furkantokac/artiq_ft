@@ -1,6 +1,7 @@
 use core::task::Poll;
 use core::cmp::min;
 use core::cell::RefCell;
+use alloc::{vec, vec::Vec};
 
 use libboard_zynq::smoltcp;
 use libasync::smoltcp::TcpStream;
@@ -86,16 +87,14 @@ pub async fn read_chunk(stream: &TcpStream, destination: &mut [u8]) -> Result<()
     Ok(())
 }
 
-pub async fn read_drain(stream: &TcpStream, total: usize) -> Result<()> {
-    let mut done = 0;
-    while done < total {
-        let count = stream.recv(|buf| {
-            let count = min(total - done, buf.len());
-            Poll::Ready((count, count))
-        }).await?;
-        done += count;
+pub async fn read_bytes(stream: &TcpStream, max_length: usize) -> Result<Vec<u8>> {
+    let length = read_i32(&stream).await? as usize;
+    if length > max_length {
+        return Err(smoltcp::Error::Exhausted);
     }
-    Ok(())
+    let mut buffer = vec![0; length];
+    read_chunk(&stream, &mut buffer).await?;
+    Ok(buffer)
 }
 
 pub async fn write_i8(stream: &TcpStream, value: i8) -> Result<()> {

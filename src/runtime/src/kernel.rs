@@ -19,6 +19,8 @@ pub enum Message {
     StartRequest,
     KernelFinished,
     RpcSend { is_async: bool, data: Arc<Vec<u8>> },
+    RpcRecvRequest(*mut ()),
+    RpcRecvReply(Result<usize, ()>),
 }
 
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<Message>>> = Mutex::new(None);
@@ -64,23 +66,31 @@ impl Control {
 static mut KERNEL_CHANNEL_0TO1: *mut () = ptr::null_mut();
 static mut KERNEL_CHANNEL_1TO0: *mut () = ptr::null_mut();
 
-extern fn rpc_send(service: u32, tag: &CSlice<u8>, data: *const *const ()) {
-    let core1_rx: &mut sync_channel::Receiver<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_0TO1) };
+fn rpc_send_common(is_async: bool, service: u32, tag: &CSlice<u8>, data: *const *const ()) {
     let core1_tx: &mut sync_channel::Sender<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_1TO0) };
     let mut buffer = Vec::<u8>::new();
     rpc::send_args(&mut buffer, service, tag.as_ref(), data).expect("RPC encoding failed");
-    core1_tx.send(Message::RpcSend { is_async: false, data: Arc::new(buffer) })
+    core1_tx.send(Message::RpcSend { is_async: is_async, data: Arc::new(buffer) });
+}
+
+extern fn rpc_send(service: u32, tag: &CSlice<u8>, data: *const *const ()) {
+    rpc_send_common(false, service, tag, data);
 }
 
 extern fn rpc_send_async(service: u32, tag: &CSlice<u8>, data: *const *const ()) {
-    let core1_tx: &mut sync_channel::Sender<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_1TO0) };
-    let mut buffer = Vec::<u8>::new();
-    rpc::send_args(&mut buffer, service, tag.as_ref(), data).expect("RPC encoding failed");
-    core1_tx.send(Message::RpcSend { is_async: true, data: Arc::new(buffer) })
+    rpc_send_common(true, service, tag, data);
 }
 
 extern fn rpc_recv(slot: *mut ()) -> usize {
-    unimplemented!();
+    let core1_rx: &mut sync_channel::Receiver<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_0TO1) };
+    let core1_tx: &mut sync_channel::Sender<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_1TO0) };
+    core1_tx.send(Message::RpcRecvRequest(slot));
+    let reply = core1_rx.recv();
+    match *reply {
+        Message::RpcRecvReply(Ok(alloc_size)) => alloc_size,
+        Message::RpcRecvReply(Err(_)) => unimplemented!(),
+        _ => panic!("received unexpected reply to RpcRecvRequest: {:?}", reply)
+    }
 }
 
 macro_rules! api {
