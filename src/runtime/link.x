@@ -45,21 +45,21 @@ SECTIONS
     .heap (NOLOAD) : ALIGN(8)
     {
         __heap_start = .;
-        . += 0x1000000;
+        . += 0x8000000;
         __heap_end = .;
     } > SDRAM
 
     .stack1 (NOLOAD) : ALIGN(8)
     {
         __stack1_end = .;
-        . += 0x1000000;
+        . += 0x8000000;
         __stack1_start = .;
     } > SDRAM
 
     .stack0 (NOLOAD) : ALIGN(8)
     {
         __stack0_end = .;
-        . += 0x1000000;
+        . += 0x10000;
         __stack0_start = .;
     } > SDRAM
 
