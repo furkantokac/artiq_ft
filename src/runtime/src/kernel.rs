@@ -100,7 +100,7 @@ extern fn exception_unimplemented() {
 macro_rules! api {
     ($i:ident) => ({
         extern { static $i: u8; }
-        api!($i = &$i as *const _)
+        unsafe { api!($i = &$i as *const _) }
     });
     ($i:ident, $d:item) => ({
         $d
@@ -129,6 +129,8 @@ fn resolve(required: &[u8]) -> Option<u32> {
         api!(rtio_input_timestamp = rtio::input_timestamp),
         api!(rtio_input_data = rtio::input_data),
         api!(rtio_input_timestamped_data = rtio::input_timestamped_data),
+
+        api!(__aeabi_l2d),
 
         api!(_Unwind_Resume = exception_unimplemented),
         api!(__artiq_personality = exception_unimplemented),
