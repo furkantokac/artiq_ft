@@ -93,6 +93,10 @@ extern fn rpc_recv(slot: *mut ()) -> usize {
     }
 }
 
+extern fn exception_unimplemented() {
+    unimplemented!();
+}
+
 macro_rules! api {
     ($i:ident) => ({
         extern { static $i: u8; }
@@ -126,7 +130,11 @@ fn resolve(required: &[u8]) -> Option<u32> {
         api!(rtio_input_data = rtio::input_data),
         api!(rtio_input_timestamped_data = rtio::input_timestamped_data),
 
-        api!(__artiq_personality = 0), // HACK
+        api!(_Unwind_Resume = exception_unimplemented),
+        api!(__artiq_personality = exception_unimplemented),
+        api!(__artiq_raise = exception_unimplemented),
+        api!(__artiq_reraise = exception_unimplemented),
+
     ];
     api.iter()
        .find(|&&(exported, _)| exported.as_bytes() == required)
