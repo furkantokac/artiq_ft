@@ -2,7 +2,6 @@
 #![no_main]
 #![recursion_limit="1024"]  // for futures_util::select!
 #![feature(llvm_asm)]
-#![feature(async_closure)]
 
 extern crate alloc;
 
