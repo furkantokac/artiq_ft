@@ -8,7 +8,7 @@ nix-channel --update
 Pure build with Nix:
 
 ```shell
-nix-build -A zc706-jtag
+nix-build -A zc706-simple-jtag  # or zc706-nist_qc2-jtag or zc706-nist_clock-jtag
 ./remote_run.sh
 ```
 
