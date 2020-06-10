@@ -81,6 +81,45 @@ extern fn rpc_send_async(service: u32, tag: &CSlice<u8>, data: *const *const ())
     rpc_send_common(true, service, tag, data);
 }
 
+unsafe fn attribute_writeback(typeinfo: *const ()) {
+    struct Attr {
+        offset: usize,
+        tag:    CSlice<'static, u8>,
+        name:   CSlice<'static, u8>
+    }
+
+    struct Type {
+        attributes: *const *const Attr,
+        objects:    *const *const ()
+    }
+
+    let mut tys = typeinfo as *const *const Type;
+    while !(*tys).is_null() {
+        let ty = *tys;
+        tys = tys.offset(1);
+
+        let mut objects = (*ty).objects;
+        while !(*objects).is_null() {
+            let object = *objects;
+            objects = objects.offset(1);
+
+            let mut attributes = (*ty).attributes;
+            while !(*attributes).is_null() {
+                let attribute = *attributes;
+                attributes = attributes.offset(1);
+
+                if (*attribute).tag.len() > 0 {
+                    rpc_send_async(0, &(*attribute).tag, [
+                        &object as *const _ as *const (),
+                        &(*attribute).name as *const _ as *const (),
+                        (object as usize + (*attribute).offset) as *const ()
+                    ].as_ptr());
+                }
+            }
+        }
+    }
+}
+
 extern fn rpc_recv(slot: *mut ()) -> usize {
     let core1_rx: &mut sync_channel::Receiver<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_0TO1) };
     let core1_tx: &mut sync_channel::Sender<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_1TO0) };
@@ -174,6 +213,7 @@ pub fn main_core1() {
     let mut core1_rx = core1_rx.unwrap();
 
     let mut current_modinit: Option<u32> = None;
+    let mut current_typeinfo: Option<u32> = None;
     loop {
         let message = core1_rx.recv();
         match *message {
@@ -190,6 +230,7 @@ pub fn main_core1() {
                         }
                         let __modinit__ = library.lookup(b"__modinit__").unwrap();
                         current_modinit = Some(__modinit__);
+                        current_typeinfo = library.lookup(b"typeinfo");
                         debug!("kernel loaded");
                         core1_tx.send(Message::LoadCompleted);
                     },
@@ -206,6 +247,9 @@ pub fn main_core1() {
                         KERNEL_CHANNEL_0TO1 = mem::transmute(&mut core1_rx);
                         KERNEL_CHANNEL_1TO0 = mem::transmute(&mut core1_tx);
                         (mem::transmute::<u32, fn()>(__modinit__))();
+                        if let Some(typeinfo) = current_typeinfo {
+                            attribute_writeback(typeinfo as *const ());
+                        }
                         KERNEL_CHANNEL_0TO1 = ptr::null_mut();
                         KERNEL_CHANNEL_1TO0 = ptr::null_mut();
                     }
