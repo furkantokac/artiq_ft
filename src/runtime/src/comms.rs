@@ -1,4 +1,3 @@
-use core::mem::transmute;
 use core::fmt;
 use core::cell::RefCell;
 use core::str::Utf8Error;
@@ -249,25 +248,13 @@ const IPADDR: IpAddress = IpAddress::Ipv4(Ipv4Address([192, 168, 1, 52]));
 pub fn main(timer: GlobalTimer) {
     let eth = zynq::eth::Eth::default(HWADDR.clone());
     const RX_LEN: usize = 8;
-    let mut rx_descs = (0..RX_LEN)
-        .map(|_| zynq::eth::rx::DescEntry::zeroed())
-        .collect::<Vec<_>>();
-    let mut rx_buffers = vec![zynq::eth::Buffer::new(); RX_LEN];
     // Number of transmission buffers (minimum is two because with
     // one, duplicate packet transmission occurs)
     const TX_LEN: usize = 8;
-    let mut tx_descs = (0..TX_LEN)
-        .map(|_| zynq::eth::tx::DescEntry::zeroed())
-        .collect::<Vec<_>>();
-    let mut tx_buffers = vec![zynq::eth::Buffer::new(); TX_LEN];
-    let eth = eth.start_rx(&mut rx_descs, &mut rx_buffers);
-    let mut eth = eth.start_tx(
-        // HACK
-        unsafe { transmute(tx_descs.as_mut_slice()) },
-        unsafe { transmute(tx_buffers.as_mut_slice()) },
-    );
-    let ethernet_addr = EthernetAddress(HWADDR);
+    let eth = eth.start_rx(RX_LEN);
+    let mut eth = eth.start_tx(TX_LEN);
 
+    let ethernet_addr = EthernetAddress(HWADDR);
     let mut ip_addrs = [IpCidr::new(IPADDR, 24)];
     let mut routes_storage = vec![None; 4];
     let routes = Routes::new(&mut routes_storage[..]);
