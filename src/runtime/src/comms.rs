@@ -41,11 +41,11 @@ pub type Result<T> = core::result::Result<T, Error>;
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &Error::NetworkError(error) => write!(f, "network error: {}", error),
-            &Error::UnexpectedPattern   => write!(f, "unexpected pattern"),
-            &Error::UnrecognizedPacket  => write!(f, "unrecognized packet"),
-            &Error::BufferExhausted     => write!(f, "buffer exhausted"),
-            &Error::Utf8Error(error)    => write!(f, "UTF-8 error: {}", error),
+            Error::NetworkError(error) => write!(f, "network error: {}", error),
+            Error::UnexpectedPattern   => write!(f, "unexpected pattern"),
+            Error::UnrecognizedPacket  => write!(f, "unrecognized packet"),
+            Error::BufferExhausted     => write!(f, "buffer exhausted"),
+            Error::Utf8Error(error)    => write!(f, "UTF-8 error: {}", error),
         }
     }
 }
