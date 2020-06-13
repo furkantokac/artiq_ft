@@ -12,6 +12,7 @@ use libboard_zynq::{timer::GlobalTimer, logger, devc};
 use libsupport_zynq::ram;
 
 mod sd_reader;
+mod config;
 mod proto_core_io;
 mod proto_async;
 mod comms;
@@ -44,6 +45,11 @@ pub fn main_core0() {
     info!("NAR3/Zynq7000 starting...");
 
     ram::init_alloc_linker();
+
+    match config::read_str("foo") {
+        Ok(val) => info!("read: {}", val),
+        Err(error) => info!("failed to read config: {}", error),
+    }
 
     let devc = devc::DevC::new();
     if devc.is_done() {
