@@ -11,6 +11,7 @@ use log::info;
 use libboard_zynq::{timer::GlobalTimer, logger, devc};
 use libsupport_zynq::ram;
 
+mod sd_reader;
 mod proto_core_io;
 mod proto_async;
 mod comms;
