@@ -251,7 +251,7 @@ fn resolve(required: &[u8]) -> Option<u32> {
         api!(__aeabi_memclr4),
         api!(__aeabi_memclr),
 
-        // ARTIQ
+        // exceptions
         api!(_Unwind_Resume = exception_unimplemented),
         api!(__artiq_personality = exception_unimplemented),
         api!(__artiq_raise = exception_unimplemented),
