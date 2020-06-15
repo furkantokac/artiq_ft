@@ -72,24 +72,17 @@ let
       bifdir=`mktemp -d`
       cd $bifdir
       ln -s ${firmware}/szl.elf szl.elf
+      ln -s ${gateware}/top.bit top.bit
       cat > boot.bif << EOF
       the_ROM_image:
       {
         [bootloader]szl.elf
+        top.bit
       }
       EOF
-      mkdir $out
+      mkdir $out $out/nix-support
       mkbootimage boot.bif $out/boot.bin
-      ln -s ${gateware}/top.bit $out
-      '';
-    sd-zip = pkgs.runCommand "zc706-${variant}-sd-zip"
-      {
-        buildInputs = [ pkgs.zip ];
-      }
-      ''
-        mkdir -p $out $out/nix-support
-        zip -j $out/sd.zip ${sd}/*
-        echo file binary-dist $out/sd.zip >> $out/nix-support/hydra-build-products
+      echo file binary-dist $out/boot.bin >> $out/nix-support/hydra-build-products
       '';
 
     # FSBL startup
@@ -121,7 +114,6 @@ let
     "zc706-${variant}-gateware" = gateware;
     "zc706-${variant}-jtag" = jtag;
     "zc706-${variant}-sd" = sd;
-    "zc706-${variant}-sd-zip" = sd-zip;
     "zc706-${variant}-fsbl-sd" = fsbl-sd;
   };
 in
