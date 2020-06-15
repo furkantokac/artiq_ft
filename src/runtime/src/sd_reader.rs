@@ -185,6 +185,7 @@ impl<'a> Read for SdReader<'a> {
                 // we have to allow partial read, as per the trait required
                 return Ok(a.len());
             }
+            self.byte_addr += b.len() as u32;
         }
         if let Err(_) = self.read_unaligned(c) {
             // we have to allow partial read, as per the trait required
@@ -229,6 +230,7 @@ impl<'a> Write for SdReader<'a> {
             ) {
                 return Ok(a.len());
             }
+            self.byte_addr += b.len() as u32;
         }
         if let Err(_) = self.write_unaligned(c) {
             return Ok(a.len() + b.len());
@@ -283,4 +285,3 @@ impl<'a> Drop for SdReader<'a> {
         self.flush().unwrap_or(());
     }
 }
-
