@@ -1,6 +1,7 @@
 use core_io::{BufRead, Error, ErrorKind, Read, Result as IoResult, Seek, SeekFrom, Write};
 use fatfs;
 use libboard_zynq::sdio::{sd_card::SdCard, CmdTransferError};
+use log::debug;
 
 fn cmd_error_to_io_error(_: CmdTransferError) -> Error {
     Error::new(ErrorKind::Other, "Command transfer error")
@@ -145,8 +146,9 @@ impl<'a> SdReader<'a> {
         // Read partition ID.
         self.seek(SeekFrom::Start(entry as u64 + 0x4))?;
         self.read_exact(&mut buffer[..1])?;
+        debug!("Partition ID: {:0X}", buffer[0]);
         match buffer[0] {
-            0x01 | 0x04 | 0x06 | 0x0B => (),
+            0x01 | 0x04 | 0x06 | 0x0B | 0x0C => (),
             _ => {
                 return Err(Error::new(
                     ErrorKind::InvalidData,

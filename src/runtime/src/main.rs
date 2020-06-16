@@ -22,7 +22,7 @@ mod pl;
 mod rtio;
 mod kernel;
 mod moninj;
-
+mod load_pl;
 
 fn identifier_read(buf: &mut [u8]) -> &str {
     unsafe {
@@ -51,15 +51,17 @@ pub fn main_core0() {
         Err(error) => info!("failed to read config: {}", error),
     }
 
-    let devc = devc::DevC::new();
-    if devc.is_done() {
+    if devc::DevC::new().is_done() {
         info!("gateware already loaded");
         // Do not load again: assume that the gateware already present is
         // what we want (e.g. gateware configured via JTAG before PS
         // startup, or by FSBL).
     } else {
-        info!("loading gateware");
-        unimplemented!("gateware loading");
+        // Load from SD card
+        match load_pl::load_bitstream_from_sd() {
+            Ok(_) => info!("Bitstream loaded successfully!"),
+            Err(e) => info!("Failure loading bitstream: {}", e),
+        }
     }
     info!("detected gateware: {}", identifier_read(&mut [0; 64]));
 
