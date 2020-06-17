@@ -88,7 +88,7 @@ let
     # FSBL startup
     fsbl-sd = pkgs.runCommand "zc706-${variant}-fsbl-sd"
       {
-        buildInputs = [ mkbootimage zc706-fsbl];
+        buildInputs = [ mkbootimage ];
       }
       ''
       # TODO: use self-built fsbl
