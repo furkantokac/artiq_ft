@@ -88,13 +88,13 @@ let
     # FSBL startup
     fsbl-sd = pkgs.runCommand "zc706-${variant}-fsbl-sd"
       {
-        buildInputs = [ mkbootimage ];
+        buildInputs = [ mkbootimage zc706-fsbl];
       }
       ''
       # TODO: use self-built fsbl
       bifdir=`mktemp -d`
       cd $bifdir
-      ln -s ${./fsbl.elf} fsbl.elf
+      ln -s ${zc706-fsbl}/fsbl.elf fsbl.elf
       ln -s ${gateware}/top.bit top.bit
       ln -s ${firmware}/runtime.elf runtime.elf
       cat > boot.bif << EOF
