@@ -10,7 +10,7 @@ pub enum Error<'a> {
     SdError(sdio::sd_card::CardInitializationError),
     IoError(io::Error),
     Utf8Error(FromUtf8Error),
-    ConfigNotFound(&'a str),
+    KeyNotFoundError(&'a str),
 }
 
 pub type Result<'a, T> = core::result::Result<T, Error<'a>>;
@@ -21,7 +21,7 @@ impl<'a> fmt::Display for Error<'a> {
             Error::SdError(error) => write!(f, "SD error: {}", error),
             Error::IoError(error) => write!(f, "I/O error: {}", error),
             Error::Utf8Error(error) => write!(f, "UTF-8 error: {}", error),
-            Error::ConfigNotFound(name) => write!(f, "Config `{}` not found", name),
+            Error::KeyNotFoundError(name) => write!(f, "Configuration key `{}` not found", name),
         }
     }
 }
@@ -57,7 +57,7 @@ fn parse_config<'a>(
             return Ok(());
         }
     }
-    Err(Error::ConfigNotFound(key))
+    Err(Error::KeyNotFoundError(key))
 }
 
 pub struct Config {
@@ -84,7 +84,7 @@ impl Config {
             Ok(mut f) => f.read_to_end(&mut buffer).map(|v| ())?,
             Err(_) => match root_dir.open_file("/CONFIG.TXT") {
                 Ok(f) => parse_config(key, &mut buffer, f)?,
-                Err(_) => return Err(Error::ConfigNotFound(key)),
+                Err(_) => return Err(Error::KeyNotFoundError(key)),
             },
         };
         Ok(buffer)
