@@ -156,8 +156,8 @@ pub fn load_bitstream_from_sd() -> Result<(), PlLoadingError> {
     let sdio0 = sdio::SDIO::sdio0(true);
     if sdio0.is_card_inserted() {
         info!("Card inserted. Mounting file system.");
-        let mut sd = sdio::sd_card::SdCard::from_sdio(sdio0).unwrap();
-        let reader = sd_reader::SdReader::new(&mut sd);
+        let sd = sdio::sd_card::SdCard::from_sdio(sdio0).unwrap();
+        let reader = sd_reader::SdReader::new(sd);
 
         let fs = reader.mount_fatfs(sd_reader::PartitionEntry::Entry1)?;
         let root_dir = fs.root_dir();

@@ -15,9 +15,9 @@ const BLOCK_SIZE: usize = 512;
 /// Implementation: all read/writes would be split into unaligned and block-aligned parts,
 /// unaligned read/writes would do a buffered read/write using a block-sized internal buffer,
 /// while aligned transactions would be sent to the SD card directly for performance reason.
-pub struct SdReader<'a> {
+pub struct SdReader {
     /// Internal SdCard handle.
-    sd: &'a mut SdCard,
+    sd: SdCard,
     /// Read buffer with the size of 1 block.
     buffer: [u8; BLOCK_SIZE],
     /// Address for the next byte.
@@ -44,9 +44,9 @@ pub enum PartitionEntry {
     Entry4 = 0x1EE,
 }
 
-impl<'a> SdReader<'a> {
+impl SdReader {
     /// Create SdReader from SdCard
-    pub fn new(sd: &'a mut SdCard) -> SdReader<'a> {
+    pub fn new(sd: SdCard) -> SdReader {
         SdReader {
             sd,
             buffer: [0; BLOCK_SIZE],
@@ -171,7 +171,7 @@ impl<'a> SdReader<'a> {
     }
 }
 
-impl<'a> Read for SdReader<'a> {
+impl Read for SdReader {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         let total_length = buf.len();
         let (a, b, c) = self.block_align_mut(buf);
@@ -197,7 +197,7 @@ impl<'a> Read for SdReader<'a> {
     }
 }
 
-impl<'a> BufRead for SdReader<'a> {
+impl BufRead for SdReader {
     fn fill_buf(&mut self) -> IoResult<&[u8]> {
         if self.index == BLOCK_SIZE {
             // flush the buffer if it is dirty before overwriting it with new data
@@ -219,7 +219,7 @@ impl<'a> BufRead for SdReader<'a> {
     }
 }
 
-impl<'a> Write for SdReader<'a> {
+impl Write for SdReader {
     fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
         let (a, b, c) = self.block_align(buf);
         self.write_unaligned(a)?;
@@ -252,7 +252,7 @@ impl<'a> Write for SdReader<'a> {
     }
 }
 
-impl<'a> Seek for SdReader<'a> {
+impl Seek for SdReader {
     fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
         let raw_target = match pos {
             SeekFrom::Start(x) => self.offset as i64 + x as i64,
@@ -281,7 +281,7 @@ impl<'a> Seek for SdReader<'a> {
     }
 }
 
-impl<'a> Drop for SdReader<'a> {
+impl Drop for SdReader {
     fn drop(&mut self) {
         // just try to flush it, ignore error if any
         self.flush().unwrap_or(());
