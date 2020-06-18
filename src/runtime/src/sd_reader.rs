@@ -2,6 +2,7 @@ use core_io::{BufRead, Error, ErrorKind, Read, Result as IoResult, Seek, SeekFro
 use fatfs;
 use libboard_zynq::sdio::{sd_card::SdCard, CmdTransferError};
 use log::debug;
+use alloc::vec::Vec;
 
 fn cmd_error_to_io_error(_: CmdTransferError) -> Error {
     Error::new(ErrorKind::Other, "Command transfer error")
@@ -19,7 +20,7 @@ pub struct SdReader {
     /// Internal SdCard handle.
     sd: SdCard,
     /// Read buffer with the size of 1 block.
-    buffer: [u8; BLOCK_SIZE],
+    buffer: Vec<u8>,
     /// Address for the next byte.
     byte_addr: u32,
     /// Internal index for the next byte.
@@ -47,9 +48,13 @@ pub enum PartitionEntry {
 impl SdReader {
     /// Create SdReader from SdCard
     pub fn new(sd: SdCard) -> SdReader {
+        let mut vec: Vec<u8> = Vec::with_capacity(BLOCK_SIZE);
+        unsafe {
+            vec.set_len(vec.capacity());
+        }
         SdReader {
             sd,
-            buffer: [0; BLOCK_SIZE],
+            buffer: vec,
             byte_addr: 0,
             index: BLOCK_SIZE,
             dirty: false,
