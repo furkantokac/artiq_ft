@@ -4,6 +4,13 @@ use libboard_zynq::sdio::{sd_card::SdCard, CmdTransferError};
 use log::debug;
 use alloc::vec::Vec;
 
+const MBR_SIGNATURE: [u8; 2] = [0x55, 0xAA];
+const PARTID_FAT12: u8 = 0x01;
+const PARTID_FAT16_LESS32M: u8 = 0x04;
+const PARTID_FAT16: u8 = 0x06;
+const PARTID_FAT32: u8 = 0x0B;
+const PARTID_FAT32_LBA: u8 = 0x0C;
+
 fn cmd_error_to_io_error(_: CmdTransferError) -> Error {
     Error::new(ErrorKind::Other, "Command transfer error")
 }
@@ -142,7 +149,7 @@ impl SdReader {
         self.seek(SeekFrom::Start(0x1FE))?;
         self.read_exact(&mut buffer[..2])?;
         // check MBR signature
-        if buffer[0] != 0x55 || buffer[1] != 0xAA {
+        if buffer[..2] != MBR_SIGNATURE {
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 "Incorrect signature for MBR sector.",
@@ -153,14 +160,15 @@ impl SdReader {
         self.read_exact(&mut buffer[..1])?;
         debug!("Partition ID: {:0X}", buffer[0]);
         match buffer[0] {
-            0x01 | 0x04 | 0x06 | 0x0B | 0x0C => (),
+            PARTID_FAT12 | PARTID_FAT16_LESS32M | PARTID_FAT16 |
+            PARTID_FAT32 | PARTID_FAT32_LBA => {}
             _ => {
                 return Err(Error::new(
                     ErrorKind::InvalidData,
                     "No FAT partition found for the specified entry.",
-                ))
+                ));
             }
-        };
+        }
         // Read LBA
         self.seek(SeekFrom::Current(0x3))?;
         self.read_exact(&mut buffer)?;
