@@ -161,16 +161,11 @@ pub fn load_bitstream_from_sd() -> Result<(), PlLoadingError> {
 
         let fs = reader.mount_fatfs(sd_reader::PartitionEntry::Entry1)?;
         let root_dir = fs.root_dir();
-        for entry in root_dir.iter() {
-            if let Ok(entry) = entry {
-                if entry.is_file() && entry.short_file_name() == "BOOT.BIN" {
-                    info!("Found boot image!");
-                    return load_bitstream(&mut entry.to_file());
-                }
-            }
-        }
+        let mut file = root_dir.open_file("/BOOT.BIN").map_err(|_| PlLoadingError::BootImageNotFound)?;
+        info!("Found boot image!");
+        load_bitstream(&mut file)
     } else {
-        info!("SD card not inserted. Bitstream cannot be loaded.")
+        info!("SD card not inserted. Bitstream cannot be loaded.");
+        Err(PlLoadingError::BootImageNotFound)
     }
-    Err(PlLoadingError::BootImageNotFound)
 }
