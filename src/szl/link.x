@@ -42,21 +42,21 @@ SECTIONS
         *(.bss .bss.*);
         . = ALIGN(4);
         __bss_end = .;
-    } > OCM
+    } > OCM3
 
     .stack1 (NOLOAD) : ALIGN(8)
     {
         __stack1_end = .;
         . += 0x4000;
         __stack1_start = .;
-    } > OCM
+    } > OCM3
 
     .stack0 (NOLOAD) : ALIGN(8)
     {
         __stack0_end = .;
         . += 0x4000;
         __stack0_start = .;
-    } > OCM
+    } > OCM3
 
     /DISCARD/ :
     {
