@@ -58,7 +58,7 @@ fn elf_hash(name: &[u8]) -> u32 {
 }
 
 pub struct Library {
-    image: Image,
+    pub image: Image,
     dyn_section: DynamicSection,
 }
 

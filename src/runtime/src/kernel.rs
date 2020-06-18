@@ -3,7 +3,7 @@ use log::{debug, error};
 use alloc::{vec::Vec, sync::Arc};
 use cslice::CSlice;
 
-use libcortex_a9::{mutex::Mutex, sync_channel::{self, sync_channel}};
+use libcortex_a9::{cache::dcci_slice, mutex::Mutex, sync_channel::{self, sync_channel}};
 use libsupport_zynq::boot::Core1;
 
 use dyld;
@@ -313,6 +313,10 @@ pub fn main_core1() {
                         current_modinit = Some(__modinit__);
                         current_typeinfo = library.lookup(b"typeinfo");
                         debug!("kernel loaded");
+                        // Flush data cache entries for the image in DDR, including
+                        // Memory/Instruction Symchronization Barriers
+                        dcci_slice(library.image.data);
+
                         core1_tx.send(Message::LoadCompleted);
                     },
                     Err(error) => {

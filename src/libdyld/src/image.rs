@@ -23,7 +23,7 @@ pub struct DynamicSection {
 /// target memory image
 pub struct Image {
     layout: Layout,
-    data: &'static mut [u8],
+    pub data: &'static mut [u8],
 }
 
 impl Image {
