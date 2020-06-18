@@ -46,9 +46,18 @@ pub fn main_core0() {
 
     ram::init_alloc_linker();
 
-    match config::read_str("foo") {
-        Ok(val) => info!("read: {}", val),
-        Err(error) => info!("failed to read config: {}", error),
+    let mut cfg = config::Config::new().unwrap();
+    match cfg.read_str("FOO") {
+        Ok(val) => info!("FOO = {}", val),
+        Err(error) => info!("failed to read config FOO: {}", error),
+    }
+    match cfg.read_str("BAR") {
+        Ok(val) => info!("BAR = {}", val),
+        Err(error) => info!("failed to read config BAR: {}", error),
+    }
+    match cfg.read_str("FOOBAR") {
+        Ok(val) => info!("read FOOBAR = {}", val),
+        Err(error) => info!("failed to read config FOOBAR: {}", error),
     }
 
     if devc::DevC::new().is_done() {
