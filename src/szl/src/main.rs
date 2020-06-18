@@ -7,6 +7,7 @@ use core::mem;
 use log::{info, error};
 use cstr_core::CStr;
 
+use libcortex_a9::cache::dcci_slice;
 use libboard_zynq::{
     self as zynq, clocks::Clocks, clocks::source::{ClockSource, ArmPll, IoPll},
     logger,
@@ -48,6 +49,12 @@ pub fn main_core0() {
     if result < 0 {
         error!("decompression failed");
     } else {
+        // Flush data cache entries for all of DDR, including
+        // Memory/Instruction Symchronization Barriers
+        dcci_slice(unsafe {
+            core::slice::from_raw_parts(ddr.ptr::<u8>(), ddr.size())
+        });
+
         // Start core0 only, for compatibility with FSBL.
         info!("executing payload");
         unsafe {
