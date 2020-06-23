@@ -4,7 +4,7 @@ extern crate alloc;
 extern crate log;
 
 use core::{fmt, str, convert};
-use alloc::string::String;
+use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use log::{debug, trace};
 use elf::*;
 
@@ -60,6 +60,7 @@ fn elf_hash(name: &[u8]) -> u32 {
 pub struct Library {
     pub image: Image,
     dyn_section: DynamicSection,
+    pub exidx: Vec<u8>,
 }
 
 impl Library {
@@ -164,21 +165,31 @@ pub fn load(
         .map_err(|_| "cannot allocate target image")?;
     debug!("ELF target: {} bytes, align to {:X}, allocated at {:08X}", image_size, image_align, image.ptr() as usize);
 
+    let mut exidx = None;
     // LOAD
     for phdr in file.program_headers() {
         let phdr = phdr.ok_or("cannot read program header")?;
-        if phdr.p_type != PT_LOAD { continue; }
-
         trace!("Program header: {:08X}+{:08X} to {:08X}",
               phdr.p_offset, phdr.p_filesz,
               image.ptr() as u32
         );
-        let src = file.get(phdr.p_offset as usize..(phdr.p_offset + phdr.p_filesz) as usize)
-            .ok_or("program header requests an out of bounds load (in file)")?;
-        let dst = image.get_mut(phdr.p_vaddr as usize..
-                                (phdr.p_vaddr + phdr.p_filesz) as usize)
-            .ok_or("program header requests an out of bounds load (in target)")?;
-        dst.copy_from_slice(src);
+        let file_range = phdr.p_offset as usize..(phdr.p_offset + phdr.p_filesz) as usize;
+        match phdr.p_type {
+            PT_LOAD => {
+                let src = file.get(file_range)
+                    .ok_or("program header requests an out of bounds load (in file)")?;
+                let dst = image.get_mut(phdr.p_vaddr as usize..
+                                        (phdr.p_vaddr + phdr.p_filesz) as usize)
+                    .ok_or("program header requests an out of bounds load (in target)")?;
+                dst.copy_from_slice(src);
+            }
+            PT_ARM_EXIDX => {
+                let src = file.get(file_range)
+                    .ok_or("program header requests an out of bounds load (in file)")?;
+                exidx = Some(src.to_owned());
+            }
+            _ => {}
+        }
     }
 
     // relocate DYNAMIC
@@ -190,6 +201,7 @@ pub fn load(
     let lib = Library {
         image,
         dyn_section,
+        exidx: exidx.ok_or("missing EXIDX program header")?,
     };
 
     for rela in lib.rela() {
