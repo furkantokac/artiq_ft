@@ -6,7 +6,7 @@
 extern crate alloc;
 
 use core::{cmp, str};
-use log::info;
+use log::{info, error};
 
 use libboard_zynq::{timer::GlobalTimer, logger, devc};
 use libsupport_zynq::ram;
@@ -46,18 +46,22 @@ pub fn main_core0() {
 
     ram::init_alloc_linker();
 
-    let mut cfg = config::Config::new().unwrap();
-    match cfg.read_str("FOO") {
-        Ok(val) => info!("FOO = {}", val),
-        Err(error) => info!("failed to read config FOO: {}", error),
-    }
-    match cfg.read_str("BAR") {
-        Ok(val) => info!("BAR = {}", val),
-        Err(error) => info!("failed to read config BAR: {}", error),
-    }
-    match cfg.read_str("FOOBAR") {
-        Ok(val) => info!("read FOOBAR = {}", val),
-        Err(error) => info!("failed to read config FOOBAR: {}", error),
+    match config::Config::new() {
+        Ok(mut cfg) => {
+            match cfg.read_str("FOO") {
+                Ok(val) => info!("FOO = {}", val),
+                Err(error) => info!("failed to read config FOO: {}", error),
+            }
+            match cfg.read_str("BAR") {
+                Ok(val) => info!("BAR = {}", val),
+                Err(error) => info!("failed to read config BAR: {}", error),
+            }
+            match cfg.read_str("FOOBAR") {
+                Ok(val) => info!("read FOOBAR = {}", val),
+                Err(error) => info!("failed to read config FOOBAR: {}", error),
+            }
+        },
+        Err(error) => error!("config failed: {}", error)
     }
 
     if devc::DevC::new().is_done() {
