@@ -3,7 +3,7 @@
 extern crate alloc;
 extern crate log;
 
-use core::{fmt, str, convert};
+use core::{ops::Range, convert, fmt, str};
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use log::{debug, trace};
 use elf::*;
@@ -60,7 +60,7 @@ fn elf_hash(name: &[u8]) -> u32 {
 pub struct Library {
     pub image: Image,
     dyn_section: DynamicSection,
-    pub exidx: Vec<u8>,
+    exidx: Range<usize>,
 }
 
 impl Library {
@@ -130,6 +130,10 @@ impl Library {
         Ok(self.strtab().get(offset..offset + size)
            .ok_or("cannot read symbol name")?)
     }
+
+    pub fn exidx(&self) -> &[usize] {
+        self.image.get_ref_slice_unchecked(&self.exidx)
+    }
 }
 
 pub fn load(
@@ -184,9 +188,8 @@ pub fn load(
                 dst.copy_from_slice(src);
             }
             PT_ARM_EXIDX => {
-                let src = file.get(file_range)
-                    .ok_or("program header requests an out of bounds load (in file)")?;
-                exidx = Some(src.to_owned());
+                exidx = Some(phdr.p_vaddr as usize..
+                             (phdr.p_vaddr + phdr.p_filesz) as usize);
             }
             _ => {}
         }
