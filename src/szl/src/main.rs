@@ -11,6 +11,7 @@ use libcortex_a9::cache::dcci_slice;
 use libboard_zynq::{
     self as zynq, clocks::Clocks, clocks::source::{ClockSource, ArmPll, IoPll},
     logger,
+    ps7_init,
     timer::GlobalTimer,
 };
 use libsupport_zynq as _;
@@ -28,6 +29,8 @@ extern fn lzma_error(message: *const u8) {
 
 #[no_mangle]
 pub fn main_core0() {
+    ps7_init::apply();
+
     GlobalTimer::start();
     logger::init().unwrap();
     log::set_max_level(log::LevelFilter::Debug);
