@@ -12,6 +12,7 @@ in
       pkgs.gnumake
       rustPlatform.rust.rustc
       rustPlatform.rust.cargo
+      pkgs.llvm_9
       pkgs.clang_9
       pkgs.cacert
       pkgs.cargo-xbuild
