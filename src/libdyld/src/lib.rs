@@ -4,7 +4,7 @@ extern crate alloc;
 extern crate log;
 
 use core::{ops::Range, convert, fmt, str};
-use alloc::{borrow::ToOwned, string::String, vec::Vec};
+use alloc::string::String;
 use log::{debug, trace};
 use elf::*;
 
