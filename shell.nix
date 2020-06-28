@@ -21,8 +21,6 @@ in
 
       (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
       vivado
-      pkgs.llvm_9
-      pkgs.lld_9
 
       (import ./mkbootimage.nix { inherit pkgs; })
     ];
