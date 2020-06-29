@@ -81,7 +81,7 @@ impl Config {
         let root_dir = self.fs.root_dir();
         let mut buffer: Vec<u8> = Vec::new();
         match root_dir.open_file(&["/CONFIG/", key, ".BIN"].concat()) {
-            Ok(mut f) => f.read_to_end(&mut buffer).map(|v| ())?,
+            Ok(mut f) => f.read_to_end(&mut buffer).map(|_| ())?,
             Err(_) => match root_dir.open_file("/CONFIG.TXT") {
                 Ok(f) => parse_config(key, &mut buffer, f)?,
                 Err(_) => return Err(Error::KeyNotFoundError(key)),
