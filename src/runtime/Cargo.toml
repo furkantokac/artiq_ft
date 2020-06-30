@@ -24,6 +24,7 @@ libsupport_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 libasync = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 dyld = { path = "../libdyld" }
+dwarf = { path = "../libdwarf" }
 unwind = { path = "../libunwind" }
 libc = { path = "../libc" }
 fatfs = { version = "0.3", features = ["core_io"], default-features = false }

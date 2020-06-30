@@ -83,6 +83,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7313c0d620d0cb4dbd9d019e461a4beb501071ff46ec0ab933efb4daa76d73e3"
 
 [[package]]
+name = "dwarf"
+version = "0.0.0"
+dependencies = [
+ "cfg-if",
+ "compiler_builtins",
+ "libc",
+ "unwind",
+]
+
+[[package]]
 name = "dyld"
 version = "0.1.0"
 dependencies = [
@@ -378,6 +388,7 @@ dependencies = [
  "byteorder",
  "core_io",
  "cslice",
+ "dwarf",
  "dyld",
  "fatfs",
  "futures",

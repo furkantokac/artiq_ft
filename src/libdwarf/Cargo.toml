@@ -1,0 +1,17 @@
+[package]
+# This package is orignally panic_unwind, but is adapted as a dwarf parser
+authors = ["The Rust Project Developers"]
+name = "dwarf"
+version = "0.0.0"
+edition = "2018"
+
+[lib]
+test = false
+bench = false
+doc = false
+
+[dependencies]
+libc = { path = "../libc" }
+unwind = { path = "../libunwind" }
+compiler_builtins = "0.1.0"
+cfg-if = "0.1.8"

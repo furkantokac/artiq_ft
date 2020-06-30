@@ -3,6 +3,7 @@ members = [
   "libc",
   "libdyld",
   "libcoreio",
+  "libdwarf",
   "libunwind",
   "runtime",
   "szl"
