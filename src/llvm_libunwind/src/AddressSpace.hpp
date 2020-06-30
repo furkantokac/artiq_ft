@@ -392,6 +392,10 @@ LocalAddressSpace::getEncodedP(pint_t &addr, pint_t end, uint8_t encoding,
   return result;
 }
 
+extern "C" {
+    uintptr_t dl_unwind_find_exidx(uintptr_t pc, int *length);
+}
+
 inline bool LocalAddressSpace::findUnwindSections(pint_t targetAddr,
                                                   UnwindInfoSections &info) {
 #ifdef __APPLE__
@@ -421,9 +425,11 @@ inline bool LocalAddressSpace::findUnwindSections(pint_t targetAddr,
   if (info.dwarf_section_length)
     return true;
 #elif defined(_LIBUNWIND_ARM_EHABI) && defined(_LIBUNWIND_IS_BAREMETAL)
-  // Bare metal is statically linked, so no need to ask the dynamic loader
-  info.arm_section =        (uintptr_t)(&__exidx_start);
-  info.arm_section_length = (uintptr_t)(&__exidx_end - &__exidx_start);
+  // patched as our baremetal solution has a dynamic loader...
+  int length = 0;
+  info.arm_section =
+      (uintptr_t)dl_unwind_find_exidx((uintptr_t)targetAddr, &length);
+  info.arm_section_length = (uintptr_t)length * sizeof(EHABIIndexEntry);
   _LIBUNWIND_TRACE_UNWINDING("findUnwindSections: section %p length %p",
                              (void *)info.arm_section, (void *)info.arm_section_length);
   if (info.arm_section && info.arm_section_length)
