@@ -446,6 +446,7 @@ unwind_phase1(unw_context_t *uc, unw_cursor_t *cursor, _Unwind_Exception *except
   // from scratch thus achieving the same effect.
   __unw_init_local(cursor, uc);
 
+  uintptr_t prev_sp = 0;
   // Walk each frame looking for a place to stop.
   for (bool handlerNotFound = true; handlerNotFound;) {
 
@@ -458,6 +459,11 @@ unwind_phase1(unw_context_t *uc, unw_cursor_t *cursor, _Unwind_Exception *except
           static_cast<void *>(exception_object));
       return _URC_FATAL_PHASE1_ERROR;
     }
+    uintptr_t cur_sp = _Unwind_GetGR((_Unwind_Context*)cursor, 13);
+    if (cur_sp == prev_sp) {
+        return _URC_END_OF_STACK;
+    }
+    prev_sp = cur_sp;
 
     // When tracing, print state information.
     if (_LIBUNWIND_TRACING_UNWINDING) {
