@@ -57,10 +57,43 @@ fn elf_hash(name: &[u8]) -> u32 {
     h
 }
 
+// linker symbols
+extern "C" {
+    #[no_mangle]
+    static __text_start: u32;
+    #[no_mangle]
+    static __text_end: u32;
+    #[no_mangle]
+    static __exidx_start: u32;
+    #[no_mangle]
+    static __exidx_end: u32;
+}
+
+static mut KERNEL_EXIDX_START: u32 = 0;
+static mut KERNEL_EXIDX_END: u32 = 0;
+
+#[no_mangle]
+extern fn dl_unwind_find_exidx(pc: u32, len_ptr: *mut u32) -> u32 {
+    let length: u32;
+    let start: u32;
+    unsafe {
+        if (&__text_start as *const u32 as u32) <= pc && pc < (&__text_end as *const u32 as u32) {
+            length = (&__exidx_end - &__exidx_start) as u32;
+            start = &__exidx_start as *const u32 as u32;
+        } else {
+            // make sure that the kernel is loaded
+            assert_ne!(KERNEL_EXIDX_START, 0);
+            length = (KERNEL_EXIDX_END - KERNEL_EXIDX_START) / core::mem::size_of::<u32>() as u32;
+            start = KERNEL_EXIDX_START;
+        }
+        *len_ptr = length;
+    }
+    start
+}
+
 pub struct Library {
     pub image: Image,
     dyn_section: DynamicSection,
-    exidx: Range<usize>,
 }
 
 impl Library {
@@ -130,10 +163,6 @@ impl Library {
         Ok(self.strtab().get(offset..offset + size)
            .ok_or("cannot read symbol name")?)
     }
-
-    pub fn exidx(&self) -> &[usize] {
-        self.image.get_ref_slice_unchecked(&self.exidx)
-    }
 }
 
 pub fn load(
@@ -169,7 +198,6 @@ pub fn load(
         .map_err(|_| "cannot allocate target image")?;
     debug!("ELF target: {} bytes, align to {:X}, allocated at {:08X}", image_size, image_align, image.ptr() as usize);
 
-    let mut exidx = None;
     // LOAD
     for phdr in file.program_headers() {
         let phdr = phdr.ok_or("cannot read program header")?;
@@ -188,8 +216,13 @@ pub fn load(
                 dst.copy_from_slice(src);
             }
             PT_ARM_EXIDX => {
-                exidx = Some(phdr.p_vaddr as usize..
-                             (phdr.p_vaddr + phdr.p_filesz) as usize);
+                let range = image.get(phdr.p_vaddr as usize..
+                    (phdr.p_vaddr + phdr.p_filesz) as usize)
+                    .ok_or("program header requests and out of bounds load (in target)")?;
+                unsafe {
+                    KERNEL_EXIDX_START = range.as_ptr() as u32;
+                    KERNEL_EXIDX_END = range.as_ptr().add(range.len()) as u32;
+                }
             }
             _ => {}
         }
@@ -203,8 +236,7 @@ pub fn load(
            dyn_section.rela.len(), dyn_section.rel.len(), dyn_section.pltrel.len());
     let lib = Library {
         image,
-        dyn_section,
-        exidx: exidx.ok_or("missing EXIDX program header")?,
+        dyn_section
     };
 
     for rela in lib.rela() {

@@ -17,11 +17,25 @@ MEMORY
 
 SECTIONS
 {
+    __text_start = .;
     .text :
     {
         KEEP(*(.text.exceptions));
         *(.text.boot);
         *(.text .text.*);
+    } > SDRAM
+    __text_end = .;
+
+    __exidx_start = .;
+    .ARM.exidx :
+    {
+        *(.ARM.exidx* .gnu.linkonce.armexidx.*)
+    } > SDRAM
+    __exidx_end = .;
+
+    .ARM.extab :
+    {
+        * (.ARM.extab*)
     } > SDRAM
  
     .rodata : ALIGN(4)
@@ -62,12 +76,4 @@ SECTIONS
         . += 0x10000;
         __stack0_start = .;
     } > SDRAM
-
-    /DISCARD/ :
-    {
-        /* Unused exception related info that only wastes space */
-        *(.ARM.exidx);
-        *(.ARM.exidx.*);
-        *(.ARM.extab.*);
-    }
 }
