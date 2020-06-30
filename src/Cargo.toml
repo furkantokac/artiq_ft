@@ -1,7 +1,9 @@
 [workspace]
 members = [
+  "libc",
   "libdyld",
   "libcoreio",
+  "libunwind",
   "runtime",
   "szl"
 ]

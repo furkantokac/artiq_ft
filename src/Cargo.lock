@@ -36,6 +36,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08c48aae112d48ed9f069b33538ea9e3e90aa263cfa3d1c24309612b1f7472de"
 
 [[package]]
+name = "cc"
+version = "1.0.54"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7bbb73db36c1246e9034e307d0fba23f9a2e251faa47ade70c1bd252220c8311"
+
+[[package]]
 name = "cfg-if"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -210,9 +216,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "libc"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "libboard_zynq",
+]
+
+[[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#ec252b099cf67a51ba9daa72b3292db8c21ba1b8"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#6195ad40c334a847cd01cd4adadf6b8f8d730908"
 dependencies = [
  "bit_field",
  "libregister",
@@ -369,11 +383,13 @@ dependencies = [
  "futures",
  "libasync",
  "libboard_zynq",
+ "libc",
  "libcortex_a9",
  "libsupport_zynq",
  "log",
  "num-derive",
  "num-traits",
+ "unwind",
  "void",
 ]
 
@@ -415,6 +431,16 @@ name = "unicode-xid"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7fe0bb3479651439c9112f72b6c505038574c9fbb575ed1bf3b797fa39dd564"
+
+[[package]]
+name = "unwind"
+version = "0.0.0"
+dependencies = [
+ "cc",
+ "cfg-if",
+ "compiler_builtins",
+ "libc",
+]
 
 [[package]]
 name = "vcell"
