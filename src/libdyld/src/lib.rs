@@ -3,7 +3,7 @@
 extern crate alloc;
 extern crate log;
 
-use core::{ops::Range, convert, fmt, str};
+use core::{convert, fmt, str};
 use alloc::string::String;
 use log::{debug, trace};
 use elf::*;
