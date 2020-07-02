@@ -430,6 +430,7 @@ dependencies = [
 name = "szl"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "cstr_core",
  "libboard_zynq",
  "libcortex_a9",
