@@ -31,7 +31,7 @@ pub fn compile_unlzma() {
     cfg.flag("-ffreestanding");
     cfg.flag("-fPIC");
     cfg.flag("-fno-stack-protector");
-    cfg.flag("--target=armv7-unknown-linux");
+    cfg.flag("--target=armv7-none-eabihf");
     cfg.flag("-O2");
 
     let sources = vec![
