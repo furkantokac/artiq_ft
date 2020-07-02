@@ -2,6 +2,8 @@
 #![no_main]
 #![recursion_limit="1024"]  // for futures_util::select!
 #![feature(llvm_asm)]
+#![feature(alloc_error_handler)]
+#![feature(panic_info_message)]
 
 extern crate alloc;
 
@@ -24,6 +26,7 @@ mod kernel;
 mod moninj;
 mod load_pl;
 mod eh_artiq;
+mod panic;
 
 fn identifier_read(buf: &mut [u8]) -> &str {
     unsafe {

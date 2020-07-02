@@ -39,6 +39,7 @@ mod llvm_libunwind {
         let cfg = &mut cc::Build::new();
         setup_options(cfg);
         cfg.compiler("clang");
+        cfg.flag("-funwind-tables");
 
         let unwind_sources = vec![
             "Unwind-sjlj.c",
