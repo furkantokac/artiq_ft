@@ -12,8 +12,8 @@ in
       pkgs.gnumake
       rustPlatform.rust.rustc
       rustPlatform.rust.cargo
-      pkgs.llvm_9
-      pkgs.clang_9
+      pkgs.llvmPackages_9.llvm
+      pkgs.llvmPackages_9.clang-unwrapped
       pkgs.cacert
       pkgs.cargo-xbuild
 

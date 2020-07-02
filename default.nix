@@ -21,8 +21,8 @@ let
         pkgs.gnumake
         (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
         pkgs.cargo-xbuild
-        pkgs.llvm_9
-        pkgs.clang_9
+        pkgs.llvmPackages_9.llvm
+        pkgs.llvmPackages_9.clang-unwrapped
       ];
       buildPhase = ''
         export XARGO_RUST_SRC="${rustPlatform.rust.rustc.src}/src"
