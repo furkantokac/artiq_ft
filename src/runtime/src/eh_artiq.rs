@@ -1,3 +1,5 @@
+// From Current artiq firmware ksupport implementation.
+// Modified to suit the case of artiq-zynq port, for ARM EHABI.
 // Portions of the code in this file are derived from code by:
 //
 // Copyright 2015 The Rust Project Developers. See the COPYRIGHT
@@ -8,27 +10,21 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-#![allow(private_no_mangle_fns, non_camel_case_types)]
+#![allow(non_camel_case_types)]
 
-use core::{ptr, mem};
+use core::mem;
 use cslice::CSlice;
 use unwind as uw;
-use libc::{c_int, c_void};
+use libc::{c_int, uintptr_t};
+use log::debug;
 
-use eh::dwarf::{self, EHAction};
+use dwarf::eh::{self, EHAction, EHContext};
 
-type _Unwind_Stop_Fn = extern "C" fn(version: c_int,
-                                     actions: uw::_Unwind_Action,
-                                     exception_class: uw::_Unwind_Exception_Class,
-                                     exception_object: *mut uw::_Unwind_Exception,
-                                     context: *mut uw::_Unwind_Context,
-                                     stop_parameter: *mut c_void)
-                                    -> uw::_Unwind_Reason_Code;
-extern {
-    fn _Unwind_ForcedUnwind(exception: *mut uw::_Unwind_Exception,
-                            stop_fn: _Unwind_Stop_Fn,
-                            stop_parameter: *mut c_void) -> uw::_Unwind_Reason_Code;
-}
+
+const EXCEPTION_CLASS: uw::_Unwind_Exception_Class = 0x4d_4c_42_53_41_52_54_51; /* 'MLBSARTQ' */
+
+#[cfg(target_arch = "arm")]
+const UNWIND_DATA_REG: (i32, i32) = (0, 1); // R0, R1
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -42,8 +38,6 @@ pub struct Exception<'a> {
     pub param:    [i64; 3]
 }
 
-const EXCEPTION_CLASS: uw::_Unwind_Exception_Class = 0x4d_4c_42_53_41_52_54_51; /* 'MLBSARTQ' */
-
 const MAX_BACKTRACE_SIZE: usize = 128;
 
 #[repr(C)]
@@ -55,60 +49,112 @@ struct ExceptionInfo {
     backtrace_size: usize
 }
 
-#[cfg(target_arch = "x86_64")]
-const UNWIND_DATA_REG: (i32, i32) = (0, 1); // RAX, RDX
+unsafe fn find_eh_action(
+    context: *mut uw::_Unwind_Context,
+    foreign_exception: bool,
+) -> Result<EHAction, ()> {
+    let lsda = uw::_Unwind_GetLanguageSpecificData(context) as *const u8;
+    let mut ip_before_instr: c_int = 0;
+    let ip = uw::_Unwind_GetIPInfo(context, &mut ip_before_instr);
+    let eh_context = EHContext {
+        // The return address points 1 byte past the call instruction,
+        // which could be in the next IP range in LSDA range table.
+        ip: if ip_before_instr != 0 { ip } else { ip - 1 },
+        func_start: uw::_Unwind_GetRegionStart(context),
+        get_text_start: &|| uw::_Unwind_GetTextRelBase(context),
+        get_data_start: &|| uw::_Unwind_GetDataRelBase(context),
+    };
+    eh::find_eh_action(lsda, &eh_context, foreign_exception)
+}
 
-#[cfg(any(target_arch = "or1k"))]
-const UNWIND_DATA_REG: (i32, i32) = (3, 4); // R3, R4
-
-#[export_name="__artiq_personality"]
-pub extern fn personality(version: c_int,
-                          actions: uw::_Unwind_Action,
-                          uw_exception_class: uw::_Unwind_Exception_Class,
-                          uw_exception: *mut uw::_Unwind_Exception,
-                          context: *mut uw::_Unwind_Context)
-                         -> uw::_Unwind_Reason_Code {
-    unsafe {
-        if version != 1 || uw_exception_class != EXCEPTION_CLASS {
-            return uw::_URC_FATAL_PHASE1_ERROR
+pub unsafe fn artiq_personality(state: uw::_Unwind_State,
+                                         exception_object: *mut uw::_Unwind_Exception,
+                                         context: *mut uw::_Unwind_Context)
+                                         -> uw::_Unwind_Reason_Code {
+    let state = state as c_int;
+    let action = state & uw::_US_ACTION_MASK as c_int;
+    let search_phase = if action == uw::_US_VIRTUAL_UNWIND_FRAME as c_int {
+        // Backtraces on ARM will call the personality routine with
+        // state == _US_VIRTUAL_UNWIND_FRAME | _US_FORCE_UNWIND. In those cases
+        // we want to continue unwinding the stack, otherwise all our backtraces
+        // would end at __rust_try
+        if state & uw::_US_FORCE_UNWIND as c_int != 0 {
+            return continue_unwind(exception_object, context);
         }
+        true
+    } else if action == uw::_US_UNWIND_FRAME_STARTING as c_int {
+        false
+    } else if action == uw::_US_UNWIND_FRAME_RESUME as c_int {
+        return continue_unwind(exception_object, context);
+    } else {
+        return uw::_URC_FAILURE;
+    };
 
-        let lsda = uw::_Unwind_GetLanguageSpecificData(context) as *const u8;
-        let ip = uw::_Unwind_GetIP(context) - 1;
-        let func_start = uw::_Unwind_GetRegionStart(context);
+    // The DWARF unwinder assumes that _Unwind_Context holds things like the function
+    // and LSDA pointers, however ARM EHABI places them into the exception object.
+    // To preserve signatures of functions like _Unwind_GetLanguageSpecificData(), which
+    // take only the context pointer, GCC personality routines stash a pointer to
+    // exception_object in the context, using location reserved for ARM's
+    // "scratch register" (r12).
+    uw::_Unwind_SetGR(context,
+                      uw::UNWIND_POINTER_REG,
+                      exception_object as uw::_Unwind_Ptr);
+    // ...A more principled approach would be to provide the full definition of ARM's
+    // _Unwind_Context in our libunwind bindings and fetch the required data from there
+    // directly, bypassing DWARF compatibility functions.
 
-        let exception_info = &mut *(uw_exception as *mut ExceptionInfo);
-        let exception = &exception_info.exception.unwrap();
-
-        let eh_action = dwarf::find_eh_action(lsda, func_start, ip, exception.name);
-        if actions as u32 & uw::_UA_SEARCH_PHASE as u32 != 0 {
-            match eh_action {
-                EHAction::None |
-                EHAction::Cleanup(_) => return uw::_URC_CONTINUE_UNWIND,
-                EHAction::Catch(_) => return uw::_URC_HANDLER_FOUND,
-                EHAction::Terminate => return uw::_URC_FATAL_PHASE1_ERROR,
+    let exception_class = (*exception_object).exception_class;
+    let foreign_exception = exception_class != EXCEPTION_CLASS;
+    let eh_action = match find_eh_action(context, foreign_exception) {
+        Ok(action) => action,
+        Err(_) => return uw::_URC_FAILURE,
+    };
+    let exception_info = &mut *(exception_object as *mut ExceptionInfo);
+    let exception = &exception_info.exception.unwrap();
+    if search_phase {
+        match eh_action {
+            EHAction::None |
+            EHAction::Cleanup(_) => return continue_unwind(exception_object, context),
+            EHAction::Catch(_) => {
+                // EHABI requires the personality routine to update the
+                // SP value in the barrier cache of the exception object.
+                (*exception_object).private[5] =
+                    uw::_Unwind_GetGR(context, uw::UNWIND_SP_REG);
+                return uw::_URC_HANDLER_FOUND;
             }
+            EHAction::Terminate => return uw::_URC_FAILURE,
+        }
+    } else {
+        match eh_action {
+            EHAction::None => return continue_unwind(exception_object, context),
+            EHAction::Cleanup(lpad) |
+            EHAction::Catch(lpad) => {
+                uw::_Unwind_SetGR(context, UNWIND_DATA_REG.0,
+                                  exception_object as uintptr_t);
+                uw::_Unwind_SetGR(context, UNWIND_DATA_REG.1, exception as *const _ as uw::_Unwind_Word);
+                uw::_Unwind_SetIP(context, lpad);
+                return uw::_URC_INSTALL_CONTEXT;
+            }
+            EHAction::Terminate => return uw::_URC_FAILURE,
+        }
+    }
+
+    // On ARM EHABI the personality routine is responsible for actually
+    // unwinding a single stack frame before returning (ARM EHABI Sec. 6.1).
+    unsafe fn continue_unwind(exception_object: *mut uw::_Unwind_Exception,
+                              context: *mut uw::_Unwind_Context)
+                              -> uw::_Unwind_Reason_Code {
+        if __gnu_unwind_frame(exception_object, context) == uw::_URC_NO_REASON {
+            uw::_URC_CONTINUE_UNWIND
         } else {
-            match eh_action {
-                EHAction::None => return uw::_URC_CONTINUE_UNWIND,
-                EHAction::Cleanup(lpad) |
-                EHAction::Catch(lpad) => {
-                    if actions as u32 & uw::_UA_HANDLER_FRAME as u32 != 0 {
-                        exception_info.handled = true
-                    }
-
-                    // Pass a pair of the unwinder exception and ARTIQ exception
-                    // (which immediately follows).
-                    uw::_Unwind_SetGR(context, UNWIND_DATA_REG.0,
-                                      uw_exception as uw::_Unwind_Word);
-                    uw::_Unwind_SetGR(context, UNWIND_DATA_REG.1,
-                                      exception as *const _ as uw::_Unwind_Word);
-                    uw::_Unwind_SetIP(context, lpad);
-                    return uw::_URC_INSTALL_CONTEXT;
-                }
-                EHAction::Terminate => return uw::_URC_FATAL_PHASE2_ERROR,
-            }
+            uw::_URC_FAILURE
         }
+    }
+    // defined in libgcc
+    extern "C" {
+        fn __gnu_unwind_frame(exception_object: *mut uw::_Unwind_Exception,
+                              context: *mut uw::_Unwind_Context)
+                              -> uw::_Unwind_Reason_Code;
     }
 }
 
@@ -121,33 +167,6 @@ extern fn cleanup(_unwind_code: uw::_Unwind_Reason_Code,
     }
 }
 
-extern fn uncaught_exception(_version: c_int,
-                             actions: uw::_Unwind_Action,
-                             _uw_exception_class: uw::_Unwind_Exception_Class,
-                             uw_exception: *mut uw::_Unwind_Exception,
-                             context: *mut uw::_Unwind_Context,
-                             _stop_parameter: *mut c_void)
-                            -> uw::_Unwind_Reason_Code {
-    unsafe {
-        let exception_info = &mut *(uw_exception as *mut ExceptionInfo);
-
-        if exception_info.backtrace_size < exception_info.backtrace.len() {
-            let ip = uw::_Unwind_GetIP(context);
-            exception_info.backtrace[exception_info.backtrace_size] = ip;
-            exception_info.backtrace_size += 1;
-        }
-
-        if actions as u32 & uw::_UA_END_OF_STACK as u32 != 0 {
-            ::terminate(&exception_info.exception.unwrap(),
-                        exception_info.backtrace[..exception_info.backtrace_size].as_mut())
-        } else {
-            uw::_URC_NO_REASON
-        }
-    }
-}
-
-// We can unfortunately not use mem::zeroed in a static, so Option<> is used as a workaround.
-// See https://github.com/rust-lang/rust/issues/39498.
 static mut INFLIGHT: ExceptionInfo = ExceptionInfo {
     uw_exception: uw::_Unwind_Exception {
         exception_class:   EXCEPTION_CLASS,
@@ -160,44 +179,40 @@ static mut INFLIGHT: ExceptionInfo = ExceptionInfo {
     backtrace_size: 0
 };
 
-#[export_name="__artiq_raise"]
-#[unwind(allowed)]
 pub unsafe extern fn raise(exception: *const Exception) -> ! {
     // Zing! The Exception<'a> to Exception<'static> transmute is not really sound in case
     // the exception is ever captured. Fortunately, they currently aren't, and we save
     // on the hassle of having to allocate exceptions somewhere except on stack.
+    debug!("Trying to raise exception");
     INFLIGHT.exception = Some(mem::transmute::<Exception, Exception<'static>>(*exception));
     INFLIGHT.handled   = false;
 
     let result = uw::_Unwind_RaiseException(&mut INFLIGHT.uw_exception);
     assert!(result == uw::_URC_END_OF_STACK);
+    debug!("Result: {:?}", result);
 
     INFLIGHT.backtrace_size = 0;
-    let _result = _Unwind_ForcedUnwind(&mut INFLIGHT.uw_exception,
-                                       uncaught_exception, ptr::null_mut());
-    unreachable!()
+    unimplemented!("top level exception handling");
 }
 
-#[export_name="__artiq_reraise"]
-#[unwind(allowed)]
 pub unsafe extern fn reraise() -> ! {
     use cslice::AsCSlice;
 
-    if INFLIGHT.handled {
-        match INFLIGHT.exception {
-            Some(ref exception) => raise(exception),
-            None => raise(&Exception {
-                name:     "0:artiq.coredevice.exceptions.RuntimeError".as_c_slice(),
-                file:     file!().as_c_slice(),
-                line:     line!(),
-                column:   column!(),
-                // https://github.com/rust-lang/rfcs/pull/1719
-                function: "__artiq_reraise".as_c_slice(),
-                message:  "No active exception to reraise".as_c_slice(),
-                param:    [0, 0, 0]
-            })
-        }
-    } else {
-        uw::_Unwind_Resume(&mut INFLIGHT.uw_exception)
+    debug!("Re-raise");
+    // current implementation uses raise as _Unwind_Resume is not working now
+    // would debug that later.
+    match INFLIGHT.exception {
+        Some(ref exception) => raise(exception),
+        None => raise(&Exception {
+            name:     "0:artiq.coredevice.exceptions.RuntimeError".as_c_slice(),
+            file:     file!().as_c_slice(),
+            line:     line!(),
+            column:   column!(),
+            // https://github.com/rust-lang/rfcs/pull/1719
+            function: "__artiq_reraise".as_c_slice(),
+            message:  "No active exception to reraise".as_c_slice(),
+            param:    [0, 0, 0]
+        })
     }
 }
+

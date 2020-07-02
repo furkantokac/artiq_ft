@@ -20,6 +20,8 @@
   "max-atomic-width": 32,
   "os": "none",
   "panic-strategy": "abort",
+  "requires-uwtable": true,
+  "force-unwind-tables": "yes",
   "relocation-model": "static",
   "target-c-int-width": "32",
   "target-endian": "little",

@@ -23,6 +23,7 @@ mod rtio;
 mod kernel;
 mod moninj;
 mod load_pl;
+mod eh_artiq;
 
 fn identifier_read(buf: &mut [u8]) -> &str {
     unsafe {

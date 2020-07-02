@@ -7,6 +7,7 @@ use libcortex_a9::{cache::dcci_slice, mutex::Mutex, sync_channel::{self, sync_ch
 use libsupport_zynq::boot::Core1;
 
 use dyld;
+use crate::eh_artiq;
 use crate::rpc;
 use crate::rtio;
 
@@ -132,10 +133,6 @@ extern fn rpc_recv(slot: *mut ()) -> usize {
     }
 }
 
-extern fn exception_unimplemented() {
-    unimplemented!();
-}
-
 macro_rules! api {
     ($i:ident) => ({
         extern { static $i: u8; }
@@ -250,12 +247,13 @@ fn resolve(required: &[u8]) -> Option<u32> {
         api!(__aeabi_memclr8),
         api!(__aeabi_memclr4),
         api!(__aeabi_memclr),
-
+        // libc
+        api!(memcmp, extern { fn memcmp(a: *const u8, b: *mut u8, size: usize); }),
         // exceptions
-        api!(_Unwind_Resume = exception_unimplemented),
-        api!(__artiq_personality = exception_unimplemented),
-        api!(__artiq_raise = exception_unimplemented),
-        api!(__artiq_reraise = exception_unimplemented),
+        api!(_Unwind_Resume = unwind::_Unwind_Resume),
+        api!(__artiq_personality = eh_artiq::artiq_personality),
+        api!(__artiq_raise = eh_artiq::raise),
+        api!(__artiq_reraise = eh_artiq::reraise),
 
     ];
     api.iter()
