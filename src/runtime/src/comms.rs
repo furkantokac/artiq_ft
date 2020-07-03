@@ -189,6 +189,23 @@ async fn handle_run_kernel(stream: &TcpStream, control: &Rc<RefCell<kernel::Cont
                 write_header(stream, Reply::KernelFinished).await?;
                 break;
             },
+            kernel::Message::KernelException(exception, backtrace) => {
+                write_header(stream, Reply::KernelException).await?;
+                write_chunk(stream, exception.name.as_ref()).await?;
+                write_chunk(stream, exception.message.as_ref()).await?;
+                write_i64(stream, exception.param[0] as i64).await?;
+                write_i64(stream, exception.param[1] as i64).await?;
+                write_i64(stream, exception.param[2] as i64).await?;
+                write_chunk(stream, exception.file.as_ref()).await?;
+                write_i32(stream, exception.line as i32).await?;
+                write_i32(stream, exception.column as i32).await?;
+                write_chunk(stream, exception.function.as_ref()).await?;
+                write_i32(stream, backtrace.len() as i32).await?;
+                for &addr in backtrace {
+                    write_i32(stream, addr as i32).await?;
+                }
+                break;
+            }
             _ => {
                 panic!("unexpected message from core1 while kernel was running: {:?}", reply);
             }

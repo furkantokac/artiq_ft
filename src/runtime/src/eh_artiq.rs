@@ -38,6 +38,21 @@ pub struct Exception<'a> {
     pub param:    [i64; 3]
 }
 
+fn str_err(_: core::str::Utf8Error) -> core::fmt::Error {
+    core::fmt::Error
+}
+
+impl<'a> core::fmt::Debug for Exception<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Exception {} from {} in {}:{}:{}, message: {}",
+            core::str::from_utf8(self.name.as_ref()).map_err(str_err)?,
+            core::str::from_utf8(self.function.as_ref()).map_err(str_err)?,
+            core::str::from_utf8(self.file.as_ref()).map_err(str_err)?,
+            self.line, self.column,
+            core::str::from_utf8(self.message.as_ref()).map_err(str_err)?)
+    }
+}
+
 const MAX_BACKTRACE_SIZE: usize = 128;
 
 #[repr(C)]
@@ -189,10 +204,16 @@ pub unsafe extern fn raise(exception: *const Exception) -> ! {
 
     let result = uw::_Unwind_RaiseException(&mut INFLIGHT.uw_exception);
     assert!(result == uw::_URC_END_OF_STACK);
-    debug!("Result: {:?}", result);
 
     INFLIGHT.backtrace_size = 0;
-    unimplemented!("top level exception handling");
+    // read backtrace
+    let _ = uw::backtrace(|ip| {
+        if INFLIGHT.backtrace_size < MAX_BACKTRACE_SIZE {
+            INFLIGHT.backtrace[INFLIGHT.backtrace_size] = ip;
+            INFLIGHT.backtrace_size += 1;
+        }
+    });
+    crate::kernel::terminate(INFLIGHT.exception.as_ref().unwrap(), INFLIGHT.backtrace[..INFLIGHT.backtrace_size].as_mut());
 }
 
 pub unsafe extern fn reraise() -> ! {

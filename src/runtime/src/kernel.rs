@@ -19,6 +19,7 @@ pub enum Message {
     LoadFailed,
     StartRequest,
     KernelFinished,
+    KernelException(&'static eh_artiq::Exception<'static>, &'static [usize]),
     RpcSend { is_async: bool, data: Arc<Vec<u8>> },
     RpcRecvRequest(*mut ()),
     RpcRecvReply(Result<usize, ()>),
@@ -80,6 +81,27 @@ extern fn rpc_send(service: u32, tag: &CSlice<u8>, data: *const *const ()) {
 
 extern fn rpc_send_async(service: u32, tag: &CSlice<u8>, data: *const *const ()) {
     rpc_send_common(true, service, tag, data);
+}
+
+static mut KERNEL_LOAD_ADDR: usize = 0;
+
+pub fn terminate(exception: &'static eh_artiq::Exception<'static>, backtrace: &'static mut [usize]) -> ! {
+    let load_addr = unsafe {
+        KERNEL_LOAD_ADDR
+    };
+    let mut cursor = 0;
+    // The address in the backtrace is relocated, so we have to convert it back to the address in
+    // the original python script, and remove those Rust function backtrace.
+    for i in 0..backtrace.len() {
+        if backtrace[i] >= load_addr {
+            backtrace[cursor] = backtrace[i] - load_addr;
+            cursor += 1;
+        }
+    }
+
+    let core1_tx: &mut sync_channel::Sender<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_1TO0) };
+    core1_tx.send(Message::KernelException(exception, &backtrace[..cursor]));
+    loop {}
 }
 
 unsafe fn attribute_writeback(typeinfo: *const ()) {
@@ -299,6 +321,9 @@ pub fn main_core1() {
             Message::LoadRequest(data) => {
                 match dyld::load(&data, &resolve) {
                     Ok(library) => {
+                        unsafe {
+                            KERNEL_LOAD_ADDR = library.image.as_ptr() as usize;
+                        }
                         let bss_start = library.lookup(b"__bss_start");
                         let end = library.lookup(b"_end");
                         if let Some(bss_start) = bss_start {

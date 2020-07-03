@@ -104,3 +104,23 @@ pub async fn write_i32(stream: &TcpStream, value: i32) -> Result<()> {
          value        as u8].iter().copied()).await?;
     Ok(())
 }
+
+pub async fn write_i64(stream: &TcpStream, value: i64) -> Result<()> {
+    stream.send([
+        (value >> 56) as u8,
+        (value >> 48) as u8,
+        (value >> 40) as u8,
+        (value >> 32) as u8,
+        (value >> 24) as u8,
+        (value >> 16) as u8,
+        (value >>  8) as u8,
+         value        as u8].iter().copied()).await?;
+    Ok(())
+}
+
+pub async fn write_chunk(stream: &TcpStream, value: &[u8]) -> Result<()> {
+    write_i32(stream, value.len() as i32).await?;
+    stream.send(value.iter().copied()).await?;
+    Ok(())
+}
+
