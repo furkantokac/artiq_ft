@@ -9,7 +9,7 @@ impure_dir="build"
 
 while getopts "h:id:" opt; do
     case "$opt" in
-    \?) exit 0
+    \?) exit 1
         ;;
     h)  target_host=$OPTARG
         ;;

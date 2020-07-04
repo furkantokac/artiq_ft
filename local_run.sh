@@ -6,7 +6,7 @@ impure=0
 
 while getopts "h:i" opt; do
     case "$opt" in
-    \?) exit 0
+    \?) exit 1
         ;;
     i)  impure=1
         ;;
