@@ -7,7 +7,7 @@ impure=0
 pure_dir="result"
 impure_dir="build"
 
-while getopts "h:i" opt; do
+while getopts "h:id:" opt; do
     case "$opt" in
     \?) exit 0
         ;;
