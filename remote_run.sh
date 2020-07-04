@@ -21,7 +21,7 @@ while getopts "h:id:" opt; do
     esac
 done
 
-target_folder=/tmp/zynq-\$USER
+target_folder=/tmp/zynq-$USER
 
 echo "Creating $target_folder..."
 ssh $target_host "mkdir -p $target_folder"
