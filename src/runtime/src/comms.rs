@@ -78,12 +78,6 @@ enum Reply {
     ClockFailure = 15,
 }
 
-async fn write_chunk(stream: &TcpStream, chunk: &[u8]) -> Result<()> {
-    write_i32(stream, chunk.len() as i32).await?;
-    stream.send(chunk.iter().copied()).await?;
-    Ok(())
-}
-
 async fn write_header(stream: &TcpStream, reply: Reply) -> Result<()> {
     stream.send([0x5a, 0x5a, 0x5a, 0x5a, reply.to_u8().unwrap()].iter().copied()).await?;
     Ok(())

@@ -123,4 +123,3 @@ pub async fn write_chunk(stream: &TcpStream, value: &[u8]) -> Result<()> {
     stream.send(value.iter().copied()).await?;
     Ok(())
 }
-
