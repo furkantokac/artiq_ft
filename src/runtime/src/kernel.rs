@@ -3,7 +3,7 @@ use log::{debug, info, error};
 use alloc::{vec::Vec, sync::Arc};
 use cslice::CSlice;
 
-use libcortex_a9::{cache::dcci_slice, mutex::Mutex, sync_channel::{self, sync_channel}};
+use libcortex_a9::{enable_fpu, cache::dcci_slice, mutex::Mutex, sync_channel::{self, sync_channel}};
 use libsupport_zynq::boot::Core1;
 
 use dyld;
@@ -288,17 +288,7 @@ fn resolve(required: &[u8]) -> Option<u32> {
 pub fn main_core1() {
     debug!("Core1 started");
 
-    unsafe {
-        llvm_asm!("
-            mrc p15, 0, r1, c1, c0, 2
-            orr r1, r1, (0b1111<<20)
-            mcr p15, 0, r1, c1, c0, 2
-
-            vmrs r1, fpexc
-            orr r1, r1, (1<<30)
-            vmsr fpexc, r1
-            ":::"r1");
-    }
+    enable_fpu();
     debug!("FPU enabled on Core1");
 
     let mut core1_tx = None;

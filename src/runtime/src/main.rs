@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 #![recursion_limit="1024"]  // for futures_util::select!
-#![feature(llvm_asm)]
 #![feature(alloc_error_handler)]
 #![feature(panic_info_message)]
 
