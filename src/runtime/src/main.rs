@@ -9,7 +9,7 @@ extern crate alloc;
 use core::{cmp, str};
 use log::{info, error};
 
-use libboard_zynq::{timer::GlobalTimer, logger, devc};
+use libboard_zynq::{timer::GlobalTimer, logger, devc, slcr};
 use libsupport_zynq::ram;
 
 mod sd_reader;
@@ -72,6 +72,10 @@ pub fn main_core0() {
         // Do not load again: assume that the gateware already present is
         // what we want (e.g. gateware configured via JTAG before PS
         // startup, or by FSBL).
+        // Make sure that the PL/PS interface is enabled (e.g. OpenOCD does not enable it).
+        slcr::RegisterBlock::unlocked(|slcr| {
+            slcr.init_postload_fpga();
+        });
     } else {
         // Load from SD card
         match load_pl::load_bitstream_from_sd() {
