@@ -1,7 +1,7 @@
 use core::str;
 use core::future::Future;
 use cslice::{CSlice, CMutSlice};
-use log::debug;
+use log::trace;
 
 use core_io::{Write, Error};
 use libboard_zynq::smoltcp;
@@ -93,7 +93,7 @@ pub async fn recv_return<F>(stream: &TcpStream, tag_bytes: &[u8], data: *mut (),
                         where F: Future<Output=*mut ()>
 {
     let mut it = TagIterator::new(tag_bytes);
-    debug!("recv ...->{}", it);
+    trace!("recv ...->{}", it);
 
     let tag = it.next().expect("truncated tag");
     let mut data = data;
@@ -187,7 +187,7 @@ pub fn send_args<W>(writer: &mut W, service: u32, tag_bytes: &[u8], data: *const
 
     let mut args_it = TagIterator::new(arg_tags_bytes);
     let return_it = TagIterator::new(return_tag_bytes);
-    debug!("send<{}>({})->{}", service, args_it, return_it);
+    trace!("send<{}>({})->{}", service, args_it, return_it);
 
     writer.write_u32(service)?;
     for index in 0.. {

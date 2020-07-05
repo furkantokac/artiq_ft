@@ -1,5 +1,5 @@
 use core::{ptr, mem};
-use log::{debug, error};
+use log::{debug, info, error};
 use alloc::{vec::Vec, sync::Arc};
 use cslice::CSlice;
 
@@ -349,7 +349,7 @@ pub fn main_core1() {
                 }
             },
             Message::StartRequest => {
-                debug!("kernel starting");
+                info!("kernel starting");
                 if let Some(__modinit__) = current_modinit {
                     unsafe {
                         KERNEL_CHANNEL_0TO1 = mem::transmute(&mut core1_rx);
@@ -362,7 +362,7 @@ pub fn main_core1() {
                         KERNEL_CHANNEL_1TO0 = ptr::null_mut();
                     }
                 }
-                debug!("kernel finished");
+                info!("kernel finished");
                 core1_tx.send(Message::KernelFinished);
             }
             _ => error!("Core1 received unexpected message: {:?}", message),

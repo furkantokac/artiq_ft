@@ -4,7 +4,7 @@ use core::str::Utf8Error;
 use alloc::rc::Rc;
 use alloc::sync::Arc;
 use alloc::{vec, vec::Vec, string::String};
-use log::{debug, warn, error};
+use log::{info, warn, error};
 
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -90,7 +90,7 @@ async fn read_request(stream: &TcpStream, allow_close: bool) -> Result<Option<Re
             return Err(Error::UnexpectedPattern),
         Err(smoltcp::Error::Illegal) => {
             if allow_close {
-                debug!("peer closed connection");
+                info!("peer closed connection");
                 return Ok(None);
             } else {
                 error!("peer unexpectedly closed connection");
@@ -210,7 +210,7 @@ async fn handle_run_kernel(stream: &TcpStream, control: &Rc<RefCell<kernel::Cont
 
 async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Control>>) -> Result<()> {
     expect(stream, b"ARTIQ coredev\n").await?;
-    debug!("received connection");
+    info!("received connection");
     loop {
         let request = read_request(stream, true).await?;
         if request.is_none() {
