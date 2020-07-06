@@ -5,7 +5,7 @@ set -e
 impure=0
 load_bitstream=1
 
-while getopts "h:i:l" opt; do
+while getopts "h:il" opt; do
     case "$opt" in
     \?) exit 1
         ;;
