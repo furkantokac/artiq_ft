@@ -1,4 +1,4 @@
-use libboard_zynq::{slcr, print, println};
+use libboard_zynq::{print, println};
 use unwind::backtrace;
 
 #[panic_handler]
