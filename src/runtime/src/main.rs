@@ -7,13 +7,14 @@
 extern crate alloc;
 
 use core::{cmp, str};
-use log::{info, error};
+use log::info;
 
 use libboard_zynq::{timer::GlobalTimer, logger, devc, slcr};
 use libsupport_zynq::ram;
 
 mod sd_reader;
 mod config;
+mod net_settings;
 mod proto_core_io;
 mod proto_async;
 mod comms;
@@ -49,24 +50,6 @@ pub fn main_core0() {
 
     ram::init_alloc_linker();
 
-    match config::Config::new() {
-        Ok(mut cfg) => {
-            match cfg.read_str("FOO") {
-                Ok(val) => info!("FOO = {}", val),
-                Err(error) => info!("failed to read config FOO: {}", error),
-            }
-            match cfg.read_str("BAR") {
-                Ok(val) => info!("BAR = {}", val),
-                Err(error) => info!("failed to read config BAR: {}", error),
-            }
-            match cfg.read_str("FOOBAR") {
-                Ok(val) => info!("read FOOBAR = {}", val),
-                Err(error) => info!("failed to read config FOOBAR: {}", error),
-            }
-        },
-        Err(error) => error!("config failed: {}", error)
-    }
-
     if devc::DevC::new().is_done() {
         info!("gateware already loaded");
         // Do not load again: assume that the gateware already present is
@@ -88,6 +71,8 @@ pub fn main_core0() {
     unsafe {
         pl::csr::rtio_core::reset_phy_write(1);
     }
+
+    info!("network addresses: {}", net_settings::get_adresses());
 
     comms::main(timer);
 }
