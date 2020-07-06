@@ -1,7 +1,7 @@
 use core::{ptr, mem};
 use log::{debug, info, error};
-use alloc::{vec::Vec, sync::Arc};
-use cslice::CSlice;
+use alloc::{vec::Vec, sync::Arc, string::String};
+use cslice::{CSlice, AsCSlice};
 
 use libcortex_a9::{enable_fpu, cache::dcci_slice, mutex::Mutex, sync_channel::{self, sync_channel}};
 use libsupport_zynq::boot::Core1;
@@ -11,6 +11,16 @@ use crate::eh_artiq;
 use crate::rpc;
 use crate::rtio;
 
+#[derive(Debug)]
+pub struct RPCException {
+    pub name: String,
+    pub message: String,
+    pub param: [i64; 3],
+    pub file: String,
+    pub line: i32,
+    pub column: i32,
+    pub function: String
+}
 
 #[derive(Debug)]
 pub enum Message {
@@ -22,7 +32,7 @@ pub enum Message {
     KernelException(&'static eh_artiq::Exception<'static>, &'static [usize]),
     RpcSend { is_async: bool, data: Arc<Vec<u8>> },
     RpcRecvRequest(*mut ()),
-    RpcRecvReply(Result<usize, ()>),
+    RpcRecvReply(Result<usize, RPCException>),
 }
 
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<Message>>> = Mutex::new(None);
@@ -150,7 +160,17 @@ extern fn rpc_recv(slot: *mut ()) -> usize {
     let reply = core1_rx.recv();
     match *reply {
         Message::RpcRecvReply(Ok(alloc_size)) => alloc_size,
-        Message::RpcRecvReply(Err(_)) => unimplemented!(),
+        Message::RpcRecvReply(Err(exception)) => unsafe {
+            eh_artiq::raise(&eh_artiq::Exception {
+                name:     exception.name.as_bytes().as_c_slice(),
+                file:     exception.file.as_bytes().as_c_slice(),
+                line:     exception.line as u32,
+                column:   exception.column as u32,
+                function: exception.function.as_bytes().as_c_slice(),
+                message:  exception.message.as_bytes().as_c_slice(),
+                param:    exception.param
+            })
+        },
         _ => panic!("received unexpected reply to RpcRecvRequest: {:?}", reply)
     }
 }

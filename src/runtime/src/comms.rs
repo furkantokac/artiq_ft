@@ -171,7 +171,9 @@ async fn handle_run_kernel(stream: &TcpStream, control: &Rc<RefCell<kernel::Cont
                             let line =     read_i32(stream).await?;
                             let column =   read_i32(stream).await?;
                             let function = read_string(stream, 16384).await?;
-                            control.tx.async_send(kernel::Message::RpcRecvReply(Err(()))).await;
+                            control.tx.async_send(kernel::Message::RpcRecvReply(Err(kernel::RPCException {
+                                name, message, param, file, line, column, function
+                            }))).await;
                         },
                         _ => {
                             error!("unexpected RPC request from host: {:?}", host_request);
