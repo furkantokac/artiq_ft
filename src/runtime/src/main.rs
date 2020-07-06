@@ -72,7 +72,5 @@ pub fn main_core0() {
         pl::csr::rtio_core::reset_phy_write(1);
     }
 
-    info!("network addresses: {}", net_settings::get_adresses());
-
     comms::main(timer);
 }

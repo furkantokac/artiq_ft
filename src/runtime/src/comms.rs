@@ -13,14 +13,15 @@ use libboard_zynq::{
     self as zynq,
     smoltcp::{
         self,
-        wire::{EthernetAddress, IpAddress, Ipv4Address, IpCidr},
-        iface::{NeighborCache, EthernetInterfaceBuilder, Routes},
+        wire::IpCidr,
+        iface::{NeighborCache, EthernetInterfaceBuilder},
         time::Instant,
     },
     timer::GlobalTimer,
 };
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
 
+use crate::net_settings;
 use crate::proto_async::*;
 use crate::kernel;
 use crate::rpc;
@@ -252,12 +253,11 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
     }
 }
 
-
-const HWADDR: [u8; 6] = [0, 0x23, 0xab, 0xad, 0x1d, 0xea];
-const IPADDR: IpAddress = IpAddress::Ipv4(Ipv4Address([192, 168, 1, 52]));
-
 pub fn main(timer: GlobalTimer) {
-    let eth = zynq::eth::Eth::default(HWADDR.clone());
+    let net_addresses = net_settings::get_adresses();
+    info!("network addresses: {}", net_addresses);
+
+    let eth = zynq::eth::Eth::default(net_addresses.hardware_addr.0.clone());
     const RX_LEN: usize = 8;
     // Number of transmission buffers (minimum is two because with
     // one, duplicate packet transmission occurs)
@@ -265,18 +265,32 @@ pub fn main(timer: GlobalTimer) {
     let eth = eth.start_rx(RX_LEN);
     let mut eth = eth.start_tx(TX_LEN);
 
-    let ethernet_addr = EthernetAddress(HWADDR);
-    let mut ip_addrs = [IpCidr::new(IPADDR, 24)];
-    let mut routes_storage = vec![None; 4];
-    let routes = Routes::new(&mut routes_storage[..]);
-    let mut neighbor_storage = vec![None; 256];
-    let neighbor_cache = NeighborCache::new(&mut neighbor_storage[..]);
-    let mut iface = EthernetInterfaceBuilder::new(&mut eth)
-        .ethernet_addr(ethernet_addr)
-        .ip_addrs(&mut ip_addrs[..])
-        .routes(routes)
-        .neighbor_cache(neighbor_cache)
-        .finalize();
+    let neighbor_cache = NeighborCache::new(alloc::collections::BTreeMap::new());
+    let mut iface = match net_addresses.ipv6_addr {
+        Some(addr) => {
+            let ip_addrs = [
+                IpCidr::new(net_addresses.ipv4_addr, 0),
+                IpCidr::new(net_addresses.ipv6_ll_addr, 0),
+                IpCidr::new(addr, 0)
+            ];
+            EthernetInterfaceBuilder::new(&mut eth)
+                       .ethernet_addr(net_addresses.hardware_addr)
+                       .ip_addrs(ip_addrs)
+                       .neighbor_cache(neighbor_cache)
+                       .finalize()
+        }
+        None => {
+            let ip_addrs = [
+                IpCidr::new(net_addresses.ipv4_addr, 0),
+                IpCidr::new(net_addresses.ipv6_ll_addr, 0)
+            ];
+            EthernetInterfaceBuilder::new(&mut eth)
+                       .ethernet_addr(net_addresses.hardware_addr)
+                       .ip_addrs(ip_addrs)
+                       .neighbor_cache(neighbor_cache)
+                       .finalize()
+        }
+    };
 
     Sockets::init(32);
 
