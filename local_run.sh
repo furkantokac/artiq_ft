@@ -3,19 +3,30 @@
 set -e
 
 impure=0
+load_bitstream=1
 
-while getopts "h:i" opt; do
+while getopts "h:i:l" opt; do
     case "$opt" in
     \?) exit 1
         ;;
     i)  impure=1
         ;;
+    l)  load_bitstream=0
+        ;;
     esac
 done
 
+load_bitstream_cmd=""
+
 cd openocd
 if [ $impure -eq 1 ]; then
-    openocd -f zc706.cfg -c 'pld load 0 ../build/gateware/top.bit; load_image ../build/firmware/armv7-none-eabihf/release/szl; resume 0; exit'
+    if [ $load_bitstream -eq 1 ]; then
+        load_bitstream_cmd="pld load 0 ../build/gateware/top.bit;"
+    fi
+    openocd -f zc706.cfg -c "$load_bitstream_cmd load_image ../build/firmware/armv7-none-eabihf/release/szl; resume 0; exit"
 else
-    openocd -f zc706.cfg -c 'pld load 0 ../result/top.bit; load_image ../result/szl.elf; resume 0; exit'
+    if [ $load_bitstream -eq 1 ]; then
+        load_bitstream_cmd="pld load 0 ../result/top.bit;"
+    fi
+    openocd -f zc706.cfg -c "$load_bitstream_cmd load_image ../result/szl.elf; resume 0; exit"
 fi
