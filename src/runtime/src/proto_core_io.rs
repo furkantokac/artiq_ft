@@ -5,6 +5,7 @@ use alloc::string::String;
 
 use core_io::{Read, Write, Error as IoError};
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReadStringError<T> {
     Utf8(Utf8Error),
