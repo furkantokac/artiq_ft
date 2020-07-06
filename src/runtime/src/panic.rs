@@ -21,6 +21,6 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         println!("{:#08x}", ip - 2 * 4);
     });
     println!("End backtrace");
-    slcr::RegisterBlock::unlocked(|slcr| slcr.soft_reset());
+
     loop {}
 }
