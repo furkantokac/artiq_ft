@@ -1,14 +1,4 @@
-ENTRY(_boot_cores);
-
-/* Provide some defaults */
-PROVIDE(Reset = _boot_cores);
-PROVIDE(UndefinedInstruction = Reset);
-PROVIDE(SoftwareInterrupt = Reset);
-PROVIDE(PrefetchAbort = Reset);
-PROVIDE(DataAbort = Reset);
-PROVIDE(ReservedException = Reset);
-PROVIDE(IRQ = Reset);
-PROVIDE(FIQ = Reset);
+ENTRY(Reset);
 
 MEMORY
 {
