@@ -325,6 +325,7 @@ pub fn main_core1() {
 
     let mut current_modinit: Option<u32> = None;
     let mut current_typeinfo: Option<u32> = None;
+    let mut library_handle: Option<dyld::Library> = None;
     loop {
         let message = core1_rx.recv();
         match *message {
@@ -351,6 +352,7 @@ pub fn main_core1() {
                         dcci_slice(library.image.data);
 
                         core1_tx.send(Message::LoadCompleted);
+                        library_handle = Some(library);
                     },
                     Err(error) => {
                         error!("failed to load shared library: {}", error);
@@ -372,6 +374,7 @@ pub fn main_core1() {
                         KERNEL_CHANNEL_1TO0 = ptr::null_mut();
                     }
                 }
+                library_handle = None;
                 info!("kernel finished");
                 core1_tx.send(Message::KernelFinished);
             }
