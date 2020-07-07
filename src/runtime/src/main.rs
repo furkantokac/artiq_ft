@@ -11,6 +11,7 @@ use log::info;
 
 use libboard_zynq::{timer::GlobalTimer, logger, devc, slcr};
 use libsupport_zynq::ram;
+use libregister::RegisterW;
 
 mod sd_reader;
 mod config;
@@ -50,6 +51,26 @@ pub fn main_core0() {
 
     ram::init_alloc_linker();
 
+    // Set up PS->PL clocks
+    slcr::RegisterBlock::unlocked(|slcr| {
+        // As we are touching the mux, the clock may glitch, so reset the PL.
+        slcr.fpga_rst_ctrl.write(
+            slcr::FpgaRstCtrl::zeroed()
+                .fpga0_out_rst(true)
+                .fpga1_out_rst(true)
+                .fpga2_out_rst(true)
+                .fpga3_out_rst(true)
+        );
+        slcr.fpga0_clk_ctrl.write(
+            slcr::Fpga0ClkCtrl::zeroed()
+                .src_sel(slcr::PllSource::IoPll)
+                .divisor0(8)
+                .divisor1(1)
+        );
+        slcr.fpga_rst_ctrl.write(
+            slcr::FpgaRstCtrl::zeroed()
+        );
+    });
     if devc::DevC::new().is_done() {
         info!("gateware already loaded");
         // Do not load again: assume that the gateware already present is
