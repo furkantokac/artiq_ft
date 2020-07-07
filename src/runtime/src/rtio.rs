@@ -1,6 +1,7 @@
 use core::ptr::{read_volatile, write_volatile};
 use cslice::CSlice;
 use log::error;
+use crate::artiq_raise;
 
 use crate::pl::csr;
 
@@ -75,12 +76,14 @@ unsafe fn process_exceptional_status(channel: i32, status: u8) {
         while csr::rtio::o_status_read() & RTIO_O_STATUS_WAIT != 0 {}
     }
     if status & RTIO_O_STATUS_UNDERFLOW != 0 {
-        error!("RTIO underflow at {0} mu, channel {1}, slack {2} mu",
-               timestamp, channel as i64, timestamp - get_counter());
+        artiq_raise!("RTIOUnderflow",
+            "RTIO underflow at {0} mu, channel {1}, slack {2} mu",
+            timestamp, channel as i64, timestamp - get_counter());
     }
     if status & RTIO_O_STATUS_DESTINATION_UNREACHABLE != 0 {
-        error!("RTIO destination unreachable, output, at {0} mu, channel {1}",
-               timestamp, channel as i64);
+        artiq_raise!("RTIODestinationUnreachable",
+            "RTIO destination unreachable, output, at {0} mu, channel {1}",
+            timestamp, channel as i64, 0);
     }
 }
 

@@ -237,3 +237,24 @@ pub unsafe extern fn reraise() -> ! {
     }
 }
 
+#[macro_export]
+macro_rules! artiq_raise {
+    ($name:expr, $message:expr, $param0:expr, $param1:expr, $param2:expr) => ({
+        use cslice::AsCSlice;
+        let exn = $crate::eh_artiq::Exception {
+            name:     concat!("0:artiq.coredevice.exceptions.", $name).as_c_slice(),
+            file:     file!().as_c_slice(),
+            line:     line!(),
+            column:   column!(),
+            // https://github.com/rust-lang/rfcs/pull/1719
+            function: "(Rust function)".as_c_slice(),
+            message:  $message.as_c_slice(),
+            param:    [$param0, $param1, $param2]
+        };
+        #[allow(unused_unsafe)]
+        unsafe { $crate::eh_artiq::raise(&exn) }
+    });
+    ($name:expr, $message:expr) => ({
+        artiq_raise!($name, $message, 0, 0, 0)
+    });
+}
