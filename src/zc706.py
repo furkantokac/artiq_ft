@@ -18,7 +18,7 @@ class ZC706(SoCCore):
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        SoCCore.__init__(self, platform=platform, ident=self.__class__.__name__)
+        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=self.__class__.__name__)
 
         platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
         platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
