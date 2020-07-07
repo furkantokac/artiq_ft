@@ -22,6 +22,7 @@ in
 
       (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
       vivado
+      artiqpkgs.binutils-arm
 
       (import ./mkbootimage.nix { inherit pkgs; })
     ];
