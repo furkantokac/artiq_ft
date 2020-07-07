@@ -16,7 +16,7 @@ use core::mem;
 use cslice::CSlice;
 use unwind as uw;
 use libc::{c_int, uintptr_t};
-use log::debug;
+use log::trace;
 
 use dwarf::eh::{self, EHAction, EHContext};
 
@@ -198,7 +198,7 @@ pub unsafe extern fn raise(exception: *const Exception) -> ! {
     // Zing! The Exception<'a> to Exception<'static> transmute is not really sound in case
     // the exception is ever captured. Fortunately, they currently aren't, and we save
     // on the hassle of having to allocate exceptions somewhere except on stack.
-    debug!("Trying to raise exception");
+    trace!("Trying to raise exception");
     INFLIGHT.exception = Some(mem::transmute::<Exception, Exception<'static>>(*exception));
     INFLIGHT.handled   = false;
 
@@ -219,7 +219,7 @@ pub unsafe extern fn raise(exception: *const Exception) -> ! {
 pub unsafe extern fn reraise() -> ! {
     use cslice::AsCSlice;
 
-    debug!("Re-raise");
+    trace!("Re-raise");
     // current implementation uses raise as _Unwind_Resume is not working now
     // would debug that later.
     match INFLIGHT.exception {
