@@ -237,6 +237,7 @@ impl Write for SdReader {
         let (a, b, c) = self.block_align(buf);
         self.write_unaligned(a)?;
         if b.len() > 0 {
+            self.flush()?;
             self.invalidate_buffer();
             if let Err(_) = self.sd.write_block(
                 self.byte_addr / BLOCK_SIZE as u32,
