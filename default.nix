@@ -7,7 +7,6 @@ let
   rustPlatform = (import ./rustPlatform.nix { inherit pkgs; });
   artiqpkgs = import <artiq-fast/default.nix> { inherit pkgs; };
   vivado = import <artiq-fast/vivado.nix> { inherit pkgs; };
-  zc706-fsbl = import ./fsbl.nix { inherit pkgs; };
   mkbootimage = (import ./mkbootimage.nix { inherit pkgs; });
   build-zc706 = { variant }: let
     firmware = rustPlatform.buildRustPackage rec {
@@ -55,7 +54,6 @@ let
         echo file binary-dist $out/top.bit >> $out/nix-support/hydra-build-products
       '';
 
-    # SZL startup
     jtag = pkgs.runCommand "zc706-${variant}-jtag" {}
       ''
         mkdir $out
@@ -84,42 +82,15 @@ let
       mkbootimage boot.bif $out/boot.bin
       echo file binary-dist $out/boot.bin >> $out/nix-support/hydra-build-products
       '';
-
-    # FSBL startup
-    fsbl-sd = pkgs.runCommand "zc706-${variant}-fsbl-sd"
-      {
-        buildInputs = [ mkbootimage ];
-      }
-      ''
-      # TODO: use self-built fsbl
-      bifdir=`mktemp -d`
-      cd $bifdir
-      ln -s ${zc706-fsbl}/fsbl.elf fsbl.elf
-      ln -s ${gateware}/top.bit top.bit
-      ln -s ${firmware}/runtime.elf runtime.elf
-      cat > boot.bif << EOF
-      the_ROM_image:
-      {
-        [bootloader]fsbl.elf
-        top.bit
-        runtime.elf
-      }
-      EOF
-      mkdir $out $out/nix-support
-      mkbootimage boot.bif $out/boot.bin
-      echo file binary-dist $out/boot.bin >> $out/nix-support/hydra-build-products
-      '';
   in {
     "zc706-${variant}-firmware" = firmware;
     "zc706-${variant}-gateware" = gateware;
     "zc706-${variant}-jtag" = jtag;
     "zc706-${variant}-sd" = sd;
-    "zc706-${variant}-fsbl-sd" = fsbl-sd;
   };
 in
   (
     (build-zc706 { variant = "simple"; }) //
     (build-zc706 { variant = "nist_clock"; }) //
-    (build-zc706 { variant = "nist_qc2"; }) //
-    { inherit zc706-fsbl; }
+    (build-zc706 { variant = "nist_qc2"; })
   )
