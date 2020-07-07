@@ -200,7 +200,7 @@ dependencies = [
 [[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#f68b5896ce9287900f585723e76558f4755cbd78"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#e67efe439b4c1a535a9d784fef3547d95584a909"
 dependencies = [
  "embedded-hal",
  "libcortex_a9",
@@ -212,7 +212,7 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#f68b5896ce9287900f585723e76558f4755cbd78"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#e67efe439b4c1a535a9d784fef3547d95584a909"
 dependencies = [
  "bit_field",
  "embedded-hal",
@@ -236,7 +236,7 @@ dependencies = [
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#f68b5896ce9287900f585723e76558f4755cbd78"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#e67efe439b4c1a535a9d784fef3547d95584a909"
 dependencies = [
  "bit_field",
  "libregister",
@@ -245,7 +245,7 @@ dependencies = [
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#f68b5896ce9287900f585723e76558f4755cbd78"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#e67efe439b4c1a535a9d784fef3547d95584a909"
 dependencies = [
  "bit_field",
  "vcell",
@@ -255,7 +255,7 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#f68b5896ce9287900f585723e76558f4755cbd78"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#e67efe439b4c1a535a9d784fef3547d95584a909"
 dependencies = [
  "compiler_builtins",
  "libboard_zynq",
