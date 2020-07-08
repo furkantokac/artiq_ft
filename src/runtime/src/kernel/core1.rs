@@ -1,11 +1,12 @@
 //! Kernel prologue/epilogue that runs on the 2nd CPU core
 
-use core::{ptr, mem};
+use core::{mem, ptr};
+use alloc::borrow::ToOwned;
 use log::{debug, info, error};
 use cslice::CSlice;
 
 use libcortex_a9::{enable_fpu, cache::dcci_slice, sync_channel};
-use dyld;
+use dyld::{self, Library};
 use crate::eh_artiq;
 use super::{
     api::resolve,
@@ -56,7 +57,50 @@ unsafe fn attribute_writeback(typeinfo: *const ()) {
         }
     }
 }
-    
+
+struct KernelImage {
+    library: Library,
+    __modinit__: u32,
+    typeinfo: Option<u32>,
+}
+
+impl KernelImage {
+    pub fn new(library: Library) -> Result<Self, dyld::Error> {
+        let __modinit__ = library.lookup(b"__modinit__")
+            .ok_or(dyld::Error::Lookup("__modinit__".to_owned()))?;
+        let typeinfo = library.lookup(b"typeinfo");
+
+        // clear .bss
+        let bss_start = library.lookup(b"__bss_start");
+        let end = library.lookup(b"_end");
+        if let Some(bss_start) = bss_start {
+            let end = end
+                .ok_or(dyld::Error::Lookup("_end".to_owned()))?;
+            unsafe {
+                ptr::write_bytes(bss_start as *mut u8, 0, (end - bss_start) as usize);
+            }
+        }
+
+        Ok(KernelImage {
+            library,
+            __modinit__,
+            typeinfo,
+        })
+    }
+
+    pub unsafe fn exec(&mut self) {
+        // Flush data cache entries for the image in DDR, including
+        // Memory/Instruction Symchronization Barriers
+        dcci_slice(self.library.image.data);
+
+        (mem::transmute::<u32, fn()>(self.__modinit__))();
+
+        if let Some(typeinfo) = self.typeinfo {
+            attribute_writeback(typeinfo as *const ());
+        }
+    }
+}
+
 #[no_mangle]
 pub fn main_core1() {
     debug!("Core1 started");
@@ -76,36 +120,22 @@ pub fn main_core1() {
     }
     let mut core1_rx = core1_rx.unwrap();
 
-    let mut current_modinit: Option<u32> = None;
-    let mut current_typeinfo: Option<u32> = None;
-    let mut library_handle: Option<dyld::Library> = None;
+    // set on load, cleared on start
+    let mut loaded_kernel = None;
     loop {
         let message = core1_rx.recv();
         match *message {
             Message::LoadRequest(data) => {
-                match dyld::load(&data, &resolve) {
-                    Ok(library) => {
+                let result = dyld::load(&data, &resolve)
+                    .and_then(KernelImage::new);
+                match result {
+                    Ok(kernel) => {
                         unsafe {
-                            KERNEL_LOAD_ADDR = library.image.as_ptr() as usize;
+                            KERNEL_LOAD_ADDR = kernel.library.image.as_ptr() as usize;
                         }
-                        let bss_start = library.lookup(b"__bss_start");
-                        let end = library.lookup(b"_end");
-                        if let Some(bss_start) = bss_start {
-                            let end = end.unwrap();
-                            unsafe {
-                                ptr::write_bytes(bss_start as *mut u8, 0, (end - bss_start) as usize);
-                            }
-                        }
-                        let __modinit__ = library.lookup(b"__modinit__").unwrap();
-                        current_modinit = Some(__modinit__);
-                        current_typeinfo = library.lookup(b"typeinfo");
+                        loaded_kernel = Some(kernel);
                         debug!("kernel loaded");
-                        // Flush data cache entries for the image in DDR, including
-                        // Memory/Instruction Symchronization Barriers
-                        dcci_slice(library.image.data);
-
                         core1_tx.send(Message::LoadCompleted);
-                        library_handle = Some(library);
                     },
                     Err(error) => {
                         error!("failed to load shared library: {}", error);
@@ -115,19 +145,15 @@ pub fn main_core1() {
             },
             Message::StartRequest => {
                 info!("kernel starting");
-                if let Some(__modinit__) = current_modinit {
+                if let Some(mut kernel) = loaded_kernel.take() {
                     unsafe {
                         KERNEL_CHANNEL_0TO1 = mem::transmute(&mut core1_rx);
                         KERNEL_CHANNEL_1TO0 = mem::transmute(&mut core1_tx);
-                        (mem::transmute::<u32, fn()>(__modinit__))();
-                        if let Some(typeinfo) = current_typeinfo {
-                            attribute_writeback(typeinfo as *const ());
-                        }
+                        kernel.exec();
                         KERNEL_CHANNEL_0TO1 = ptr::null_mut();
                         KERNEL_CHANNEL_1TO0 = ptr::null_mut();
                     }
                 }
-                library_handle = None;
                 info!("kernel finished");
                 core1_tx.send(Message::KernelFinished);
             }
