@@ -213,7 +213,7 @@ pub unsafe extern fn raise(exception: *const Exception) -> ! {
             INFLIGHT.backtrace_size += 1;
         }
     });
-    crate::kernel::terminate(INFLIGHT.exception.as_ref().unwrap(), INFLIGHT.backtrace[..INFLIGHT.backtrace_size].as_mut());
+    crate::kernel::core1::terminate(INFLIGHT.exception.as_ref().unwrap(), INFLIGHT.backtrace[..INFLIGHT.backtrace_size].as_mut());
 }
 
 pub unsafe extern fn reraise() -> ! {
