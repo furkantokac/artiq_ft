@@ -113,16 +113,16 @@ class NIST_CLOCK(ZC706):
         rtio_channels = []
         for i in range(16):
             if i % 4 == 3:
-                phy = ttl_simple.InOut(platform.request("ttl", i))
+                phy = ttl_serdes_7series.InOut_8X(platform.request("ttl", i))
                 self.submodules += phy
                 rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=512))
             else:
-                phy = ttl_simple.Output(platform.request("ttl", i))
+                phy = ttl_serdes_7series.Output_8X(platform.request("ttl", i))
                 self.submodules += phy
                 rtio_channels.append(rtio.Channel.from_phy(phy))
 
         for i in range(2):
-            phy = ttl_simple.InOut(platform.request("pmt", i))
+            phy = ttl_serdes_7series.InOut_8X(platform.request("pmt", i))
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=512))
 
@@ -163,8 +163,7 @@ class NIST_QC2(ZC706):
 
         # All TTL channels are In+Out capable
         for i in range(40):
-            phy = ttl_simple.InOut(
-                platform.request("ttl", i))
+            phy = ttl_serdes_7series.InOut_8X(platform.request("ttl", i))
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=512))
 
