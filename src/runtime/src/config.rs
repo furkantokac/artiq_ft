@@ -77,7 +77,7 @@ impl Config {
         Ok(Config { fs })
     }
 
-    fn read<'b>(&self, key: &'b str) -> Result<'b, Vec<u8>> {
+    pub fn read<'b>(&self, key: &'b str) -> Result<'b, Vec<u8>> {
         let root_dir = self.fs.root_dir();
         let mut buffer: Vec<u8> = Vec::new();
         match root_dir.open_file(&["/CONFIG/", key, ".BIN"].concat()) {

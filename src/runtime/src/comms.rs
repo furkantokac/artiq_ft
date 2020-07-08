@@ -21,6 +21,7 @@ use libboard_zynq::{
 };
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
 
+use crate::config;
 use crate::net_settings;
 use crate::proto_async::*;
 use crate::kernel;
@@ -119,12 +120,17 @@ async fn read_string(stream: &TcpStream, max_length: usize) -> Result<String> {
     Ok(String::from_utf8(bytes).map_err(|err| Error::Utf8Error(err.utf8_error()))?)
 }
 
-async fn handle_run_kernel(stream: &TcpStream, control: &Rc<RefCell<kernel::Control>>) -> Result<()> {
+async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kernel::Control>>) -> Result<()> {
     control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
     loop {
         let reply = control.borrow_mut().rx.async_recv().await;
         match *reply {
             kernel::Message::RpcSend { is_async, data } => {
+                if stream.is_none() {
+                    error!("Unexpected RPC from startup/idle kernel!");
+                    break
+                }
+                let stream = stream.unwrap();
                 write_header(stream, Reply::RPCRequest).await?;
                 write_bool(stream, is_async).await?;
                 stream.send(data.iter().copied()).await?;
@@ -183,23 +189,34 @@ async fn handle_run_kernel(stream: &TcpStream, control: &Rc<RefCell<kernel::Cont
                 }
             },
             kernel::Message::KernelFinished => {
-                write_header(stream, Reply::KernelFinished).await?;
+                if let Some(stream) = stream {
+                    write_header(stream, Reply::KernelFinished).await?;
+                }
                 break;
             },
             kernel::Message::KernelException(exception, backtrace) => {
-                write_header(stream, Reply::KernelException).await?;
-                write_chunk(stream, exception.name.as_ref()).await?;
-                write_chunk(stream, exception.message.as_ref()).await?;
-                write_i64(stream, exception.param[0] as i64).await?;
-                write_i64(stream, exception.param[1] as i64).await?;
-                write_i64(stream, exception.param[2] as i64).await?;
-                write_chunk(stream, exception.file.as_ref()).await?;
-                write_i32(stream, exception.line as i32).await?;
-                write_i32(stream, exception.column as i32).await?;
-                write_chunk(stream, exception.function.as_ref()).await?;
-                write_i32(stream, backtrace.len() as i32).await?;
-                for &addr in backtrace {
-                    write_i32(stream, addr as i32).await?;
+                match stream {
+                    Some(stream) => {
+                        // only send the exception data to host if there is host,
+                        // i.e. not idle/startup kernel.
+                        write_header(stream, Reply::KernelException).await?;
+                        write_chunk(stream, exception.name.as_ref()).await?;
+                        write_chunk(stream, exception.message.as_ref()).await?;
+                        write_i64(stream, exception.param[0] as i64).await?;
+                        write_i64(stream, exception.param[1] as i64).await?;
+                        write_i64(stream, exception.param[2] as i64).await?;
+                        write_chunk(stream, exception.file.as_ref()).await?;
+                        write_i32(stream, exception.line as i32).await?;
+                        write_i32(stream, exception.column as i32).await?;
+                        write_chunk(stream, exception.function.as_ref()).await?;
+                        write_i32(stream, backtrace.len() as i32).await?;
+                        for &addr in backtrace {
+                            write_i32(stream, addr as i32).await?;
+                        }
+                    },
+                    None => {
+                        error!("Uncaught kernel exception: {:?}", exception);
+                    }
                 }
                 break;
             }
@@ -209,6 +226,39 @@ async fn handle_run_kernel(stream: &TcpStream, control: &Rc<RefCell<kernel::Cont
         }
     }
     Ok(())
+}
+
+
+async fn load_kernel(buffer: Vec<u8>, control: &Rc<RefCell<kernel::Control>>, stream: Option<&TcpStream>) -> Result<()> {
+    let mut control = control.borrow_mut();
+    control.restart();
+    control.tx.async_send(kernel::Message::LoadRequest(Arc::new(buffer))).await;
+    let reply = control.rx.async_recv().await;
+    match *reply {
+        kernel::Message::LoadCompleted => {
+            if let Some(stream) = stream {
+                write_header(stream, Reply::LoadCompleted).await?;
+            }
+            Ok(())
+        },
+        kernel::Message::LoadFailed => {
+            if let Some(stream) = stream {
+                write_header(stream, Reply::LoadFailed).await?;
+                write_chunk(stream, b"core1 failed to process data").await?;
+            } else {
+                error!("Kernel load failed");
+            }
+            Err(Error::UnexpectedPattern)
+        },
+        _ => {
+            error!("unexpected message from core1: {:?}", reply);
+            if let Some(stream) = stream {
+                write_header(stream, Reply::LoadFailed).await?;
+                write_chunk(stream, b"core1 sent unexpected reply").await?;
+            }
+            Err(Error::UnrecognizedPacket)
+        }
+    }
 }
 
 async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Control>>) -> Result<()> {
@@ -227,25 +277,10 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
             },
             Request::LoadKernel => {
                 let buffer = read_bytes(stream, 1024*1024).await?;
-                let mut control = control.borrow_mut();
-                control.restart();
-                control.tx.async_send(kernel::Message::LoadRequest(Arc::new(buffer))).await;
-                let reply = control.rx.async_recv().await;
-                match *reply {
-                    kernel::Message::LoadCompleted => write_header(stream, Reply::LoadCompleted).await?,
-                    kernel::Message::LoadFailed => {
-                        write_header(stream, Reply::LoadFailed).await?;
-                        write_chunk(stream, b"core1 failed to process data").await?;
-                    },
-                    _ => {
-                        error!("unexpected message from core1: {:?}", reply);
-                        write_header(stream, Reply::LoadFailed).await?;
-                        write_chunk(stream, b"core1 sent unexpected reply").await?;
-                    }
-                }
+                load_kernel(buffer, &control, Some(stream)).await?;
             },
             Request::RunKernel => {
-                handle_run_kernel(stream, &control).await?;
+                handle_run_kernel(Some(stream), &control).await?;
             },
             _ => {
                 error!("unexpected request from host: {:?}", request);
@@ -294,9 +329,24 @@ pub fn main(timer: GlobalTimer) {
         }
     };
 
+    let startup_kernel: Option<Vec<u8>>;
+    let cfg = config::Config::new();
+    startup_kernel = cfg.as_ref().ok().and_then(|cfg| cfg.read("startup").ok());
+
     Sockets::init(32);
 
     let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start()));
+    if let Some(buffer) = startup_kernel {
+        info!("Loading startup kernel...");
+        if let Ok(()) = task::block_on(load_kernel(buffer, &control, None)) {
+            info!("Starting startup kernel...");
+            let _ = task::block_on(handle_run_kernel(None, &control));
+            info!("Startup kernel finished!");
+        } else {
+            error!("Error loading startup kernel!");
+        }
+    }
+
     task::spawn(async move {
         loop {
             let stream = TcpStream::accept(1381, 2048, 2048).await.unwrap();
