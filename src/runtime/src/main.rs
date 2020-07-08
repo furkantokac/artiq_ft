@@ -7,7 +7,7 @@
 extern crate alloc;
 
 use core::{cmp, str};
-use log::info;
+use log::{info, warn};
 
 use libboard_zynq::{timer::GlobalTimer, logger, devc, slcr};
 use libsupport_zynq::ram;
@@ -93,5 +93,12 @@ pub fn main_core0() {
         pl::csr::rtio_core::reset_phy_write(1);
     }
 
-    comms::main(timer);
+    let cfg = match config::Config::new() {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            warn!("config initialization failed: {}", err);
+            config::Config::new_dummy()
+        }
+    };
+    comms::main(timer, &cfg);
 }

@@ -11,6 +11,7 @@ pub enum Error<'a> {
     IoError(io::Error),
     Utf8Error(FromUtf8Error),
     KeyNotFoundError(&'a str),
+    NoConfig,
 }
 
 pub type Result<'a, T> = core::result::Result<T, Error<'a>>;
@@ -22,6 +23,7 @@ impl<'a> fmt::Display for Error<'a> {
             Error::IoError(error) => write!(f, "I/O error: {}", error),
             Error::Utf8Error(error) => write!(f, "UTF-8 error: {}", error),
             Error::KeyNotFoundError(name) => write!(f, "Configuration key `{}` not found", name),
+            Error::NoConfig => write!(f, "Configuration not present"),
         }
     }
 }
@@ -61,7 +63,7 @@ fn parse_config<'a>(
 }
 
 pub struct Config {
-    fs: fatfs::FileSystem<sd_reader::SdReader>,
+    fs: Option<fatfs::FileSystem<sd_reader::SdReader>>,
 }
 
 impl Config {
@@ -74,20 +76,28 @@ impl Config {
         let reader = sd_reader::SdReader::new(sd);
 
         let fs = reader.mount_fatfs(sd_reader::PartitionEntry::Entry1)?;
-        Ok(Config { fs })
+        Ok(Config { fs: Some(fs) })
+    }
+
+    pub fn new_dummy() -> Self {
+        Config { fs: None }
     }
 
     pub fn read<'b>(&self, key: &'b str) -> Result<'b, Vec<u8>> {
-        let root_dir = self.fs.root_dir();
-        let mut buffer: Vec<u8> = Vec::new();
-        match root_dir.open_file(&["/CONFIG/", key, ".BIN"].concat()) {
-            Ok(mut f) => f.read_to_end(&mut buffer).map(|_| ())?,
-            Err(_) => match root_dir.open_file("/CONFIG.TXT") {
-                Ok(f) => parse_config(key, &mut buffer, f)?,
-                Err(_) => return Err(Error::KeyNotFoundError(key)),
-            },
-        };
-        Ok(buffer)
+        if let Some(fs) = &self.fs {
+            let root_dir = fs.root_dir();
+            let mut buffer: Vec<u8> = Vec::new();
+            match root_dir.open_file(&["/CONFIG/", key, ".BIN"].concat()) {
+                Ok(mut f) => f.read_to_end(&mut buffer).map(|_| ())?,
+                Err(_) => match root_dir.open_file("/CONFIG.TXT") {
+                    Ok(f) => parse_config(key, &mut buffer, f)?,
+                    Err(_) => return Err(Error::KeyNotFoundError(key)),
+                },
+            };
+            Ok(buffer)
+        } else {
+            Err(Error::NoConfig)
+        }
     }
 
     pub fn read_str<'b>(&self, key: &'b str) -> Result<'b, String> {

@@ -23,21 +23,19 @@ impl fmt::Display for NetAddresses {
     }
 }
 
-pub fn get_adresses() -> NetAddresses {
+pub fn get_adresses(cfg: &config::Config) -> NetAddresses {
     let mut hardware_addr = EthernetAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x52]);
     let mut ipv4_addr = IpAddress::v4(192, 168, 1, 52);
     let mut ipv6_addr = None;
 
-    if let Ok(cfg) = config::Config::new() {
-        if let Ok(Ok(addr)) = cfg.read_str("mac").map(|s| s.parse()) {
-            hardware_addr = addr;
-        }
-        if let Ok(Ok(addr)) = cfg.read_str("ip").map(|s| s.parse()) {
-            ipv4_addr = addr;
-        }
-        if let Ok(Ok(addr)) = cfg.read_str("ip6").map(|s| s.parse()) {
-            ipv6_addr = Some(addr);
-        }
+    if let Ok(Ok(addr)) = cfg.read_str("mac").map(|s| s.parse()) {
+        hardware_addr = addr;
+    }
+    if let Ok(Ok(addr)) = cfg.read_str("ip").map(|s| s.parse()) {
+        ipv4_addr = addr;
+    }
+    if let Ok(Ok(addr)) = cfg.read_str("ip6").map(|s| s.parse()) {
+        ipv6_addr = Some(addr);
     }
 
     let ipv6_ll_addr = IpAddress::v6(

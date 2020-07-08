@@ -290,8 +290,8 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
     }
 }
 
-pub fn main(timer: GlobalTimer) {
-    let net_addresses = net_settings::get_adresses();
+pub fn main(timer: GlobalTimer, cfg: &config::Config) {
+    let net_addresses = net_settings::get_adresses(cfg);
     info!("network addresses: {}", net_addresses);
 
     let eth = zynq::eth::Eth::default(net_addresses.hardware_addr.0.clone());
@@ -329,14 +329,10 @@ pub fn main(timer: GlobalTimer) {
         }
     };
 
-    let startup_kernel: Option<Vec<u8>>;
-    let cfg = config::Config::new();
-    startup_kernel = cfg.as_ref().ok().and_then(|cfg| cfg.read("startup").ok());
-
     Sockets::init(32);
 
     let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start()));
-    if let Some(buffer) = startup_kernel {
+    if let Ok(buffer) = cfg.read("startup") {
         info!("Loading startup kernel...");
         if let Ok(()) = task::block_on(load_kernel(buffer, &control, None)) {
             info!("Starting startup kernel...");
