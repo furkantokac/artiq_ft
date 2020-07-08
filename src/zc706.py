@@ -3,13 +3,59 @@
 import argparse
 
 from migen import *
-
+from migen.genlib.resetsync import AsyncResetSynchronizer
+from migen.genlib.cdc import MultiReg
 from migen_axi.integration.soc_core import SoCCore
 from migen_axi.platforms import zc706
+from misoc.interconnect.csr import *
 from misoc.integration import cpu_interface
 
 from artiq.gateware import rtio, nist_clock, nist_qc2
 from artiq.gateware.rtio.phy import ttl_simple, ttl_serdes_7series, dds, spi2
+
+
+class RTIOCRG(Module, AutoCSR):
+    def __init__(self, platform, rtio_internal_clk):
+        self.clock_sel = CSRStorage()
+        self.pll_reset = CSRStorage(reset=1)
+        self.pll_locked = CSRStatus()
+        self.clock_domains.cd_rtio = ClockDomain()
+        self.clock_domains.cd_rtiox4 = ClockDomain(reset_less=True)
+
+        rtio_external_clk = Signal()
+        user_sma_clock = platform.request("user_sma_clock")
+        platform.add_period_constraint(user_sma_clock.p, 8.0)
+        self.specials += Instance("IBUFDS",
+                                  i_I=user_sma_clock.p, i_IB=user_sma_clock.n,
+                                  o_O=rtio_external_clk)
+
+        pll_locked = Signal()
+        rtio_clk = Signal()
+        rtiox4_clk = Signal()
+        self.specials += [
+            Instance("PLLE2_ADV",
+                     p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
+
+                     p_REF_JITTER1=0.01,
+                     p_CLKIN1_PERIOD=8.0, p_CLKIN2_PERIOD=8.0,
+                     i_CLKIN1=rtio_internal_clk, i_CLKIN2=rtio_external_clk,
+                     # Warning: CLKINSEL=0 means CLKIN2 is selected
+                     i_CLKINSEL=~self.clock_sel.storage,
+
+                     # VCO @ 1GHz when using 125MHz input
+                     p_CLKFBOUT_MULT=8, p_DIVCLK_DIVIDE=1,
+                     i_CLKFBIN=self.cd_rtio.clk,
+                     i_RST=self.pll_reset.storage,
+
+                     o_CLKFBOUT=rtio_clk,
+
+                     p_CLKOUT0_DIVIDE=2, p_CLKOUT0_PHASE=0.0,
+                     o_CLKOUT0=rtiox4_clk),
+            Instance("BUFG", i_I=rtio_clk, o_O=self.cd_rtio.clk),
+            Instance("BUFG", i_I=rtiox4_clk, o_O=self.cd_rtiox4.clk),
+            AsyncResetSynchronizer(self.cd_rtio, ~pll_locked),
+            MultiReg(pll_locked, self.pll_locked.status)
+        ]
 
 
 class ZC706(SoCCore):
@@ -22,11 +68,9 @@ class ZC706(SoCCore):
 
         platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
         platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
-        self.clock_domains.cd_rtio = ClockDomain()
-        self.comb += [
-            self.cd_rtio.clk.eq(self.ps7.cd_sys.clk),
-            self.cd_rtio.rst.eq(self.ps7.cd_sys.rst)
-        ]
+
+        self.submodules.rtio_crg = RTIOCRG(self.platform, self.ps7.cd_sys.clk)
+        self.csr_devices.append("rtio_crg")
 
     def add_rtio(self, rtio_channels):
         self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)

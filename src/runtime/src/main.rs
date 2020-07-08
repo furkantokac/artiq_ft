@@ -9,9 +9,11 @@ extern crate alloc;
 use core::{cmp, str};
 use log::{info, warn};
 
-use libboard_zynq::{timer::GlobalTimer, logger, devc, slcr};
+use libboard_zynq::{timer::GlobalTimer, time::Milliseconds, logger, devc, slcr};
 use libsupport_zynq::ram;
 use libregister::RegisterW;
+use nb::block;
+use embedded_hal::timer::CountDown;
 
 mod sd_reader;
 mod config;
@@ -29,28 +31,7 @@ mod load_pl;
 mod eh_artiq;
 mod panic;
 
-fn identifier_read(buf: &mut [u8]) -> &str {
-    unsafe {
-        pl::csr::identifier::address_write(0);
-        let len = pl::csr::identifier::data_read();
-        let len = cmp::min(len, buf.len() as u8);
-        for i in 0..len {
-            pl::csr::identifier::address_write(1 + i);
-            buf[i as usize] = pl::csr::identifier::data_read();
-        }
-        str::from_utf8_unchecked(&buf[..len as usize])
-    }
-}
-
-#[no_mangle]
-pub fn main_core0() {
-    let timer = GlobalTimer::start();
-    let _ = logger::init();
-    log::set_max_level(log::LevelFilter::Debug);
-    info!("NAR3/Zynq7000 starting...");
-
-    ram::init_alloc_linker();
-
+fn init_gateware() {
     // Set up PS->PL clocks
     slcr::RegisterBlock::unlocked(|slcr| {
         // As we are touching the mux, the clock may glitch, so reset the PL.
@@ -87,11 +68,73 @@ pub fn main_core0() {
             Err(e) => info!("Failure loading bitstream: {}", e),
         }
     }
-    info!("detected gateware: {}", identifier_read(&mut [0; 64]));
+}
+
+fn identifier_read(buf: &mut [u8]) -> &str {
+    unsafe {
+        pl::csr::identifier::address_write(0);
+        let len = pl::csr::identifier::data_read();
+        let len = cmp::min(len, buf.len() as u8);
+        for i in 0..len {
+            pl::csr::identifier::address_write(1 + i);
+            buf[i as usize] = pl::csr::identifier::data_read();
+        }
+        str::from_utf8_unchecked(&buf[..len as usize])
+    }
+}
+
+fn init_rtio(timer: GlobalTimer, cfg: &config::Config) {
+    let clock_sel =
+        if let Ok(rtioclk) = cfg.read_str("rtioclk") {
+            match rtioclk.as_ref() {
+                "internal" => {
+                    info!("using internal RTIO clock");
+                    0
+                },
+                "external" => {
+                    info!("using external RTIO clock");
+                    1
+                },
+                other => {
+                    warn!("RTIO clock specification '{}' not recognized", other);
+                    info!("using internal RTIO clock");
+                    0
+                },
+            }
+        } else {
+            info!("using internal RTIO clock (default)");
+            0
+        };
+
+    unsafe {
+        pl::csr::rtio_crg::pll_reset_write(1);
+        pl::csr::rtio_crg::clock_sel_write(clock_sel);
+        pl::csr::rtio_crg::pll_reset_write(0);
+    }
+    let mut countdown = timer.countdown();
+    countdown.start(Milliseconds(1));
+    block!(countdown.wait()).unwrap();
+    let locked = unsafe { pl::csr::rtio_crg::pll_locked_read() != 0 };
+    if !locked {
+        panic!("RTIO PLL failed to lock");
+    }
 
     unsafe {
         pl::csr::rtio_core::reset_phy_write(1);
     }
+}
+
+#[no_mangle]
+pub fn main_core0() {
+    let timer = GlobalTimer::start();
+    let _ = logger::init();
+    log::set_max_level(log::LevelFilter::Debug);
+    info!("NAR3/Zynq7000 starting...");
+
+    ram::init_alloc_linker();
+
+    init_gateware();
+    info!("detected gateware: {}", identifier_read(&mut [0; 64]));
 
     let cfg = match config::Config::new() {
         Ok(cfg) => cfg,
@@ -100,5 +143,8 @@ pub fn main_core0() {
             config::Config::new_dummy()
         }
     };
+
+    init_rtio(timer, &cfg);
+
     comms::main(timer, &cfg);
 }
