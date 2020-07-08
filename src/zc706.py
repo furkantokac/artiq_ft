@@ -71,6 +71,10 @@ class ZC706(SoCCore):
 
         self.submodules.rtio_crg = RTIOCRG(self.platform, self.ps7.cd_sys.clk)
         self.csr_devices.append("rtio_crg")
+        self.platform.add_period_constraint(self.rtio_crg.cd_rtio.clk, 8.)
+        self.platform.add_false_path_constraints(
+            self.ps7.cd_sys.clk,
+            self.rtio_crg.cd_rtio.clk)
 
     def add_rtio(self, rtio_channels):
         self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)
