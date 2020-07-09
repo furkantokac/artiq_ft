@@ -9,7 +9,7 @@ all: ../build/firmware/armv7-none-eabihf/release/szl
 	mkdir -p ../build
 	python zc706.py -r ../build/pl.rs -V $(VARIANT)
 
-../build/firmware/armv7-none-eabihf/release/runtime: .cargo/* armv7-none-eabihf.json Cargo.lock Cargo.toml libdyld/* libdyld/src/* libcoreio/* libcoreio/src/* libcoreio/src/io/* runtime/* runtime/src/* runtime/src/kernel/* ../build/pl.rs libc/* libc/src/* libdwarf/* libdwarf/src/* libunwind/* llvm_libunwind/src/*
+../build/firmware/armv7-none-eabihf/release/runtime: ../build/pl.rs $(shell find . -path ./szl -prune -o -print)
 	XBUILD_SYSROOT_PATH=`pwd`/../build/sysroot cargo xbuild --release -p runtime --target-dir ../build/firmware
 
 ../build/szl-payload.bin.lzma: ../build/firmware/armv7-none-eabihf/release/runtime
