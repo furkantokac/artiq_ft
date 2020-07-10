@@ -231,7 +231,6 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
 
 async fn load_kernel(buffer: Vec<u8>, control: &Rc<RefCell<kernel::Control>>, stream: Option<&TcpStream>) -> Result<()> {
     let mut control = control.borrow_mut();
-    control.restart();
     control.tx.async_send(kernel::Message::LoadRequest(Arc::new(buffer))).await;
     let reply = control.rx.async_recv().await;
     match *reply {
