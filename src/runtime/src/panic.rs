@@ -18,9 +18,9 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     let _ = backtrace(|ip| {
         // Backtrace gives us the return address, i.e. the address after the delay slot,
         // but we're interested in the call instruction.
-        println!("{:#08x}", ip - 2 * 4);
+        print!("{:#08x} ", ip - 2 * 4);
     });
-    println!("End backtrace");
+    println!("\nEnd backtrace");
 
     loop {}
 }
