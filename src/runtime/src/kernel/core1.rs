@@ -5,7 +5,7 @@ use alloc::borrow::ToOwned;
 use log::{debug, info, error};
 use cslice::CSlice;
 
-use libcortex_a9::{enable_fpu, cache::dcci_slice, sync_channel};
+use libcortex_a9::{enable_fpu, cache::{dcci_slice, iciallu}, sync_channel};
 use dyld::{self, Library};
 use crate::eh_artiq;
 use super::{
@@ -92,6 +92,7 @@ impl KernelImage {
         // Flush data cache entries for the image in DDR, including
         // Memory/Instruction Synchronization Barriers
         dcci_slice(self.library.image.data);
+        iciallu();
 
         (mem::transmute::<u32, fn()>(self.__modinit__))();
 
