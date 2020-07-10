@@ -53,7 +53,7 @@ pub fn main_core0() {
         error!("decompression failed");
     } else {
         // Flush data cache entries for all of DDR, including
-        // Memory/Instruction Symchronization Barriers
+        // Memory/Instruction Synchronization Barriers
         dcci_slice(unsafe {
             core::slice::from_raw_parts(ddr.ptr::<u8>(), ddr.size())
         });

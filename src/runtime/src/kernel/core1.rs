@@ -90,7 +90,7 @@ impl KernelImage {
 
     pub unsafe fn exec(&mut self) {
         // Flush data cache entries for the image in DDR, including
-        // Memory/Instruction Symchronization Barriers
+        // Memory/Instruction Synchronization Barriers
         dcci_slice(self.library.image.data);
 
         (mem::transmute::<u32, fn()>(self.__modinit__))();
