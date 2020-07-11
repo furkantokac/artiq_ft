@@ -13,6 +13,19 @@ How to use
 7. Power up the board. After the firmware starts successfully, it should respond to ping at its IP addresses, and boot messages can be observed from its UART at 115200bps.
 8. Create and use an ARTIQ device database as usual, but set ``"target": "cortexa9"`` in the arguments of the core device.
 
+Configuration
+-------------
+
+Configuring the device is done using the ``config.txt`` text file at the root of the SD card, plus the content of the ``config`` folder. When searching for a configuration key, the firmware first looks for a file named ``/config/[key].bin`` and, if it exists, returns the contents of that file. If not, it looks into ``config.txt``, which contains a list of ``key=value`` pairs, one per line. The ``config`` folder allows configuration values to consist in binary data.
+
+The following configuration keys are available:
+
+- ``mac``: Ethernet MAC address.
+- ``ip``: IPv4 address.
+- ``ip6``: IPv6 address.
+- ``startup``: startup kernel in ELF format (as produced by ``artiq_compile``).
+- ``rtioclk``: source of RTIO clock; valid values are ``external`` and ``internal``.
+
 Development instructions
 ------------------------
 
