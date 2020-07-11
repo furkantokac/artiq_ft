@@ -5,9 +5,9 @@ all: ../build/firmware/armv7-none-eabihf/release/szl
 .PHONY: all
 
 
-../build/pl.rs: zc706.py
+../build/pl.rs: gateware/zc706.py
 	mkdir -p ../build
-	python zc706.py -r ../build/pl.rs -V $(VARIANT)
+	python gateware/zc706.py -r ../build/pl.rs -V $(VARIANT)
 
 ../build/firmware/armv7-none-eabihf/release/runtime: ../build/pl.rs $(shell find . -path ./szl -prune -o -print)
 	XBUILD_SYSROOT_PATH=`pwd`/../build/sysroot cargo xbuild --release -p runtime --target-dir ../build/firmware

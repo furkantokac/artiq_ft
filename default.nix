@@ -48,7 +48,7 @@ let
         ];
       }
       ''
-        python ${./src/zc706.py} -g build -V ${variant}
+        python ${./src/gateware/zc706.py} -g build -V ${variant}
         mkdir -p $out $out/nix-support
         cp build/top.bit $out
         echo file binary-dist $out/top.bit >> $out/nix-support/hydra-build-products
