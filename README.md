@@ -16,7 +16,7 @@ How to use
 Configuration
 -------------
 
-Configuring the device is done using the ``config.txt`` text file at the root of the SD card, plus the contents of the ``config`` folder. When searching for a configuration key, the firmware first looks for a file named ``/config/[key].bin`` and, if it exists, returns the contents of that file. If not, it looks into ``config.txt``, which contains a list of ``key=value`` pairs, one per line. The ``config`` folder allows configuration values that consist in binary data, such as the startup kernel.
+Configuring the device is done using the ``config.txt`` text file at the root of the SD card, plus the contents of the ``config`` folder. When searching for a configuration key, the firmware first looks for a file named ``/config/[key].bin`` and, if it exists, returns the contents of that file. If not, it looks into ``/config.txt``, which contains a list of ``key=value`` pairs, one per line. The ``config`` folder allows configuration values that consist in binary data, such as the startup kernel.
 
 The following configuration keys are available:
 
