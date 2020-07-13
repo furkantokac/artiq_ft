@@ -1,6 +1,5 @@
 use core::ptr::{read_volatile, write_volatile};
 use cslice::CSlice;
-use log::error;
 use crate::artiq_raise;
 
 use crate::pl::csr;
@@ -125,15 +124,17 @@ pub extern fn input_timestamp(timeout: i64, channel: i32) -> i64 {
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
             csr::rtio::i_overflow_reset_write(1);
-            error!("RTIO input overflow on channel {0}",
-                   channel as i64);
+            artiq_raise!("RTIOOverflow",
+                         "RTIO input overflow on channel {0}",
+                         channel as i64, 0, 0);
         }
         if status & RTIO_I_STATUS_WAIT_EVENT != 0 {
             return -1
         }
         if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
-            error!("RTIO destination unreachable, input, on channel {0}",
-                   channel as i64);
+            artiq_raise!("RTIODestinationUnreachable",
+                         "RTIO destination unreachable, input, on channel {0}",
+                         channel as i64, 0, 0);
         }
 
         csr::rtio::i_timestamp_read() as i64
@@ -152,12 +153,14 @@ pub extern fn input_data(channel: i32) -> i32 {
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
             csr::rtio::i_overflow_reset_write(1);
-            error!("RTIO input overflow on channel {0}",
-                   channel as i64);
+            artiq_raise!("RTIOOverflow",
+                         "RTIO input overflow on channel {0}",
+                         channel as i64, 0, 0);
         }
         if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
-            error!("RTIO destination unreachable, input, on channel {0}",
-                   channel as i64);
+            artiq_raise!("RTIODestinationUnreachable",
+                         "RTIO destination unreachable, input, on channel {0}",
+                         channel as i64, 0, 0);
         }
 
         rtio_i_data_read(0) as i32
@@ -176,15 +179,17 @@ pub extern fn input_timestamped_data(timeout: i64, channel: i32) -> TimestampedD
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
             csr::rtio::i_overflow_reset_write(1);
-            error!("RTIO input overflow on channel {0}",
-                   channel as i64);
+            artiq_raise!("RTIOOverflow",
+                         "RTIO input overflow on channel {0}",
+                         channel as i64, 0, 0);
         }
         if status & RTIO_I_STATUS_WAIT_EVENT != 0 {
             return TimestampedData { timestamp: -1, data: 0 }
         }
         if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
-            error!("RTIO destination unreachable, input, on channel {0}",
-                   channel as i64);
+            artiq_raise!("RTIODestinationUnreachable",
+                         "RTIO destination unreachable, input, on channel {0}",
+                         channel as i64, 0, 0);
         }
 
         TimestampedData {
