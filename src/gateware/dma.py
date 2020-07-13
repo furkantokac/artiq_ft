@@ -1,5 +1,4 @@
 from migen import *
-from migen.genlib.record import Record, layout_len
 from migen.genlib.fsm import FSM
 from misoc.interconnect.csr import *
 from misoc.interconnect import stream
