@@ -14,6 +14,9 @@ from artiq.gateware import rtio, nist_clock, nist_qc2
 from artiq.gateware.rtio.phy import ttl_simple, ttl_serdes_7series, dds, spi2
 
 
+import dma
+
+
 class RTIOCRG(Module, AutoCSR):
     def __init__(self, platform, rtio_internal_clk):
         self.clock_sel = CSRStorage()
@@ -81,9 +84,14 @@ class ZC706(SoCCore):
         self.submodules.rtio_core = rtio.Core(self.rtio_tsc, rtio_channels)
         self.csr_devices.append("rtio_core")
         self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
+        self.submodules.rtio_dma = dma.DMA(self.ps7.s_axi_hp0)
         self.csr_devices.append("rtio")
+        self.csr_devices.append("rtio_dma")
 
-        self.comb += self.rtio.cri.connect(self.rtio_core.cri)
+        self.submodules.cri_con = rtio.CRIInterconnectShared(
+            [self.rtio.cri, self.rtio_dma.cri],
+            [self.rtio_core.cri])
+        self.csr_devices.append("cri_con")
 
         self.submodules.rtio_moninj = rtio.MonInj(rtio_channels)
         self.csr_devices.append("rtio_moninj")
