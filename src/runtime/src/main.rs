@@ -7,12 +7,14 @@
 extern crate alloc;
 
 use core::{cmp, str};
-use log::{info, warn};
+use log::{info, warn, error};
 
 use libboard_zynq::{timer::GlobalTimer, time::Milliseconds, devc, slcr};
+use libasync::{task, block_async};
 use libsupport_zynq::ram;
 use libregister::RegisterW;
-use nb::block;
+use nb;
+use void::Void;
 use embedded_hal::timer::CountDown;
 
 mod sd_reader;
@@ -116,7 +118,7 @@ fn init_rtio(timer: GlobalTimer, cfg: &config::Config) {
     }
     let mut countdown = timer.countdown();
     countdown.start(Milliseconds(1));
-    block!(countdown.wait()).unwrap();
+    nb::block!(countdown.wait()).unwrap();
     let locked = unsafe { pl::csr::rtio_crg::pll_locked_read() != 0 };
     if !locked {
         panic!("RTIO PLL failed to lock");
@@ -124,6 +126,38 @@ fn init_rtio(timer: GlobalTimer, cfg: &config::Config) {
 
     unsafe {
         pl::csr::rtio_core::reset_phy_write(1);
+    }
+}
+
+fn wait_for_async_rtio_error() -> nb::Result<(), Void> {
+    unsafe {
+        if pl::csr::rtio_core::async_error_read() != 0 {
+            Ok(())
+        } else {
+            Err(nb::Error::WouldBlock)
+        }
+    }
+}
+
+async fn report_async_rtio_errors() {
+    loop {
+        let _ = block_async!(wait_for_async_rtio_error()).await;
+        unsafe {
+            let errors = pl::csr::rtio_core::async_error_read();
+            if errors & 1 != 0 {
+                error!("RTIO collision involving channel {}",
+                       pl::csr::rtio_core::collision_channel_read());
+            }
+            if errors & 2 != 0 {
+                error!("RTIO busy error involving channel {}",
+                       pl::csr::rtio_core::busy_channel_read());
+            }
+            if errors & 4 != 0 {
+                error!("RTIO sequence error involving channel {}",
+                       pl::csr::rtio_core::sequence_error_channel_read());
+            }
+            pl::csr::rtio_core::async_error_write(errors);
+        }
     }
 }
 
@@ -156,6 +190,7 @@ pub fn main_core0() {
     };
 
     init_rtio(timer, &cfg);
+    task::spawn(report_async_rtio_errors());
 
     comms::main(timer, &cfg);
 }
