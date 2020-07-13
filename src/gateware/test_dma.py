@@ -45,7 +45,7 @@ class AXIMemorySim:
                         raise ValueError
                     addr = request.addr//self.align + i
                     if addr < len(self.queue):
-                        data = self.queue[addr]
+                        data = self.data[addr]
                     else:
                         data = 0
                     yield from self.bus.write_r(request.id, data, last=i == request_len-1)

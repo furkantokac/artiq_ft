@@ -42,13 +42,20 @@ class AXIReader(Module):
 
         # UG585: "Large slave interface read acceptance capability in the range of 14 to 70 commands"
         inflight_cnt = Signal(max=128)
-        self.sync += inflight_cnt.eq(inflight_cnt + (ar.valid & ar.ready) - (r.valid & r.ready))
+        request_done = Signal()
+        reply_done = Signal()
+        self.comb += [
+            request_done.eq(ar.valid & ar.ready),
+            reply_done.eq(r.valid & r.ready & r.last)
+        ]
+        self.sync += inflight_cnt.eq(inflight_cnt + request_done - reply_done)
 
         self.comb += [
             self.source.stb.eq(r.valid),
             r.ready.eq(self.source.ack),
             self.source.data.eq(r.data),
-            self.source.eop.eq(eop_pending & r.last & (inflight_cnt == 0))
+            # Note that when eop_pending=1, no new transactions are made and inflight_cnt is no longer incremented
+            self.source.eop.eq(eop_pending & r.last & (inflight_cnt == 1))
         ]
 
 
