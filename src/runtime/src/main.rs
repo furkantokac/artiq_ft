@@ -9,7 +9,7 @@ extern crate alloc;
 use core::{cmp, str};
 use log::{info, warn};
 
-use libboard_zynq::{timer::GlobalTimer, time::Milliseconds, logger, devc, slcr};
+use libboard_zynq::{timer::GlobalTimer, time::Milliseconds, devc, slcr};
 use libsupport_zynq::ram;
 use libregister::RegisterW;
 use nb::block;
@@ -30,6 +30,7 @@ mod moninj;
 mod load_pl;
 mod eh_artiq;
 mod panic;
+mod logger;
 
 fn init_gateware() {
     // Set up PS->PL clocks
@@ -124,11 +125,19 @@ fn init_rtio(timer: GlobalTimer, cfg: &config::Config) {
     }
 }
 
+static mut LOG_BUFFER: [u8; 1<<17] = [0; 1<<17];
+
 #[no_mangle]
 pub fn main_core0() {
     let timer = GlobalTimer::start();
-    let _ = logger::init();
+
+    let buffer_logger = unsafe {
+        logger::BufferLogger::new(&mut LOG_BUFFER[..])
+    };
+    buffer_logger.set_uart_log_level(log::LevelFilter::Debug);
+    buffer_logger.register();
     log::set_max_level(log::LevelFilter::Debug);
+
     info!("NAR3/Zynq7000 starting...");
 
     ram::init_alloc_linker();
