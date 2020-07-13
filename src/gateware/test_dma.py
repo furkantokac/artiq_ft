@@ -26,7 +26,6 @@ class AXIMemorySim:
         while True:
             if len(self.queue) < self.max_queue:
                 request = yield from self.bus.read_ar()
-                print(request.addr)
                 self.queue.append(request)
             else:
                 yield
@@ -44,7 +43,7 @@ class AXIMemorySim:
                     if request.addr % self.align:
                         raise ValueError
                     addr = request.addr//self.align + i
-                    if addr < len(self.queue):
+                    if addr < len(self.data):
                         data = self.data[addr]
                     else:
                         data = 0
