@@ -22,6 +22,7 @@ void = { version = "1", default-features = false }
 futures = { version = "0.3", default-features = false, features = ["async-await"] }
 async-recursion = "0.3"
 fatfs = { version = "0.3", features = ["core_io"], default-features = false }
+log_buffer = { version = "1.2" }
 
 libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 libsupport_zynq = { default-features = false, git = "https://git.m-labs.hk/M-Labs/zc706.git" }

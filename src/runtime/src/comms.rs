@@ -27,6 +27,7 @@ use crate::proto_async::*;
 use crate::kernel;
 use crate::rpc;
 use crate::moninj;
+use crate::mgmt;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -356,6 +357,7 @@ pub fn main(timer: GlobalTimer, cfg: &config::Config) {
         }
     });
 
+    mgmt::start();
     moninj::start(timer);
 
     Sockets::run(&mut iface, || {

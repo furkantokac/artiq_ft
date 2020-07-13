@@ -7,7 +7,7 @@ use libasync::smoltcp::TcpStream;
 
 // TODO: use byteorder, make it more like libio
 
-pub type Result<T> = core::result::Result<T, smoltcp::Error>;
+type Result<T> = core::result::Result<T, smoltcp::Error>;
 
 pub async fn expect(stream: &TcpStream, pattern: &[u8]) -> Result<bool> {
     stream.recv(|buf| {

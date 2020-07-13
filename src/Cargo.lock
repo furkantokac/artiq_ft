@@ -281,6 +281,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "log_buffer"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f033173c9486b7fe97a79c895c0a3483ae395ab6744c985d10078950e2492419"
+
+[[package]]
 name = "managed"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -400,6 +406,7 @@ dependencies = [
  "libregister",
  "libsupport_zynq",
  "log",
+ "log_buffer",
  "nb",
  "num-derive",
  "num-traits",
