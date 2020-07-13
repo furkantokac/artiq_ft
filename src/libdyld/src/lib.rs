@@ -93,6 +93,7 @@ extern fn dl_unwind_find_exidx(pc: u32, len_ptr: *mut u32) -> u32 {
 
 pub struct Library {
     pub image: Image,
+    pub arch: Arch,
     dyn_section: DynamicSection,
 }
 
@@ -162,6 +163,11 @@ impl Library {
                               .ok_or("symbol in symbol table not null-terminated")?;
         Ok(self.strtab().get(offset..offset + size)
            .ok_or("cannot read symbol name")?)
+    }
+
+    /// Rebind Rela by `name` to a new `addr`
+    pub fn rebind(&self, name: &[u8], addr: *const ()) -> Result<(), Error> {
+        reloc::rebind(self.arch, self, name, addr as Elf32_Word)
     }
 }
 
@@ -235,6 +241,7 @@ pub fn load(
     debug!("Relocating {} rela, {} rel, {} pltrel",
            dyn_section.rela.len(), dyn_section.rel.len(), dyn_section.pltrel.len());
     let lib = Library {
+        arch,
         image,
         dyn_section
     };

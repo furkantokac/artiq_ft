@@ -133,3 +133,27 @@ pub fn relocate<R: Relocatable>(
 
     lib.image.write(rel.offset(), value)
 }
+
+pub fn rebind(
+    arch: Arch, lib: &Library, name: &[u8], value: Elf32_Word
+) -> Result<(), Error> {
+    for rela in lib.pltrel() {
+        let rel_type = RelType::new(arch, rela.type_info())
+            .ok_or("unsupported relocation type")?;
+        match rel_type {
+            RelType::Lookup => {
+                let sym = lib.symtab().get(ELF32_R_SYM(rela.r_info) as usize)
+                    .ok_or("symbol out of bounds of symbol table")?;
+                let sym_name = lib.name_starting_at(sym.st_name as usize)?;
+
+                if sym_name == name {
+                    lib.image.write(rela.offset(), value)?
+                }
+            }
+            // No associated symbols for other relocation types.
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
