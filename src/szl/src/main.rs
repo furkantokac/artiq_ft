@@ -7,7 +7,11 @@ use core::mem;
 use log::{debug, info, error};
 use cstr_core::CStr;
 
-use libcortex_a9::{enable_fpu, cache::dcci_slice};
+use libcortex_a9::{
+    enable_fpu,
+    cache::{dcci_slice, iciallu, bpiall},
+    asm::{dsb, isb},
+};
 use libboard_zynq::{
     self as zynq, clocks::Clocks, clocks::source::{ClockSource, ArmPll, IoPll},
     logger,
@@ -57,6 +61,11 @@ pub fn main_core0() {
         dcci_slice(unsafe {
             core::slice::from_raw_parts(ddr.ptr::<u8>(), ddr.size())
         });
+        dsb();
+        iciallu();
+        bpiall();
+        dsb();
+        isb();
 
         // Start core0 only, for compatibility with FSBL.
         info!("executing payload");
