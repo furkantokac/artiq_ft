@@ -17,7 +17,7 @@ where
     poll_fn(|ctx| {
         let logger = unsafe { BufferLogger::get_logger().as_mut().unwrap() };
         match logger.buffer() {
-            Ok(buffer) if f(&buffer) => Poll::Ready(buffer),
+            Some(buffer) if f(&buffer) => Poll::Ready(buffer),
             _ => {
                 ctx.waker().wake_by_ref();
                 Poll::Pending

@@ -1,16 +1,17 @@
-use core::cell::{Cell, RefCell, RefMut};
+use core::cell::Cell;
 use core::fmt::Write;
 use log::{Log, LevelFilter};
 use log_buffer::LogBuffer;
+use libcortex_a9::mutex::{Mutex, MutexGuard};
 use libboard_zynq::{println, timer::GlobalTimer};
 
 pub struct LogBufferRef<'a> {
-    buffer:        RefMut<'a, LogBuffer<&'static mut [u8]>>,
+    buffer:        MutexGuard<'a, LogBuffer<&'static mut [u8]>>,
     old_log_level: LevelFilter
 }
 
 impl<'a> LogBufferRef<'a> {
-    fn new(buffer: RefMut<'a, LogBuffer<&'static mut [u8]>>) -> LogBufferRef<'a> {
+    fn new(buffer: MutexGuard<'a, LogBuffer<&'static mut [u8]>>) -> LogBufferRef<'a> {
         let old_log_level = log::max_level();
         log::set_max_level(LevelFilter::Off);
         LogBufferRef { buffer, old_log_level }
@@ -36,7 +37,7 @@ impl<'a> Drop for LogBufferRef<'a> {
 }
 
 pub struct BufferLogger {
-    buffer:      RefCell<LogBuffer<&'static mut [u8]>>,
+    buffer:      Mutex<LogBuffer<&'static mut [u8]>>,
     uart_filter: Cell<LevelFilter>
 }
 
@@ -45,7 +46,7 @@ static mut LOGGER: Option<BufferLogger> = None;
 impl BufferLogger {
     pub fn new(buffer: &'static mut [u8]) -> BufferLogger {
         BufferLogger {
-            buffer: RefCell::new(LogBuffer::new(buffer)),
+            buffer: Mutex::new(LogBuffer::new(buffer)),
             uart_filter: Cell::new(LevelFilter::Info),
         }
     }
@@ -62,11 +63,10 @@ impl BufferLogger {
         &mut LOGGER
     }
 
-    pub fn buffer<'a>(&'a self) -> Result<LogBufferRef<'a>, ()> {
+    pub fn buffer<'a>(&'a self) -> Option<LogBufferRef<'a>> {
         self.buffer
-            .try_borrow_mut()
+            .try_lock()
             .map(LogBufferRef::new)
-            .map_err(|_| ())
     }
 
     pub fn uart_log_level(&self) -> LevelFilter {
@@ -94,7 +94,7 @@ impl Log for BufferLogger {
             let seconds   = timestamp / 1_000_000;
             let micros    = timestamp % 1_000_000;
 
-            if let Ok(mut buffer) = self.buffer.try_borrow_mut() {
+            if let Some(mut buffer) = self.buffer.try_lock() {
                 writeln!(buffer, "[{:6}.{:06}s] {:>5}({}): {}", seconds, micros,
                          record.level(), record.target(), record.args()).unwrap();
             }
