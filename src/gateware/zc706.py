@@ -13,8 +13,8 @@ from misoc.integration import cpu_interface
 from artiq.gateware import rtio, nist_clock, nist_qc2
 from artiq.gateware.rtio.phy import ttl_simple, ttl_serdes_7series, dds, spi2
 
-
 import dma
+import analyzer
 
 
 class RTIOCRG(Module, AutoCSR):
@@ -95,6 +95,10 @@ class ZC706(SoCCore):
 
         self.submodules.rtio_moninj = rtio.MonInj(rtio_channels)
         self.csr_devices.append("rtio_moninj")
+
+        self.submodules.rtio_analyzer = analyzer.Analyzer(self.rtio_tsc, self.rtio_core.cri,
+                                                          self.ps7.s_axi_hp1)
+        self.csr_devices.append("rtio_analyzer")
 
 
 class Simple(ZC706):
