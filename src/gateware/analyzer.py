@@ -52,9 +52,11 @@ class AXIDMAWriter(Module, AutoCSR):
         ]
 
         self.comb += [
+            membus.w.id.eq(0),
             membus.w.valid.eq(self.sink.stb),
             self.sink.ack.eq(membus.w.ready),
-            membus.w.data.eq(self.sink.data)
+            membus.w.data.eq(self.sink.data),
+            membus.w.strb.eq(2**(dw//8)-1),
         ]
         beat_count = Signal(max=burst_length)
         self.sync += [
