@@ -20,9 +20,6 @@ class AXIReader(Module):
 
         # # #
 
-        ar = membus.ar
-        r = membus.r
-
         eop_pending = Signal()
         self.sync += [
             If(self.sink.stb & self.sink.ack & self.sink.eop, eop_pending.eq(1)),
@@ -30,14 +27,14 @@ class AXIReader(Module):
         ]
 
         self.comb += [
-            ar.addr.eq(Cat(C(0, alignment_bits), self.sink.address)),
-            ar.id.eq(0),                   # Same ID for all transactions to forbid reordering.
-            ar.burst.eq(axi.Burst.incr.value),
-            ar.len.eq(AXI_BURST_LEN-1),    # Number of transfers in burst (0->1 transfer, 1->2 transfers...).
-            ar.size.eq(log2_int(dw//8)),   # Width of burst: 3 = 8 bytes = 64 bits.
-            ar.cache.eq(0xf),
-            ar.valid.eq(self.sink.stb & ~eop_pending),
-            self.sink.ack.eq(ar.ready & ~eop_pending)
+            membus.ar.addr.eq(Cat(C(0, alignment_bits), self.sink.address)),
+            membus.ar.id.eq(0),                   # Same ID for all transactions to forbid reordering.
+            membus.ar.burst.eq(axi.Burst.incr.value),
+            membus.ar.len.eq(AXI_BURST_LEN-1),    # Number of transfers in burst (0->1 transfer, 1->2 transfers...).
+            membus.ar.size.eq(log2_int(dw//8)),   # Width of burst: 3 = 8 bytes = 64 bits.
+            membus.ar.cache.eq(0xf),
+            membus.ar.valid.eq(self.sink.stb & ~eop_pending),
+            self.sink.ack.eq(membus.ar.ready & ~eop_pending)
         ]
 
         # UG585: "Large slave interface read acceptance capability in the range of 14 to 70 commands"
@@ -45,17 +42,17 @@ class AXIReader(Module):
         request_done = Signal()
         reply_done = Signal()
         self.comb += [
-            request_done.eq(ar.valid & ar.ready),
-            reply_done.eq(r.valid & r.ready & r.last)
+            request_done.eq(membus.ar.valid & membus.ar.ready),
+            reply_done.eq(membus.r.valid & membus.r.ready & membus.r.last)
         ]
         self.sync += inflight_cnt.eq(inflight_cnt + request_done - reply_done)
 
         self.comb += [
-            self.source.stb.eq(r.valid),
-            r.ready.eq(self.source.ack),
-            self.source.data.eq(r.data),
+            self.source.stb.eq(membus.r.valid),
+            membus.r.ready.eq(self.source.ack),
+            self.source.data.eq(membus.r.data),
             # Note that when eop_pending=1, no new transactions are made and inflight_cnt is no longer incremented
-            self.source.eop.eq(eop_pending & r.last & (inflight_cnt == 1))
+            self.source.eop.eq(eop_pending & membus.r.last & (inflight_cnt == 1))
         ]
 
 
