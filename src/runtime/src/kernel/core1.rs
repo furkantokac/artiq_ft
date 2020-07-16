@@ -189,5 +189,7 @@ pub fn terminate(exception: &'static eh_artiq::Exception<'static>, backtrace: &'
 
     let core1_tx: &mut sync_channel::Sender<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_1TO0) };
     core1_tx.send(Message::KernelException(exception, &backtrace[..cursor]));
+    // TODO: remove after implementing graceful kernel termination.
+    error!("Core1 uncaught exception");
     loop {}
 }
