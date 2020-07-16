@@ -5,7 +5,7 @@ all: ../build/firmware/armv7-none-eabihf/release/szl
 .PHONY: all
 
 
-../build/pl.rs: gateware/zc706.py
+../build/pl.rs: gateware/*
 	mkdir -p ../build
 	python gateware/zc706.py -r ../build/pl.rs -V $(VARIANT)
 
