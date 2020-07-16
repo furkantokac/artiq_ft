@@ -1,3 +1,5 @@
+# For NIST_QC2
+
 device_db = {
     "core": {
         "type": "local",
@@ -11,6 +13,7 @@ device_db = {
         }
     },
 
+    # led? are common to all variants
     "led0": {
         "type": "local",
         "module": "artiq.coredevice.ttl",
@@ -36,3 +39,11 @@ device_db = {
         "arguments": {"channel": 3}
     },
 }
+
+for i in range(40):
+    device_db["ttl" + str(i)] = {
+        "type": "local",
+        "module": "artiq.coredevice.ttl",
+        "class": "TTLInOut",
+        "arguments": {"channel": 3+i}
+    }
