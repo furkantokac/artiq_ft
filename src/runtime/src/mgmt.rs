@@ -33,6 +33,7 @@ async fn get_logger_buffer() -> LogBufferRef<'static> {
 
 async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>) -> Result<(), Error> {
     Request::read_magic(stream).await?;
+    info!("received connection");
 
     loop {
         let req = Request::read_from(stream).await;
