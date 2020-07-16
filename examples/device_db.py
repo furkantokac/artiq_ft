@@ -40,6 +40,7 @@ device_db = {
     },
 }
 
+# TTLs on QC2 backplane
 for i in range(40):
     device_db["ttl" + str(i)] = {
         "type": "local",
@@ -47,3 +48,11 @@ for i in range(40):
         "class": "TTLInOut",
         "arguments": {"channel": 4+i}
     }
+
+# for ARTIQ test suite
+device_db.update(
+    loop_out="ttl0",
+    loop_in="ttl1",
+    ttl_out="ttl2",
+    ttl_out_serdes="ttl2",
+)
