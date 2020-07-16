@@ -3,6 +3,7 @@
 import argparse
 
 from migen import *
+from migen.build.generic_platform import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import MultiReg
 from migen_axi.integration.soc_core import SoCCore
@@ -115,6 +116,16 @@ class Simple(ZC706):
         self.add_rtio(rtio_channels)
 
 
+# The NIST backplanes require setting VADJ to 3.3V by reprogramming the power supply.
+# This also changes the I/O standard for some on-board LEDs.
+leds_fmc33 = [
+    ("user_led_33", 0, Pins("Y21"), IOStandard("LVCMOS33")),
+    ("user_led_33", 1, Pins("G2"), IOStandard("LVCMOS15")),
+    ("user_led_33", 2, Pins("W21"), IOStandard("LVCMOS33")),
+    ("user_led_33", 3, Pins("A17"), IOStandard("LVCMOS15")),
+]
+
+
 class NIST_CLOCK(ZC706):
     """
     NIST clock hardware, with old backplane and 11 DDS channels
@@ -124,11 +135,12 @@ class NIST_CLOCK(ZC706):
 
         platform = self.platform
         platform.add_extension(nist_clock.fmc_adapter_io)
+        platform.add_extension(leds_fmc33)
 
         rtio_channels = []
 
         for i in range(4):
-            phy = ttl_simple.Output(platform.request("user_led", i))
+            phy = ttl_simple.Output(platform.request("user_led_33", i))
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy))
 
@@ -174,11 +186,12 @@ class NIST_QC2(ZC706):
 
         platform = self.platform
         platform.add_extension(nist_qc2.fmc_adapter_io)
+        platform.add_extension(leds_fmc33)
 
         rtio_channels = []
 
         for i in range(4):
-            phy = ttl_simple.Output(platform.request("user_led", i))
+            phy = ttl_simple.Output(platform.request("user_led_33", i))
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy))
 
