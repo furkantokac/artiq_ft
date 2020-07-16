@@ -75,7 +75,6 @@ async fn handle_connection(stream: &mut TcpStream) -> Result<(), Error> {
         dds_onehot_sel: true  // kept for backward compatibility of analyzer dumps
     };
     debug!("{:?}", header);
-    debug!("{:?}", &data[..256]);
 
     write_header(stream, &header).await?;
     if wraparound {
