@@ -19,7 +19,7 @@ class AXIDMAWriter(Module, AutoCSR):
         # All numbers in bytes
         self.base_address = CSRStorage(aw, alignment_bits=alignment_bits)
         self.last_address = CSRStorage(aw, alignment_bits=alignment_bits)
-        self.byte_count = CSRStatus(64)  # only read when shut down
+        self.byte_count = CSRStatus(32)  # only read when shut down
 
         self.make_request = Signal()
         self.sink = stream.Endpoint([("data", dw)])
@@ -71,7 +71,7 @@ class AXIDMAWriter(Module, AutoCSR):
             )
         ]
 
-        message_count = Signal(64 - log2_int(message_len//8))
+        message_count = Signal(32 - log2_int(message_len//8))
         self.comb += self.byte_count.status.eq(
             message_count << log2_int(message_len//8))
         self.sync += [
