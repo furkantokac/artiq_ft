@@ -109,8 +109,7 @@ class Simple(ZC706):
 
         rtio_channels = []
         for i in range(4):
-            pad = platform.request("user_led", i)
-            phy = ttl_simple.Output(pad)
+            phy = ttl_simple.Output(platform.request("user_led", i))
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy))
         self.add_rtio(rtio_channels)
@@ -127,6 +126,12 @@ class NIST_CLOCK(ZC706):
         platform.add_extension(nist_clock.fmc_adapter_io)
 
         rtio_channels = []
+
+        for i in range(4):
+            phy = ttl_simple.Output(platform.request("user_led", i))
+            self.submodules += phy
+            rtio_channels.append(rtio.Channel.from_phy(phy))
+
         for i in range(16):
             if i % 4 == 3:
                 phy = ttl_serdes_7series.InOut_8X(platform.request("ttl", i))
@@ -141,10 +146,6 @@ class NIST_CLOCK(ZC706):
             phy = ttl_serdes_7series.InOut_8X(platform.request("pmt", i))
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=512))
-
-        phy = ttl_simple.Output(platform.request("user_led", 1))
-        self.submodules += phy
-        rtio_channels.append(rtio.Channel.from_phy(phy))
 
         phy = ttl_simple.ClockGen(platform.request("la32_p"))
         self.submodules += phy
@@ -175,7 +176,11 @@ class NIST_QC2(ZC706):
         platform.add_extension(nist_qc2.fmc_adapter_io)
 
         rtio_channels = []
-        clock_generators = []
+
+        for i in range(4):
+            phy = ttl_simple.Output(platform.request("user_led", i))
+            self.submodules += phy
+            rtio_channels.append(rtio.Channel.from_phy(phy))
 
         # All TTL channels are In+Out capable
         for i in range(40):
@@ -188,14 +193,7 @@ class NIST_QC2(ZC706):
             phy = ttl_simple.ClockGen(
                 platform.request("clkout", i))
             self.submodules += phy
-            clock_generators.append(rtio.Channel.from_phy(phy))
-
-        phy = ttl_simple.Output(platform.request("user_led", 1))
-        self.submodules += phy
-        rtio_channels.append(rtio.Channel.from_phy(phy))
-
-        # add clock generators after TTLs
-        rtio_channels += clock_generators
+            rtio_channels.append(rtio.Channel.from_phy(phy))
 
         for i in range(4):
             phy = spi2.SPIMaster(self.platform.request("spi", i))
