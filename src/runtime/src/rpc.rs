@@ -13,6 +13,18 @@ use crate::proto_core_io::ProtoWrite;
 use crate::proto_async;
 use self::tag::{Tag, TagIterator, split_tag};
 
+unsafe fn align_ptr<T>(ptr: *const ()) -> *const T {
+    let alignment = core::mem::align_of::<T>() as isize;
+    let fix = (alignment - (ptr as isize) % alignment) % alignment;
+    ((ptr as isize) + fix) as *const T
+}
+
+unsafe fn align_ptr_mut<T>(ptr: *mut ()) -> *mut T {
+    let alignment = core::mem::align_of::<T>() as isize;
+    let fix = (alignment - (ptr as isize) % alignment) % alignment;
+    ((ptr as isize) + fix) as *mut T
+}
+
 #[async_recursion(?Send)]
 async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, data: &mut *mut (),
                               alloc: &(impl Fn(usize) -> F + 'async_recursion))
@@ -21,7 +33,7 @@ async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, da
 {
     macro_rules! consume_value {
         ($ty:ty, |$ptr:ident| $map:expr) => ({
-            let $ptr = (*data) as *mut $ty;
+            let $ptr = align_ptr_mut::<$ty>(*data);
             *data = $ptr.offset(1) as *mut ();
             $map
         })
@@ -108,7 +120,7 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
 {
     macro_rules! consume_value {
         ($ty:ty, |$ptr:ident| $map:expr) => ({
-            let $ptr = (*data) as *const $ty;
+            let $ptr = align_ptr::<$ty>(*data);
             *data = $ptr.offset(1) as *const ();
             $map
         })
@@ -142,6 +154,7 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
             Ok(())
         }
         Tag::List(it) | Tag::Array(it) => {
+            #[repr(C)]
             struct List { elements: *const (), length: u32 };
             consume_value!(List, |ptr| {
                 writer.write_u32((*ptr).length)?;
