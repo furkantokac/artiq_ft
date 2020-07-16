@@ -98,7 +98,7 @@ pub fn start() {
                 .await
                 .map_err(|e| warn!("connection terminated: {:?}", e));
             let _ = stream.flush().await;
-            let _ = stream.abort().await;
+            let _ = stream.close().await;
         }
     });
 }
