@@ -6,6 +6,8 @@ from migen_axi.interconnect import axi
 
 from artiq.gateware.rtio.dma import RawSlicer, RecordConverter, RecordSlicer, TimeOffset, CRIMaster
 
+import endianness
+
 
 AXI_BURST_LEN = 16
 
@@ -50,7 +52,7 @@ class AXIReader(Module):
         self.comb += [
             self.source.stb.eq(membus.r.valid),
             membus.r.ready.eq(self.source.ack),
-            self.source.data.eq(membus.r.data),
+            self.source.data.eq(endianness.convert_signal(membus.r.data)),
             # Note that when eop_pending=1, no new transactions are made and inflight_cnt is no longer incremented
             self.source.eop.eq(eop_pending & membus.r.last & (inflight_cnt == 1))
         ]

@@ -6,14 +6,7 @@ from migen_axi.interconnect import axi
 
 from artiq.gateware.rtio.analyzer import message_len, MessageEncoder
 
-
-def convert_endianness(signal):
-    assert len(signal) % 8 == 0
-    nbytes = len(signal)//8
-    signal_bytes = []
-    for i in range(nbytes):
-        signal_bytes.append(signal[8*i:8*(i+1)])
-    return Cat(*reversed(signal_bytes))
+import endianness
 
 
 class AXIDMAWriter(Module, AutoCSR):
@@ -64,7 +57,7 @@ class AXIDMAWriter(Module, AutoCSR):
             membus.w.id.eq(0),
             membus.w.valid.eq(self.sink.stb),
             self.sink.ack.eq(membus.w.ready),
-            membus.w.data.eq(convert_endianness(self.sink.data)),
+            membus.w.data.eq(endianness.convert_signal(self.sink.data)),
             membus.w.strb.eq(2**(dw//8)-1),
         ]
         beat_count = Signal(max=burst_length)

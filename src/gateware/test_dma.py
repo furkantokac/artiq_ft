@@ -10,6 +10,7 @@ from artiq.gateware import rtio
 from artiq.gateware.rtio import cri
 from artiq.gateware.rtio.phy import ttl_simple
 
+import endianness
 import dma
 
 
@@ -47,6 +48,7 @@ class AXIMemorySim:
                         data = self.data[addr]
                     else:
                         data = 0
+                    data = endianness.convert_value(data, len(self.bus.r.data))
                     yield from self.bus.write_r(request.id, data, last=i == request_len-1)
             else:
                 yield
