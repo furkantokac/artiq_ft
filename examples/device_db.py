@@ -45,5 +45,5 @@ for i in range(40):
         "type": "local",
         "module": "artiq.coredevice.ttl",
         "class": "TTLInOut",
-        "arguments": {"channel": 3+i}
+        "arguments": {"channel": 4+i}
     }
