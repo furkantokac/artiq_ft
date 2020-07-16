@@ -28,6 +28,7 @@ use crate::kernel;
 use crate::rpc;
 use crate::moninj;
 use crate::mgmt;
+use crate::analyzer;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -331,6 +332,10 @@ pub fn main(timer: GlobalTimer, cfg: &config::Config) {
 
     Sockets::init(32);
 
+    mgmt::start();
+    analyzer::start();
+    moninj::start(timer);
+
     let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start()));
     if let Ok(buffer) = cfg.read("startup") {
         info!("Loading startup kernel...");
@@ -356,9 +361,6 @@ pub fn main(timer: GlobalTimer, cfg: &config::Config) {
             });
         }
     });
-
-    mgmt::start();
-    moninj::start(timer);
 
     Sockets::run(&mut iface, || {
         Instant::from_millis(timer.get_time().0 as i32)

@@ -35,6 +35,7 @@ mod eh_artiq;
 mod panic;
 mod logger;
 mod mgmt;
+mod analyzer;
 
 fn init_gateware() {
     // Set up PS->PL clocks
