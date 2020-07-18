@@ -36,6 +36,8 @@ nix-channel --add https://nixbld.m-labs.hk/channel/custom/artiq/fast-beta/artiq-
 nix-channel --update
 ```
 
+Note: if you are using Nix channels the first time, you need to be aware of this bug: https://github.com/NixOS/nix/issues/3831
+
 Pure build with Nix and execution on a remote JTAG server:
 
 ```shell
