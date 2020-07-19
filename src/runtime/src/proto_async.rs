@@ -1,4 +1,3 @@
-use core::task::Poll;
 use core::cmp::min;
 use core::cell::RefCell;
 
@@ -22,14 +21,14 @@ pub async fn expect(stream: &TcpStream, pattern: &[u8]) -> Result<bool> {
                     consumed += 1;
                     if *b == pattern[cur_index] {
                         if cur_index + 1 == pattern.len() {
-                            return Poll::Ready((consumed, RecvState::Completed(true)));
+                            return (consumed, RecvState::Completed(true));
                         }
                     } else {
-                        return Poll::Ready((consumed, RecvState::Completed(false)));
+                        return (consumed, RecvState::Completed(false));
                     }
                     cur_index += 1;
                 }
-                Poll::Ready((consumed, RecvState::NeedsMore(cur_index, true)))
+                (consumed, RecvState::NeedsMore(cur_index, true))
             } else {
                 unreachable!();
             }
@@ -42,13 +41,13 @@ pub async fn expect(stream: &TcpStream, pattern: &[u8]) -> Result<bool> {
 
 pub async fn read_bool(stream: &TcpStream) -> Result<bool> {
     Ok(stream.recv(|buf| {
-        Poll::Ready((1, buf[0] != 0))
+        (1, buf[0] != 0)
     }).await?)
 }
 
 pub async fn read_i8(stream: &TcpStream) -> Result<i8> {
     Ok(stream.recv(|buf| {
-        Poll::Ready((1, buf[0] as i8))
+        (1, buf[0] as i8)
     }).await?)
 }
 
@@ -64,10 +63,10 @@ pub async fn read_i32(stream: &TcpStream) -> Result<i32> {
                     cur_value <<= 8;
                     cur_value |= *b as i32;
                     if cur_index == 4 {
-                        return Poll::Ready((consumed, RecvState::Completed(cur_value)));
+                        return (consumed, RecvState::Completed(cur_value));
                     }
                 }
-                Poll::Ready((consumed, RecvState::NeedsMore(cur_index, cur_value)))
+                (consumed, RecvState::NeedsMore(cur_index, cur_value))
             } else {
                 unreachable!();
             }
@@ -90,10 +89,10 @@ pub async fn read_i64(stream: &TcpStream) -> Result<i64> {
                     cur_value <<= 8;
                     cur_value |= *b as i64;
                     if cur_index == 8 {
-                        return Poll::Ready((consumed, RecvState::Completed(cur_value)));
+                        return (consumed, RecvState::Completed(cur_value));
                     }
                 }
-                Poll::Ready((consumed, RecvState::NeedsMore(cur_index, cur_value)))
+                (consumed, RecvState::NeedsMore(cur_index, cur_value))
             } else {
                 unreachable!();
             }
@@ -113,7 +112,7 @@ pub async fn read_chunk(stream: &TcpStream, destination: &mut [u8]) -> Result<()
             let mut destination = destination.borrow_mut();
             let count = min(total - done, buf.len());
             destination[done..done + count].copy_from_slice(&buf[..count]);
-            Poll::Ready((count, count))
+            (count, count)
         }).await?;
         done += count;
     }
