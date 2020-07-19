@@ -113,6 +113,10 @@ class Simple(ZC706):
             phy = ttl_simple.Output(platform.request("user_led", i))
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy))
+
+        self.config["RTIO_LOG_CHANNEL"] = len(rtio_channels)
+        rtio_channels.append(rtio.LogChannel())
+
         self.add_rtio(rtio_channels)
 
 
@@ -173,6 +177,9 @@ class NIST_CLOCK(ZC706):
         self.submodules += phy
         rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=4))
 
+        self.config["RTIO_LOG_CHANNEL"] = len(rtio_channels)
+        rtio_channels.append(rtio.LogChannel())
+
         self.add_rtio(rtio_channels)
 
 
@@ -219,6 +226,9 @@ class NIST_QC2(ZC706):
                 platform.request("dds", backplane_offset), 12, onehot=True)
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=4))
+
+        self.config["RTIO_LOG_CHANNEL"] = len(rtio_channels)
+        rtio_channels.append(rtio.LogChannel())
 
         self.add_rtio(rtio_channels)
 
