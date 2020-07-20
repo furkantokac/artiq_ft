@@ -1,6 +1,6 @@
 use core::fmt;
 use alloc::collections::BTreeMap;
-use log::{debug, warn};
+use log::{debug, info, warn};
 use void::Void;
 
 use libboard_zynq::{smoltcp, timer::GlobalTimer, time::Milliseconds};
@@ -180,9 +180,13 @@ pub fn start(timer: GlobalTimer) {
         loop {
             let stream = TcpStream::accept(1383, 2048, 2048).await.unwrap();
             task::spawn(async move {
-                let _ = handle_connection(&stream, timer)
-                    .await
-                    .map_err(|e| warn!("connection terminated: {}", e));
+                info!("received connection");
+                let result = handle_connection(&stream, timer).await;
+                match result {
+                    Err(Error::NetworkError(smoltcp::Error::Illegal)) => info!("peer closed connection"),
+                    Err(error) => warn!("connection terminated: {}", error),
+                    _ => (),
+                }
                 let _ = stream.flush().await;
                 let _ = stream.abort().await;
             });
