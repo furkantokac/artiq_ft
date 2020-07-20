@@ -44,7 +44,7 @@ fn disarm() {
 struct Header {
     sent_bytes: u32,
     total_byte_count: u64,
-    overflow_occurred: bool,
+    error_occurred: bool,
     log_channel: u8,
     dds_onehot_sel: bool
 }
@@ -52,7 +52,7 @@ struct Header {
 async fn write_header(stream: &mut TcpStream, header: &Header) -> Result<(), Error> {
     write_i32(stream, header.sent_bytes as i32).await?;
     write_i64(stream, header.total_byte_count as i64).await?;
-    write_i8(stream, header.overflow_occurred as i8).await?;
+    write_i8(stream, header.error_occurred as i8).await?;
     write_i8(stream, header.log_channel as i8).await?;
     write_i8(stream, header.dds_onehot_sel as i8).await?;
     Ok(())
@@ -63,14 +63,22 @@ async fn handle_connection(stream: &mut TcpStream) -> Result<(), Error> {
 
     let data = unsafe { &BUFFER.data[..] };
     let overflow_occurred = unsafe { pl::csr::rtio_analyzer::message_encoder_overflow_read() != 0 };
+    let bus_error_occurred = unsafe { pl::csr::rtio_analyzer::dma_bus_error_read() != 0 };
     let total_byte_count = unsafe { pl::csr::rtio_analyzer::dma_byte_count_read() as u64 };
     let pointer = (total_byte_count % BUFFER_SIZE as u64) as usize;
     let wraparound = total_byte_count >= BUFFER_SIZE as u64;
 
+    if overflow_occurred {
+        warn!("overflow occured");
+    }
+    if bus_error_occurred {
+        warn!("bus error occured");
+    }
+
     let header = Header {
         total_byte_count: total_byte_count,
         sent_bytes: if wraparound { BUFFER_SIZE as u32 } else { total_byte_count as u32 },
-        overflow_occurred: overflow_occurred,
+        error_occurred: overflow_occurred | bus_error_occurred,
         log_channel: pl::csr::CONFIG_RTIO_LOG_CHANNEL as u8,
         dds_onehot_sel: true  // kept for backward compatibility of analyzer dumps
     };

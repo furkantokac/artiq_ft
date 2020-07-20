@@ -22,6 +22,7 @@ class AXIDMAWriter(Module, AutoCSR):
         self.base_address = CSRStorage(aw, alignment_bits=alignment_bits)
         self.last_address = CSRStorage(aw, alignment_bits=alignment_bits)
         self.byte_count = CSRStatus(32)  # only read when shut down
+        self.bus_error = CSRStatus()
 
         self.make_request = Signal()
         self.sink = stream.Endpoint([("data", dw)])
@@ -82,6 +83,11 @@ class AXIDMAWriter(Module, AutoCSR):
         ]
 
         self.comb += membus.b.ready.eq(1)
+        self.sync += [
+            If(self.reset.re, self.bus_error.status.eq(0)),
+            If(membus.b.valid & membus.b.ready & (membus.b.resp != axi.Response.okay),
+                self.bus_error.status.eq(1))
+        ]
 
 
 class Analyzer(Module, AutoCSR):
