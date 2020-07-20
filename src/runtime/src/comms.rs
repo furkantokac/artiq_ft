@@ -263,7 +263,9 @@ async fn load_kernel(buffer: Vec<u8>, control: &Rc<RefCell<kernel::Control>>, st
 }
 
 async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Control>>) -> Result<()> {
-    expect(stream, b"ARTIQ coredev\n").await?;
+    if !expect(stream, b"ARTIQ coredev\n").await? {
+        return Err(Error::UnexpectedPattern);
+    }
     info!("received connection");
     loop {
         let request = read_request(stream, true).await?;
