@@ -266,7 +266,6 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
     if !expect(stream, b"ARTIQ coredev\n").await? {
         return Err(Error::UnexpectedPattern);
     }
-    info!("received connection");
     loop {
         let request = read_request(stream, true).await?;
         if request.is_none() {
@@ -355,6 +354,7 @@ pub fn main(timer: GlobalTimer, cfg: &config::Config) {
             let stream = TcpStream::accept(1381, 2048, 2048).await.unwrap();
             let control = control.clone();
             task::spawn(async {
+                info!("received connection");
                 let _ = handle_connection(&stream, control)
                     .await
                     .map_err(|e| warn!("connection terminated: {}", e));

@@ -33,7 +33,6 @@ async fn get_logger_buffer() -> LogBufferRef<'static> {
 
 async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>) -> Result<(), Error> {
     Request::read_magic(stream).await?;
-    info!("received connection");
 
     loop {
         let req = Request::read_from(stream).await;
@@ -104,6 +103,7 @@ pub fn start() {
             let mut stream = TcpStream::accept(1380, 2048, 2048).await.unwrap();
             let pull_id = pull_id.clone();
             task::spawn(async move {
+                info!("received connection");
                 let _ = handle_connection(&mut stream, pull_id)
                     .await
                     .map_err(|e| warn!("connection terminated: {:?}", e));
