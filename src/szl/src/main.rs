@@ -13,7 +13,8 @@ use libcortex_a9::{
     asm::{dsb, isb},
 };
 use libboard_zynq::{
-    self as zynq, clocks::Clocks, clocks::source::{ClockSource, ArmPll, IoPll},
+    self as zynq, println,
+    clocks::Clocks, clocks::source::{ClockSource, ArmPll, IoPll},
     logger,
     timer::GlobalTimer,
 };
@@ -35,6 +36,16 @@ pub fn main_core0() {
     GlobalTimer::start();
     logger::init().unwrap();
     log::set_max_level(log::LevelFilter::Debug);
+    println!(r#"
+
+                     __________   __
+                    / ___/__  /  / /
+                    \__ \  / /  / /
+                   ___/ / / /__/ /___
+                  /____/ /____/_____/
+
+                   (C) 2020 M-Labs
+"#);
     info!("Simple Zynq Loader starting...");
 
     enable_fpu();
