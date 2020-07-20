@@ -61,3 +61,21 @@ Notes:
 - This is known to work with Nixpkgs 20.03 and the ``nixbld.m-labs.hk`` binary substituter can also be used here (see the ARTIQ manual for the public key and instructions).
 - The impure build process is also compatible with non-Nix systems.
 - If the board is connected to the local machine, use the ``local_run.sh`` script.
+
+License
+-------
+
+Copyright (C) 2019-2020 M-Labs Limited.
+
+ARTIQ is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+ARTIQ is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with ARTIQ.  If not, see <http://www.gnu.org/licenses/>.
