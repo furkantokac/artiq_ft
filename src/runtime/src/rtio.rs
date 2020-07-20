@@ -1,5 +1,9 @@
-use core::ptr::{read_volatile, write_volatile};
+use core::ptr::{self, read_volatile, write_volatile};
+use core::ffi::VaList;
+use alloc::vec;
 use cslice::CSlice;
+use libc::{c_char, c_int, size_t};
+
 use crate::artiq_raise;
 
 use crate::pl::csr;
@@ -197,4 +201,35 @@ pub extern fn input_timestamped_data(timeout: i64, channel: i32) -> TimestampedD
             data: rtio_i_data_read(0) as i32
         }
     }
+}
+
+extern "C" {
+    fn vsnprintf_(buffer: *mut c_char, count: size_t, format: *const c_char, va: VaList) -> c_int;
+}
+
+fn write_rtio_log(data: &[i8]) {
+    unsafe {
+        csr::rtio::target_write(csr::CONFIG_RTIO_LOG_CHANNEL << 8);
+
+        let mut word: u32 = 0;
+        for i in 0..data.len() {
+            word <<= 8;
+            word |= data[i] as u32;
+            if i % 4 == 3 {
+                rtio_o_data_write(0, word);
+                word = 0;
+            }
+        }
+
+        if word != 0 {
+            rtio_o_data_write(0, word);
+        }
+    }
+}
+
+pub unsafe extern fn log(fmt: *const c_char, mut args: ...) {
+    let size = vsnprintf_(ptr::null_mut(), 0, fmt, args.as_va_list()) as usize;
+    let mut buf = vec![0; size + 1];
+    vsnprintf_(buf.as_mut_ptr(), size + 1, fmt, args.as_va_list());
+    write_rtio_log(buf.as_slice());
 }

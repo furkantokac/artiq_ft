@@ -37,6 +37,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(rtio_input_timestamp = rtio::input_timestamp),
         api!(rtio_input_data = rtio::input_data),
         api!(rtio_input_timestamped_data = rtio::input_timestamped_data),
+        api!(rtio_log = rtio::log),
 
         // Double-precision floating-point arithmetic helper functions
         // RTABI chapter 4.1.2, Table 2

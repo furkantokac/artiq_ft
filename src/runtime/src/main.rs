@@ -3,6 +3,7 @@
 #![recursion_limit="1024"]  // for futures_util::select!
 #![feature(alloc_error_handler)]
 #![feature(panic_info_message)]
+#![feature(c_variadic)]
 
 extern crate alloc;
 

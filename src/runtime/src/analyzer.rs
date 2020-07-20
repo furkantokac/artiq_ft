@@ -71,7 +71,7 @@ async fn handle_connection(stream: &mut TcpStream) -> Result<(), Error> {
         total_byte_count: total_byte_count,
         sent_bytes: if wraparound { BUFFER_SIZE as u32 } else { total_byte_count as u32 },
         overflow_occurred: overflow_occurred,
-        log_channel: 255,
+        log_channel: pl::csr::CONFIG_RTIO_LOG_CHANNEL as u8,
         dds_onehot_sel: true  // kept for backward compatibility of analyzer dumps
     };
     debug!("{:?}", header);
