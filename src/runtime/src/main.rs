@@ -23,7 +23,6 @@ mod config;
 mod net_settings;
 mod proto_core_io;
 mod proto_async;
-mod proto_mgmt;
 mod comms;
 mod rpc;
 #[path = "../../../build/pl.rs"]
