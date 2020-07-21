@@ -96,6 +96,7 @@ dependencies = [
 name = "dyld"
 version = "0.1.0"
 dependencies = [
+ "libcortex_a9",
  "log",
 ]
 

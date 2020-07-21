@@ -3,6 +3,7 @@ use libm;
 use crate::eh_artiq;
 use crate::rtio;
 use super::rpc::{rpc_send, rpc_send_async, rpc_recv};
+use super::dma;
 
 macro_rules! api {
     ($i:ident) => ({
@@ -49,6 +50,13 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(rtio_input_data = rtio::input_data),
         api!(rtio_input_timestamped_data = rtio::input_timestamped_data),
         api!(rtio_log = rtio::log),
+
+        // rtio dma
+        api!(dma_record_start = dma::dma_record_start),
+        api!(dma_record_stop = dma::dma_record_stop),
+        api!(dma_erase = dma::dma_erase),
+        api!(dma_retrieve = dma::dma_retrieve),
+        api!(dma_playback = dma::dma_playback),
 
         // Double-precision floating-point arithmetic helper functions
         // RTABI chapter 4.1.2, Table 2

@@ -16,8 +16,10 @@ use crate::eh_artiq;
 use super::{
     api::resolve,
     rpc::rpc_send_async,
+    dma::init_dma,
     CHANNEL_0TO1, CHANNEL_1TO0,
     KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0,
+    KERNEL_LIBRARY,
     Message,
 };
 
@@ -93,6 +95,10 @@ impl KernelImage {
         })
     }
 
+    pub fn get_library_ptr(&mut self) -> *mut Library {
+        &mut self.library as *mut Library
+    }
+
     pub unsafe fn exec(&mut self) {
         // Flush data cache entries for the image in DDR, including
         // Memory/Instruction Synchronization Barriers
@@ -118,6 +124,9 @@ pub fn main_core1() {
     enable_fpu();
     debug!("FPU enabled on Core1");
 
+    init_dma();
+    debug!("Init DMA!");
+
     let mut core1_tx = None;
     while core1_tx.is_none() {
         core1_tx = CHANNEL_1TO0.lock().take();
@@ -139,9 +148,10 @@ pub fn main_core1() {
                 let result = dyld::load(&data, &resolve)
                     .and_then(KernelImage::new);
                 match result {
-                    Ok(kernel) => {
+                    Ok(mut kernel) => {
                         unsafe {
                             KERNEL_LOAD_ADDR = kernel.library.image.as_ptr() as usize;
+                            KERNEL_LIBRARY = kernel.get_library_ptr();
                         }
                         loaded_kernel = Some(kernel);
                         debug!("kernel loaded");

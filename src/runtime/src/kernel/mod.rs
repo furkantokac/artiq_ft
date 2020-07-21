@@ -1,6 +1,7 @@
 use core::ptr;
 use alloc::{vec::Vec, sync::Arc, string::String};
 
+use dyld::Library;
 use libcortex_a9::{mutex::Mutex, sync_channel};
 use crate::eh_artiq;
 
@@ -9,6 +10,7 @@ pub use control::Control;
 pub mod core1;
 mod api;
 mod rpc;
+mod dma;
 
 #[derive(Debug)]
 pub struct RPCException {
@@ -39,3 +41,5 @@ static CHANNEL_1TO0: Mutex<Option<sync_channel::Sender<Message>>> = Mutex::new(N
 
 static mut KERNEL_CHANNEL_0TO1: *mut () = ptr::null_mut();
 static mut KERNEL_CHANNEL_1TO0: *mut () = ptr::null_mut();
+static mut KERNEL_LIBRARY: *mut Library = ptr::null_mut();
+

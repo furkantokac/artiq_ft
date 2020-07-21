@@ -8,3 +8,5 @@ name = "dyld"
 
 [dependencies]
 log = "0.4"
+libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
+

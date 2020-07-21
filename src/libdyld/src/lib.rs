@@ -2,6 +2,7 @@
 
 extern crate alloc;
 extern crate log;
+extern crate libcortex_a9;
 
 use core::{convert, fmt, str};
 use alloc::string::String;

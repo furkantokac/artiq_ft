@@ -12,7 +12,11 @@ device_db = {
             "target": "cortexa9"
         }
     },
-
+    "core_dma": {
+        "type": "local",
+        "module": "artiq.coredevice.dma",
+        "class": "CoreDMA"
+    },
     # led? are common to all variants
     "led0": {
         "type": "local",

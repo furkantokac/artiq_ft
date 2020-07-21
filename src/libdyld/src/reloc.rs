@@ -7,6 +7,10 @@ use super::{
     image::Image,
     Library,
 };
+use libcortex_a9::{
+    cache::{dcci_slice, iciallu, bpiall},
+    asm::{dsb, isb},
+};
 
 pub trait Relocatable {
     fn offset(&self) -> usize;
@@ -154,6 +158,13 @@ pub fn rebind(
             _ => {}
         }
     }
+    // FIXME: the cache maintainance operations may be more than enough,
+    // may cause performance degradation.
+    dcci_slice(lib.image.data);
+    iciallu();
+    bpiall();
+    dsb();
+    isb();
 
     Ok(())
 }
