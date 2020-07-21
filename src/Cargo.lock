@@ -243,6 +243,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "libm"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7d73b3f436185384286bd8098d17ec07c9a7d2388a6599f824d8502b529702a"
+
+[[package]]
 name = "libregister"
 version = "0.0.0"
 source = "git+https://git.m-labs.hk/M-Labs/zc706.git#84f1380f4830055bfe69ca14b5ade527a5edef6b"
@@ -412,6 +418,7 @@ dependencies = [
  "libboard_zynq",
  "libc",
  "libcortex_a9",
+ "libm",
  "libregister",
  "libsupport_zynq",
  "log",

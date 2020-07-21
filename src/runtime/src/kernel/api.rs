@@ -1,3 +1,5 @@
+use libm;
+
 use crate::eh_artiq;
 use crate::rtio;
 use super::rpc::{rpc_send, rpc_send_async, rpc_recv};
@@ -14,6 +16,15 @@ macro_rules! api {
     ($i:ident = $e:expr) => {
         (stringify!($i), $e as *const ())
     }
+}
+
+macro_rules! api_libm_f64f64 {
+    ($i:ident) => ({
+        extern fn $i(x: f64) -> f64 {
+            libm::$i(x)
+        }
+        api!($i = $i)
+    })
 }
 
 pub fn resolve(required: &[u8]) -> Option<u32> {
@@ -117,14 +128,32 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__aeabi_memclr8),
         api!(__aeabi_memclr4),
         api!(__aeabi_memclr),
+
         // libc
         api!(memcmp, extern { fn memcmp(a: *const u8, b: *mut u8, size: usize); }),
+
         // exceptions
         api!(_Unwind_Resume = unwind::_Unwind_Resume),
         api!(__artiq_personality = eh_artiq::artiq_personality),
         api!(__artiq_raise = eh_artiq::raise),
         api!(__artiq_reraise = eh_artiq::reraise),
 
+        // libm
+        api_libm_f64f64!(log),
+        api_libm_f64f64!(log10),
+        api_libm_f64f64!(exp),
+        {
+            extern fn pow(x: f64, y: f64) -> f64 {
+                libm::pow(x, y)
+            }
+            api!(pow = pow)
+        },
+        api_libm_f64f64!(sin),
+        api_libm_f64f64!(cos),
+        api_libm_f64f64!(tan),
+        api_libm_f64f64!(asin),
+        api_libm_f64f64!(acos),
+        api_libm_f64f64!(atan),
     ];
     api.iter()
        .find(|&&(exported, _)| exported.as_bytes() == required)
