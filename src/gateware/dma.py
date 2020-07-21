@@ -12,13 +12,15 @@ import endianness
 AXI_BURST_LEN = 16
 
 
-class AXIReader(Module):
+class AXIReader(Module, AutoCSR):
     def __init__(self, membus):
         aw = len(membus.ar.addr)
         dw = len(membus.r.data)
         alignment_bits = log2_int(AXI_BURST_LEN*dw//8)
         self.sink = stream.Endpoint([("address", aw - alignment_bits)])
         self.source = stream.Endpoint([("data", dw)])
+
+        self.bus_error = CSRStatus()
 
         # # #
 
@@ -55,6 +57,17 @@ class AXIReader(Module):
             self.source.data.eq(endianness.convert_signal(membus.r.data)),
             # Note that when eop_pending=1, no new transactions are made and inflight_cnt is no longer incremented
             self.source.eop.eq(eop_pending & membus.r.last & (inflight_cnt == 1))
+        ]
+
+        stopped = Signal(reset=1)
+        self.sync += [
+            If(self.source.stb & self.source.ack & self.source.eop, stopped.eq(1)),
+            If(self.sink.stb & self.sink.ack, stopped.eq(0)),
+            If(stopped & (self.sink.stb & self.sink.ack),
+                # reset bus error status on new run
+                self.bus_error.status.eq(0)),
+            If(membus.r.valid & membus.r.valid & (membus.r.resp != axi.Response.okay),
+                self.bus_error.status.eq(1))
         ]
 
 
