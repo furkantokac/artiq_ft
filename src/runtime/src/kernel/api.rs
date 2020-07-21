@@ -139,6 +139,15 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__artiq_reraise = eh_artiq::reraise),
 
         // libm
+        api_libm_f64f64!(sqrt),
+        api_libm_f64f64!(round),
+        api_libm_f64f64!(floor),
+        {
+            extern fn fmod(x: f64, y: f64) -> f64 {
+                libm::fmod(x, y)
+            }
+            api!(fmod = fmod)
+        },
         api_libm_f64f64!(log),
         api_libm_f64f64!(log10),
         api_libm_f64f64!(exp),
