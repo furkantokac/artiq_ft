@@ -90,7 +90,7 @@ impl Log for BufferLogger {
         if self.enabled(record.metadata()) {
             let timestamp = unsafe {
                 GlobalTimer::get()
-            }.get_us();
+            }.get_us().0;
             let seconds   = timestamp / 1_000_000;
             let micros    = timestamp % 1_000_000;
 

@@ -10,13 +10,13 @@ extern crate alloc;
 use core::{cmp, str};
 use log::{info, warn, error};
 
-use libboard_zynq::{timer::GlobalTimer, time::Milliseconds, devc, slcr};
+use libboard_zynq::{timer::GlobalTimer, devc, slcr};
 use libasync::{task, block_async};
 use libsupport_zynq::ram;
 use libregister::RegisterW;
 use nb;
 use void::Void;
-use embedded_hal::timer::CountDown;
+use embedded_hal::blocking::delay::DelayMs;
 
 mod sd_reader;
 mod config;
@@ -89,7 +89,7 @@ fn identifier_read(buf: &mut [u8]) -> &str {
     }
 }
 
-fn init_rtio(timer: GlobalTimer, cfg: &config::Config) {
+fn init_rtio(timer: &mut GlobalTimer, cfg: &config::Config) {
     let clock_sel =
         if let Ok(rtioclk) = cfg.read_str("rtioclk") {
             match rtioclk.as_ref() {
@@ -117,17 +117,13 @@ fn init_rtio(timer: GlobalTimer, cfg: &config::Config) {
         pl::csr::rtio_crg::clock_sel_write(clock_sel);
     }
 
-    let mut countdown = timer.countdown();
-    countdown.start(Milliseconds(2));
-    nb::block!(countdown.wait()).unwrap();
+    timer.delay_ms(2);
 
     unsafe {
         pl::csr::rtio_crg::pll_reset_write(0);
     }
 
-    let mut countdown = timer.countdown();
-    countdown.start(Milliseconds(2));
-    nb::block!(countdown.wait()).unwrap();
+    timer.delay_ms(2);
 
     let locked = unsafe { pl::csr::rtio_crg::pll_locked_read() != 0 };
     if !locked {
@@ -175,7 +171,7 @@ static mut LOG_BUFFER: [u8; 1<<17] = [0; 1<<17];
 
 #[no_mangle]
 pub fn main_core0() {
-    let timer = GlobalTimer::start();
+    let mut timer = GlobalTimer::start();
 
     let buffer_logger = unsafe {
         logger::BufferLogger::new(&mut LOG_BUFFER[..])
@@ -199,7 +195,7 @@ pub fn main_core0() {
         }
     };
 
-    init_rtio(timer, &cfg);
+    init_rtio(&mut timer, &cfg);
     task::spawn(report_async_rtio_errors());
 
     comms::main(timer, &cfg);
