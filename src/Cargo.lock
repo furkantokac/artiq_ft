@@ -111,9 +111,9 @@ dependencies = [
 
 [[package]]
 name = "fatfs"
-version = "0.3.3"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6d1df9e4503954f60504a5ee4fc435cd65cc42e98b2081f7f421be5f2e68e7d"
+checksum = "93079df23039e52059e1f03b4c29fb0c72da2c792aad91bb2236c9fb81d3592e"
 dependencies = [
  "bitflags",
  "byteorder",
@@ -200,7 +200,7 @@ dependencies = [
 [[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#84f1380f4830055bfe69ca14b5ade527a5edef6b"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#0aa75d3544a2092a0ba6ce689c3f025f22ec30e4"
 dependencies = [
  "embedded-hal",
  "libcortex_a9",
@@ -212,7 +212,7 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#84f1380f4830055bfe69ca14b5ade527a5edef6b"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#0aa75d3544a2092a0ba6ce689c3f025f22ec30e4"
 dependencies = [
  "bit_field",
  "embedded-hal",
@@ -236,7 +236,7 @@ dependencies = [
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#84f1380f4830055bfe69ca14b5ade527a5edef6b"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#0aa75d3544a2092a0ba6ce689c3f025f22ec30e4"
 dependencies = [
  "bit_field",
  "libregister",
@@ -251,7 +251,7 @@ checksum = "c7d73b3f436185384286bd8098d17ec07c9a7d2388a6599f824d8502b529702a"
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#84f1380f4830055bfe69ca14b5ade527a5edef6b"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#0aa75d3544a2092a0ba6ce689c3f025f22ec30e4"
 dependencies = [
  "bit_field",
  "vcell",
@@ -261,7 +261,7 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zc706.git#84f1380f4830055bfe69ca14b5ade527a5edef6b"
+source = "git+https://git.m-labs.hk/M-Labs/zc706.git#0aa75d3544a2092a0ba6ce689c3f025f22ec30e4"
 dependencies = [
  "compiler_builtins",
  "libboard_zynq",
@@ -379,9 +379,9 @@ checksum = "eba180dafb9038b050a4c280019bbedf9f2467b61e5d892dcad585bb57aadc5a"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.18"
+version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "beae6331a816b1f65d04c45b078fd8e6c93e8071771f41b8163255bbd8d7c8fa"
+checksum = "04f5f085b5d71e2188cb8271e5da0161ad52c3f227a661a3c135fdf28e258b12"
 dependencies = [
  "unicode-xid",
 ]
@@ -443,9 +443,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.34"
+version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "936cae2873c940d92e697597c5eee105fb570cd5689c695806f672883653349b"
+checksum = "fb7f4c519df8c117855e19dd8cc851e89eb746fe7a73f0157e0d95fdec5369b0"
 dependencies = [
  "proc-macro2",
  "quote",
