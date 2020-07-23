@@ -128,8 +128,15 @@ pub unsafe fn artiq_personality(state: uw::_Unwind_State,
     let exception = &exception_info.exception.unwrap();
     if search_phase {
         match eh_action {
-            EHAction::None |
-            EHAction::Cleanup(_) => return continue_unwind(exception_object, context),
+            EHAction::None => return continue_unwind(exception_object, context),
+            // Actually, cleanup should not return handler found, this is to workaround
+            // the issue of terminating directly when no catch cause is found while
+            // having some cleanup routines defined by finally.
+            // The best way to handle this is to force unwind the stack in the raise
+            // function when end of stack is reached, and call terminate at the end of
+            // the unwind. Unfortunately, there is no forced unwind function defined
+            // for EHABI, and I have no idea how to implement that, so this is a hack.
+            EHAction::Cleanup(_) => return uw::_URC_HANDLER_FOUND,
             EHAction::Catch(_) => {
                 // EHABI requires the personality routine to update the
                 // SP value in the barrier cache of the exception object.
@@ -195,10 +202,9 @@ static mut INFLIGHT: ExceptionInfo = ExceptionInfo {
 };
 
 pub unsafe extern fn raise(exception: *const Exception) -> ! {
-    // Zing! The Exception<'a> to Exception<'static> transmute is not really sound in case
-    // the exception is ever captured. Fortunately, they currently aren't, and we save
-    // on the hassle of having to allocate exceptions somewhere except on stack.
     trace!("Trying to raise exception");
+    // FIXME: unsound transmute
+    // This would cause stack memory corruption.
     INFLIGHT.exception = Some(mem::transmute::<Exception, Exception<'static>>(*exception));
     INFLIGHT.handled   = false;
 
@@ -219,9 +225,8 @@ pub unsafe extern fn raise(exception: *const Exception) -> ! {
 pub unsafe extern fn reraise() -> ! {
     use cslice::AsCSlice;
 
-    trace!("Re-raise");
-    // current implementation uses raise as _Unwind_Resume is not working now
-    // would debug that later.
+    // Reraise is basically cxa_rethrow, which calls _Unwind_Resume_or_Rethrow,
+    // which for EHABI would always call _Unwind_RaiseException.
     match INFLIGHT.exception {
         Some(ref exception) => raise(exception),
         None => raise(&Exception {

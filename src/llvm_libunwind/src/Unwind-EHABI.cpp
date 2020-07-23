@@ -551,6 +551,7 @@ static _Unwind_Reason_Code unwind_phase2(unw_context_t *uc, unw_cursor_t *cursor
                              static_cast<void *>(exception_object));
   int frame_count = 0;
 
+  unw_word_t prev_sp = 0x0;
   // Walk each frame until we reach where search phase said to stop.
   while (true) {
     // Ask libunwind to get next frame (skip over first which is
@@ -576,6 +577,10 @@ static _Unwind_Reason_Code unwind_phase2(unw_context_t *uc, unw_cursor_t *cursor
     unw_word_t sp;
     unw_proc_info_t frameInfo;
     __unw_get_reg(cursor, UNW_REG_SP, &sp);
+    if (sp == prev_sp) {
+        return _URC_END_OF_STACK;
+    }
+    prev_sp = sp;
     if (__unw_get_proc_info(cursor, &frameInfo) != UNW_ESUCCESS) {
       _LIBUNWIND_TRACE_UNWINDING(
           "unwind_phase2(ex_ojb=%p): __unw_get_proc_info "
