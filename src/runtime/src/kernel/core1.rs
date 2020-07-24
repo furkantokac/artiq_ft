@@ -1,6 +1,6 @@
 //! Kernel prologue/epilogue that runs on the 2nd CPU core
 
-use core::{mem, ptr};
+use core::{mem, ptr, cell::UnsafeCell};
 use alloc::borrow::ToOwned;
 use log::{debug, info, error};
 use cslice::CSlice;
@@ -9,7 +9,6 @@ use libcortex_a9::{
     enable_fpu,
     cache::{dcci_slice, iciallu, bpiall},
     asm::{dsb, isb},
-    sync_channel
 };
 use dyld::{self, Library};
 use crate::eh_artiq;
@@ -19,12 +18,9 @@ use super::{
     dma::init_dma,
     CHANNEL_0TO1, CHANNEL_1TO0,
     KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0,
-    KERNEL_LIBRARY,
+    KERNEL_IMAGE,
     Message,
 };
-
-/// will contain the kernel image address on the heap
-static mut KERNEL_LOAD_ADDR: usize = 0;
 
 unsafe fn attribute_writeback(typeinfo: *const ()) {
     struct Attr {
@@ -65,8 +61,8 @@ unsafe fn attribute_writeback(typeinfo: *const ()) {
     }
 }
 
-struct KernelImage {
-    library: Library,
+pub struct KernelImage {
+    library: UnsafeCell<Library>,
     __modinit__: u32,
     typeinfo: Option<u32>,
 }
@@ -89,21 +85,21 @@ impl KernelImage {
         }
 
         Ok(KernelImage {
-            library,
+            library: UnsafeCell::new(library),
             __modinit__,
             typeinfo,
         })
     }
 
-    pub fn get_library_ptr(&mut self) -> *mut Library {
-        &mut self.library as *mut Library
+    pub unsafe fn rebind(&self, name: &[u8], addr: *const ()) -> Result<(), dyld::Error> {
+        let library = self.library.get().as_mut().unwrap();
+        library.rebind(name, addr)
     }
 
-    pub unsafe fn exec(&mut self) {
+    pub unsafe fn exec(&self) {
         // Flush data cache entries for the image in DDR, including
         // Memory/Instruction Synchronization Barriers
-        dcci_slice(self.library.image.data);
-        dsb();
+        dcci_slice(self.library.get().as_ref().unwrap().image.data);
         iciallu();
         bpiall();
         dsb();
@@ -113,6 +109,12 @@ impl KernelImage {
 
         if let Some(typeinfo) = self.typeinfo {
             attribute_writeback(typeinfo as *const ());
+        }
+    }
+
+    pub fn get_load_addr(&self) -> usize {
+        unsafe {
+            self.library.get().as_ref().unwrap().image.as_ptr() as usize
         }
     }
 }
@@ -148,11 +150,7 @@ pub fn main_core1() {
                 let result = dyld::load(&data, &resolve)
                     .and_then(KernelImage::new);
                 match result {
-                    Ok(mut kernel) => {
-                        unsafe {
-                            KERNEL_LOAD_ADDR = kernel.library.image.as_ptr() as usize;
-                            KERNEL_LIBRARY = kernel.get_library_ptr();
-                        }
+                    Ok(kernel) => {
                         loaded_kernel = Some(kernel);
                         debug!("kernel loaded");
                         core1_tx.send(Message::LoadCompleted);
@@ -165,14 +163,16 @@ pub fn main_core1() {
             },
             Message::StartRequest => {
                 info!("kernel starting");
-                if let Some(mut kernel) = loaded_kernel.take() {
+                if let Some(kernel) = loaded_kernel.take() {
+                    core::mem::replace(&mut *KERNEL_CHANNEL_0TO1.lock(), Some(core1_rx));
+                    core::mem::replace(&mut *KERNEL_CHANNEL_1TO0.lock(), Some(core1_tx));
                     unsafe {
-                        KERNEL_CHANNEL_0TO1 = mem::transmute(&mut core1_rx);
-                        KERNEL_CHANNEL_1TO0 = mem::transmute(&mut core1_tx);
+                        KERNEL_IMAGE = &kernel as *const KernelImage;
                         kernel.exec();
-                        KERNEL_CHANNEL_0TO1 = ptr::null_mut();
-                        KERNEL_CHANNEL_1TO0 = ptr::null_mut();
+                        KERNEL_IMAGE = ptr::null();
                     }
+                    core1_rx = core::mem::replace(&mut *KERNEL_CHANNEL_0TO1.lock(), None).unwrap();
+                    core1_tx = core::mem::replace(&mut *KERNEL_CHANNEL_1TO0.lock(), None).unwrap();
                 }
                 info!("kernel finished");
                 core1_tx.send(Message::KernelFinished);
@@ -185,7 +185,7 @@ pub fn main_core1() {
 /// Called by eh_artiq
 pub fn terminate(exception: &'static eh_artiq::Exception<'static>, backtrace: &'static mut [usize]) -> ! {
     let load_addr = unsafe {
-        KERNEL_LOAD_ADDR
+        KERNEL_IMAGE.as_ref().unwrap().get_load_addr()
     };
     let mut cursor = 0;
     // The address in the backtrace is relocated, so we have to convert it back to the address in
@@ -197,8 +197,10 @@ pub fn terminate(exception: &'static eh_artiq::Exception<'static>, backtrace: &'
         }
     }
 
-    let core1_tx: &mut sync_channel::Sender<Message> = unsafe { mem::transmute(KERNEL_CHANNEL_1TO0) };
-    core1_tx.send(Message::KernelException(exception, &backtrace[..cursor]));
+    {
+        let mut core1_tx = KERNEL_CHANNEL_1TO0.lock();
+        core1_tx.as_mut().unwrap().send(Message::KernelException(exception, &backtrace[..cursor]));
+    }
     // TODO: remove after implementing graceful kernel termination.
     error!("Core1 uncaught exception");
     loop {}

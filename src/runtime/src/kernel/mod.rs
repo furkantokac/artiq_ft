@@ -1,7 +1,6 @@
 use core::ptr;
 use alloc::{vec::Vec, sync::Arc, string::String};
 
-use dyld::Library;
 use libcortex_a9::{mutex::Mutex, sync_channel};
 use crate::eh_artiq;
 
@@ -39,7 +38,8 @@ pub enum Message {
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<Message>>> = Mutex::new(None);
 static CHANNEL_1TO0: Mutex<Option<sync_channel::Sender<Message>>> = Mutex::new(None);
 
-static mut KERNEL_CHANNEL_0TO1: *mut () = ptr::null_mut();
-static mut KERNEL_CHANNEL_1TO0: *mut () = ptr::null_mut();
-static mut KERNEL_LIBRARY: *mut Library = ptr::null_mut();
+static KERNEL_CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<Message>>> = Mutex::new(None);
+static KERNEL_CHANNEL_1TO0: Mutex<Option<sync_channel::Sender<Message>>> = Mutex::new(None);
+
+static mut KERNEL_IMAGE: *const core1::KernelImage = ptr::null();
 

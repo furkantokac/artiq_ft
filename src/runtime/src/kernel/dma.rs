@@ -5,7 +5,7 @@ use crate::{
 };
 use alloc::{vec::Vec, string::String, collections::BTreeMap, str};
 use cslice::CSlice;
-use super::KERNEL_LIBRARY;
+use super::KERNEL_IMAGE;
 use core::mem;
 use log::debug;
 
@@ -136,7 +136,7 @@ pub extern fn dma_record_start(name: CSlice<u8>) {
             artiq_raise!("DMAError", "DMA is already recording")
         }
 
-        let library = KERNEL_LIBRARY.as_mut().unwrap();
+        let library = KERNEL_IMAGE.as_ref().unwrap();
         library.rebind(b"rtio_output",
                        dma_record_output as *const ()).unwrap();
         library.rebind(b"rtio_output_wide",
@@ -156,7 +156,7 @@ pub extern fn dma_record_stop(duration: i64) {
             artiq_raise!("DMAError", "DMA is not recording")
         }
 
-        let library = KERNEL_LIBRARY.as_mut().unwrap();
+        let library = KERNEL_IMAGE.as_ref().unwrap();
         library.rebind(b"rtio_output",
                        rtio::output as *const ()).unwrap();
         library.rebind(b"rtio_output_wide",
