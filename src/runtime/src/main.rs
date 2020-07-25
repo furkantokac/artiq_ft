@@ -112,22 +112,21 @@ fn init_rtio(timer: &mut GlobalTimer, cfg: &config::Config) {
             0
         };
 
-    unsafe {
-        pl::csr::rtio_crg::pll_reset_write(1);
-        pl::csr::rtio_crg::clock_sel_write(clock_sel);
-    }
-
-    timer.delay_ms(2);
-
-    unsafe {
-        pl::csr::rtio_crg::pll_reset_write(0);
-    }
-
-    timer.delay_ms(2);
-
-    let locked = unsafe { pl::csr::rtio_crg::pll_locked_read() != 0 };
-    if !locked {
-        panic!("RTIO PLL failed to lock");
+    loop {
+        unsafe {
+            pl::csr::rtio_crg::pll_reset_write(1);
+            pl::csr::rtio_crg::clock_sel_write(clock_sel);
+            pl::csr::rtio_crg::pll_reset_write(0);
+        }
+        timer.delay_ms(1);
+        let locked = unsafe { pl::csr::rtio_crg::pll_locked_read() != 0 };
+        if locked {
+            info!("RTIO PLL locked");
+            break;
+        } else {
+            warn!("RTIO PLL failed to lock, retrying...");
+            timer.delay_ms(500);
+        }
     }
 
     unsafe {
