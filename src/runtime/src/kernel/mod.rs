@@ -10,6 +10,7 @@ pub mod core1;
 mod api;
 mod rpc;
 mod dma;
+mod cache;
 
 #[derive(Debug)]
 pub struct RPCException {

@@ -4,6 +4,7 @@ use crate::eh_artiq;
 use crate::rtio;
 use super::rpc::{rpc_send, rpc_send_async, rpc_recv};
 use super::dma;
+use super::cache;
 
 macro_rules! api {
     ($i:ident) => ({
@@ -57,6 +58,10 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(dma_erase = dma::dma_erase),
         api!(dma_retrieve = dma::dma_retrieve),
         api!(dma_playback = dma::dma_playback),
+
+        // cache
+        api!(cache_get = cache::get),
+        api!(cache_put = cache::put),
 
         // Double-precision floating-point arithmetic helper functions
         // RTABI chapter 4.1.2, Table 2

@@ -12,6 +12,11 @@ device_db = {
             "target": "cortexa9"
         }
     },
+    "core_cache": {
+        "type": "local",
+        "module": "artiq.coredevice.cache",
+        "class": "CoreCache"
+    },
     "core_dma": {
         "type": "local",
         "module": "artiq.coredevice.dma",
