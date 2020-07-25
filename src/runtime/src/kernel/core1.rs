@@ -160,8 +160,8 @@ pub fn main_core1() {
             Message::StartRequest => {
                 info!("kernel starting");
                 if let Some(kernel) = loaded_kernel.take() {
-                    core::mem::replace(&mut *KERNEL_CHANNEL_0TO1.lock(), Some(core1_rx));
-                    core::mem::replace(&mut *KERNEL_CHANNEL_1TO0.lock(), Some(core1_tx));
+                    *KERNEL_CHANNEL_0TO1.lock() = Some(core1_rx);
+                    *KERNEL_CHANNEL_1TO0.lock() = Some(core1_tx);
                     unsafe {
                         KERNEL_IMAGE = &kernel as *const KernelImage;
                         kernel.exec();
