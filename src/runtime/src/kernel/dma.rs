@@ -46,7 +46,7 @@ pub struct Manager {
 // Copied from https://github.com/m-labs/artiq/blob/master/artiq/firmware/runtime/rtio_dma.rs
 // basically without modification except removing some warnings.
 impl Manager {
-    pub fn new() -> Manager {
+    pub const fn new() -> Manager {
         Manager {
             entries: BTreeMap::new(),
             recording_name: String::new(),
@@ -106,7 +106,7 @@ impl Manager {
 }
 
 
-static mut DMA_MANAGER: Option<Manager> = None;
+static mut DMA_MANAGER: Manager = Manager::new();
 
 #[repr(C)]
 pub struct DmaTrace {
@@ -114,16 +114,9 @@ pub struct DmaTrace {
     address:  i32,
 }
 
-pub fn init_dma() {
-    unsafe {
-        DMA_MANAGER = Some(Manager::new());
-    }
-}
-
 fn dma_record_flush() {
     unsafe {
-        let manager = DMA_MANAGER.as_mut().unwrap();
-        manager.record_append(&DMA_RECORDER.buffer[..DMA_RECORDER.data_len]);
+        DMA_MANAGER.record_append(&DMA_RECORDER.buffer[..DMA_RECORDER.data_len]);
         DMA_RECORDER.data_len = 0;
     }
 }
@@ -143,8 +136,7 @@ pub extern fn dma_record_start(name: CSlice<u8>) {
                        dma_record_output_wide as *const ()).unwrap();
 
         DMA_RECORDER.active = true;
-        let manager = DMA_MANAGER.as_mut().unwrap();
-        manager.record_start(name);
+        DMA_MANAGER.record_start(name);
     }
 }
 
@@ -163,8 +155,7 @@ pub extern fn dma_record_stop(duration: i64) {
                        rtio::output_wide as *const ()).unwrap();
 
         DMA_RECORDER.active = false;
-        let manager = DMA_MANAGER.as_mut().unwrap();
-        manager.record_stop(duration as u64);
+        DMA_MANAGER.record_stop(duration as u64);
     }
 }
 
@@ -238,23 +229,21 @@ pub extern fn dma_record_output_wide(target: i32, words: CSlice<i32>) {
 pub extern fn dma_erase(name: CSlice<u8>) {
     let name = str::from_utf8(name.as_ref()).unwrap();
 
-    let manager = unsafe {
-        DMA_MANAGER.as_mut().unwrap()
+    unsafe {
+        DMA_MANAGER.erase(name);
     };
-    manager.erase(name);
 }
 
 pub extern fn dma_retrieve(name: CSlice<u8>) -> DmaTrace {
     let name = str::from_utf8(name.as_ref()).unwrap();
 
-    let manager = unsafe {
-        DMA_MANAGER.as_mut().unwrap()
+    let (trace, duration) = unsafe {
+        DMA_MANAGER.with_trace(name, |trace, duration| (trace.map(|v| {
+            dcci_slice(v);
+            dsb();
+            v.as_ptr()
+        }), duration))
     };
-    let (trace, duration) = manager.with_trace(name, |trace, duration| (trace.map(|v| {
-        dcci_slice(v);
-        dsb();
-        v.as_ptr()
-    }), duration));
     match trace {
         Some(ptr) => Ok(DmaTrace {
             address: ptr as i32,

@@ -15,7 +15,6 @@ use crate::eh_artiq;
 use super::{
     api::resolve,
     rpc::rpc_send_async,
-    dma::init_dma,
     CHANNEL_0TO1, CHANNEL_1TO0,
     KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0,
     KERNEL_IMAGE,
@@ -125,9 +124,6 @@ pub fn main_core1() {
 
     enable_fpu();
     debug!("FPU enabled on Core1");
-
-    init_dma();
-    debug!("Init DMA!");
 
     let mut core1_tx = None;
     while core1_tx.is_none() {
