@@ -222,13 +222,21 @@ pub fn load(
                     .ok_or("program header requests an out of bounds load (in target)")?;
                 dst.copy_from_slice(src);
             }
-            PT_ARM_EXIDX => {
-                let range = image.get(phdr.p_vaddr as usize..
-                    (phdr.p_vaddr + phdr.p_filesz) as usize)
-                    .ok_or("program header requests and out of bounds load (in target)")?;
+            _ => {}
+        }
+    }
+
+    // Obtain EXIDX
+    for shdr in file.section_headers() {
+        let shdr = shdr.ok_or("cannot read section header")?;
+        match shdr.sh_type as usize {
+            SHT_ARM_EXIDX => {
+                let slice = image.get(shdr.sh_addr as usize..
+                                      (shdr.sh_addr + shdr.sh_size) as usize)
+                    .ok_or("section header requests an out of bounds load (in target)")?;
                 unsafe {
-                    KERNEL_EXIDX_START = range.as_ptr() as u32;
-                    KERNEL_EXIDX_END = range.as_ptr().add(range.len()) as u32;
+                    KERNEL_EXIDX_START = slice.as_ptr() as u32;
+                    KERNEL_EXIDX_END = slice.as_ptr().add(slice.len()) as u32;
                 }
             }
             _ => {}

@@ -56,6 +56,14 @@ impl<'a> File<'a> {
         })
     }
 
+    pub fn section_headers<'b>(&'b self) -> impl Iterator<Item = Option<Elf32_Shdr>> + 'b
+    {
+        (0..self.ehdr.e_shnum).map(move |i| {
+            let shdr_off = self.ehdr.e_shoff as usize + mem::size_of::<Elf32_Shdr>() * i as usize;
+            self.read_unaligned::<Elf32_Shdr>(shdr_off)
+        })
+    }
+
     pub fn dyn_header_vaddr(&self) -> Option<Range<usize>> {
         self.program_headers()
             .filter_map(|phdr| phdr)
