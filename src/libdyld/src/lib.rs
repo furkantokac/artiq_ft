@@ -4,7 +4,7 @@ extern crate alloc;
 extern crate log;
 extern crate libcortex_a9;
 
-use core::{convert, fmt, str};
+use core::{convert, fmt, ops::Range, str};
 use alloc::string::String;
 use log::{debug, trace};
 use elf::*;
@@ -58,44 +58,11 @@ fn elf_hash(name: &[u8]) -> u32 {
     h
 }
 
-// linker symbols
-extern "C" {
-    #[no_mangle]
-    static __text_start: u32;
-    #[no_mangle]
-    static __text_end: u32;
-    #[no_mangle]
-    static __exidx_start: u32;
-    #[no_mangle]
-    static __exidx_end: u32;
-}
-
-static mut KERNEL_EXIDX_START: u32 = 0;
-static mut KERNEL_EXIDX_END: u32 = 0;
-
-#[no_mangle]
-extern fn dl_unwind_find_exidx(pc: u32, len_ptr: *mut u32) -> u32 {
-    let length: u32;
-    let start: u32;
-    unsafe {
-        if (&__text_start as *const u32 as u32) <= pc && pc < (&__text_end as *const u32 as u32) {
-            length = (&__exidx_end - &__exidx_start) as u32;
-            start = &__exidx_start as *const u32 as u32;
-        } else {
-            // make sure that the kernel is loaded
-            assert_ne!(KERNEL_EXIDX_START, 0);
-            length = (KERNEL_EXIDX_END - KERNEL_EXIDX_START) / core::mem::size_of::<u32>() as u32;
-            start = KERNEL_EXIDX_START;
-        }
-        *len_ptr = length;
-    }
-    start
-}
-
 pub struct Library {
     pub image: Image,
     pub arch: Arch,
     dyn_section: DynamicSection,
+    exidx: Range<usize>,
 }
 
 impl Library {
@@ -170,6 +137,10 @@ impl Library {
     pub fn rebind(&self, name: &[u8], addr: *const ()) -> Result<(), Error> {
         reloc::rebind(self.arch, self, name, addr as Elf32_Word)
     }
+
+    pub fn exidx(&self) -> &[u32] {
+        self.image.get_ref_slice_unchecked(&self.exidx)
+    }
 }
 
 pub fn load(
@@ -226,18 +197,17 @@ pub fn load(
         }
     }
 
+    let mut exidx = None;
     // Obtain EXIDX
     for shdr in file.section_headers() {
         let shdr = shdr.ok_or("cannot read section header")?;
         match shdr.sh_type as usize {
             SHT_ARM_EXIDX => {
-                let slice = image.get(shdr.sh_addr as usize..
-                                      (shdr.sh_addr + shdr.sh_size) as usize)
-                    .ok_or("section header requests an out of bounds load (in target)")?;
-                unsafe {
-                    KERNEL_EXIDX_START = slice.as_ptr() as u32;
-                    KERNEL_EXIDX_END = slice.as_ptr().add(slice.len()) as u32;
-                }
+                let range = shdr.sh_addr as usize..
+                    (shdr.sh_addr + shdr.sh_size) as usize;
+                let _ = image.get(range.clone())
+                    .ok_or("section header specifies EXIDX outside of image (in target)")?;
+                exidx = Some(range);
             }
             _ => {}
         }
@@ -252,7 +222,8 @@ pub fn load(
     let lib = Library {
         arch,
         image,
-        dyn_section
+        dyn_section,
+        exidx: exidx.ok_or("no EXIDX section")?,
     };
 
     for rela in lib.rela() {

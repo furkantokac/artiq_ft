@@ -5,6 +5,7 @@
 #![feature(panic_info_message)]
 #![feature(c_variadic)]
 #![feature(const_btree_new)]
+#![feature(ptr_offset_from)]
 
 extern crate alloc;
 

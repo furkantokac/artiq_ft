@@ -22,6 +22,18 @@ use super::{
     cache
 };
 
+// linker symbols
+extern "C" {
+    #[no_mangle]
+    static __text_start: u32;
+    #[no_mangle]
+    static __text_end: u32;
+    #[no_mangle]
+    static __exidx_start: u32;
+    #[no_mangle]
+    static __exidx_end: u32;
+}
+
 unsafe fn attribute_writeback(typeinfo: *const ()) {
     struct Attr {
         offset: usize,
@@ -204,4 +216,28 @@ pub fn terminate(exception: &'static eh_artiq::Exception<'static>, backtrace: &'
     // TODO: remove after implementing graceful kernel termination.
     error!("Core1 uncaught exception");
     loop {}
+}
+
+/// Called by llvm_libunwind
+#[no_mangle]
+extern fn dl_unwind_find_exidx(pc: *const u32, len_ptr: *mut u32) -> *const u32 {
+    let exidx = unsafe {
+        KERNEL_IMAGE.as_ref()
+            .expect("dl_unwind_find_exidx kernel image")
+            .library.get().as_ref().unwrap().exidx()
+    };
+
+    let length;
+    let start: *const u32;
+    unsafe {
+        if &__text_start as *const u32 <= pc && pc < &__text_end as *const u32 {
+            length = (&__exidx_end as *const u32).offset_from(&__exidx_start) as u32;
+            start = &__exidx_start;
+        } else {
+            length = exidx.len() as u32;
+            start = exidx.as_ptr();
+        }
+        *len_ptr = length;
+    }
+    start
 }
