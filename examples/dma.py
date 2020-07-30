@@ -8,11 +8,12 @@ class DMAPulses(EnvExperiment):
 
     @kernel
     def record(self):
-        with self.core_dma.record("pulses"):
-            # all RTIO operations now go to the "pulses"
+        with self.core_dma.record("pulse"):
+            delay(200*ms)
+            # all RTIO operations now go to the "pulse"
             # DMA buffer, instead of being executed immediately.
-            self.led0.pulse(100*ns)
-            delay(100*ns)
+            self.led0.pulse(500*ms)
+
 
     @kernel
     def run(self):
@@ -20,7 +21,6 @@ class DMAPulses(EnvExperiment):
         self.record()
         # prefetch the address of the DMA buffer
         # for faster playback trigger
-        pulses_handle = self.core_dma.get_handle("pulses")
+        pulse_handle = self.core_dma.get_handle("pulse")
         self.core.break_realtime()
-        self.core_dma.playback_handle(pulses_handle)
-
+        self.core_dma.playback_handle(pulse_handle)
