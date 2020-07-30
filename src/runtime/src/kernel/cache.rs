@@ -3,7 +3,6 @@ use libcortex_a9::mutex::Mutex;
 use cslice::{CSlice, AsCSlice};
 use core::mem::transmute;
 use core::str;
-use log::debug;
 
 use crate::artiq_raise;
 
