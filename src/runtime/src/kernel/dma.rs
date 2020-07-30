@@ -258,7 +258,7 @@ pub extern fn dma_retrieve(name: CSlice<u8>) -> DmaTrace {
 pub extern fn dma_playback(timestamp: i64, ptr: i32) {
     assert!(ptr % ALIGNMENT as i32 == 0);
 
-    debug!("DMA Playback");
+    debug!("DMA playback started");
     unsafe {
         csr::rtio_dma::base_address_write(ptr as u32);
         csr::rtio_dma::time_offset_write(timestamp as u64);
@@ -267,6 +267,8 @@ pub extern fn dma_playback(timestamp: i64, ptr: i32) {
         csr::rtio_dma::enable_write(1);
         while csr::rtio_dma::enable_read() != 0 {}
         csr::cri_con::selected_write(0);
+
+        debug!("DMA playback finished");
 
         let error = csr::rtio_dma::error_read();
         if error != 0 {
