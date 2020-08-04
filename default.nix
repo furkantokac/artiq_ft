@@ -92,5 +92,8 @@ in
   (
     (build-zc706 { variant = "simple"; }) //
     (build-zc706 { variant = "nist_clock"; }) //
-    (build-zc706 { variant = "nist_qc2"; })
+    (build-zc706 { variant = "nist_qc2"; }) //
+    (build-zc706 { variant = "acpki_simple"; }) //
+    (build-zc706 { variant = "acpki_nist_clock"; }) //
+    (build-zc706 { variant = "acpki_nist_qc2"; })
   )
