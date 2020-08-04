@@ -31,6 +31,11 @@ mod comms;
 mod rpc;
 #[path = "../../../build/pl.rs"]
 mod pl;
+#[cfg(ki_impl = "csr")]
+#[path = "rtio_csr.rs"]
+mod rtio;
+#[cfg(ki_impl = "acp")]
+#[path = "rtio_acp.rs"]
 mod rtio;
 mod kernel;
 mod moninj;

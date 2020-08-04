@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+from operator import itemgetter
 
 from migen import *
 from migen.build.generic_platform import *
@@ -16,6 +17,7 @@ from artiq.gateware.rtio.phy import ttl_simple, ttl_serdes_7series, dds, spi2
 
 import dma
 import analyzer
+import acpki
 
 
 class RTIOCRG(Module, AutoCSR):
@@ -63,12 +65,18 @@ class RTIOCRG(Module, AutoCSR):
 
 
 class ZC706(SoCCore):
-    def __init__(self):
+    def __init__(self, acpki=False):
+        self.acpki = acpki
+        self.rustc_cfg = dict()
+
         platform = zc706.Platform()
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=self.__class__.__name__)
+        ident = self.__class__.__name__
+        if self.acpki:
+            ident = "acpki_" + ident
+        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
 
         platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
         platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
@@ -84,9 +92,20 @@ class ZC706(SoCCore):
         self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)
         self.submodules.rtio_core = rtio.Core(self.rtio_tsc, rtio_channels)
         self.csr_devices.append("rtio_core")
-        self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
+
+        if self.acpki:
+            self.rustc_cfg["ki_impl"] = "csr"
+            self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
+            self.csr_devices.append("rtio")
+        else:
+            self.rustc_cfg["ki_impl"] = "acp"
+            self.submodules.rtio = acpki.KernelInitiator(self.rtio_tsc,
+                                                         bus=self.ps7.s_axi_acp,
+                                                         user=self.ps7.s_axi_acp_user,
+                                                         evento=self.ps7.event.o)
+            self.csr_devices.append("rtio")
+
         self.submodules.rtio_dma = dma.DMA(self.ps7.s_axi_hp0)
-        self.csr_devices.append("rtio")
         self.csr_devices.append("rtio_dma")
 
         self.submodules.cri_con = rtio.CRIInterconnectShared(
@@ -103,8 +122,8 @@ class ZC706(SoCCore):
 
 
 class Simple(ZC706):
-    def __init__(self):
-        ZC706.__init__(self)
+    def __init__(self, **kwargs):
+        ZC706.__init__(self, **kwargs)
 
         platform = self.platform
 
@@ -134,8 +153,8 @@ class NIST_CLOCK(ZC706):
     """
     NIST clock hardware, with old backplane and 11 DDS channels
     """
-    def __init__(self):
-        ZC706.__init__(self)
+    def __init__(self, **kwargs):
+        ZC706.__init__(self, **kwargs)
 
         platform = self.platform
         platform.add_extension(nist_clock.fmc_adapter_io)
@@ -188,8 +207,8 @@ class NIST_QC2(ZC706):
     NIST QC2 hardware, as used in Quantum I and Quantum II, with new backplane
     and 24 DDS channels.  Two backplanes are used.
     """
-    def __init__(self):
-        ZC706.__init__(self)
+    def __init__(self, **kwargs):
+        ZC706.__init__(self, **kwargs)
 
         platform = self.platform
         platform.add_extension(nist_qc2.fmc_adapter_io)
@@ -242,31 +261,48 @@ def write_csr_file(soc, filename):
             soc.get_csr_regions(), soc.get_csr_groups(), soc.get_constants()))
 
 
+def write_rustc_cfg_file(soc, filename):
+    with open(filename, "w") as f:
+        for k, v in sorted(soc.rustc_cfg.items(), key=itemgetter(0)):
+            if v is None:
+                f.write("{}\n".format(k))
+            else:
+                f.write("{}=\"{}\"\n".format(k, v))
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="ARTIQ port to the ZC706 Zynq development kit")
     parser.add_argument("-r", default=None,
         help="build Rust interface into the specified file")
+    parser.add_argument("-c", default=None,
+        help="build Rust compiler configuration into the specified file")
     parser.add_argument("-g", default=None,
         help="build gateware into the specified directory")
     parser.add_argument("-V", "--variant", default="simple",
                         help="variant: "
-                             "simple/nist_clock/nist_qc2 "
+                             "[acpki_]simple/nist_clock/nist_qc2 "
                              "(default: %(default)s)")
     args = parser.parse_args()
 
+    variant = args.variant.lower()
+    acpki = variant.startswith("acpki_")
+    if acpki:
+        variant = variant[6:]
     try:
-        cls = VARIANTS[args.variant.lower()]
+        cls = VARIANTS[variant]
     except KeyError:
         raise SystemExit("Invalid variant (-V/--variant)")
 
-    soc = cls()
+    soc = cls(acpki=acpki)
     soc.finalize()
 
-    if args.g is not None:
-        soc.build(build_dir=args.g)
     if args.r is not None:
         write_csr_file(soc, args.r)
+    if args.c is not None:
+        write_rustc_cfg_file(soc, args.c)
+    if args.g is not None:
+        soc.build(build_dir=args.g)
 
 
 if __name__ == "__main__":
