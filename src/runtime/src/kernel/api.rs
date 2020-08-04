@@ -1,10 +1,28 @@
+use core::ffi::VaList;
+use core::ptr;
+use libc::{c_char, c_int, size_t};
 use libm;
+
+use alloc::vec;
 
 use crate::eh_artiq;
 use crate::rtio;
 use super::rpc::{rpc_send, rpc_send_async, rpc_recv};
 use super::dma;
 use super::cache;
+
+
+extern "C" {
+    fn vsnprintf_(buffer: *mut c_char, count: size_t, format: *const c_char, va: VaList) -> c_int;
+}
+
+pub unsafe extern fn rtio_log(fmt: *const c_char, mut args: ...) {
+    let size = vsnprintf_(ptr::null_mut(), 0, fmt, args.as_va_list()) as usize;
+    let mut buf = vec![0; size + 1];
+    vsnprintf_(buf.as_mut_ptr(), size + 1, fmt, args.as_va_list());
+    rtio::write_log(buf.as_slice());
+}
+
 
 macro_rules! api {
     ($i:ident) => ({
@@ -50,7 +68,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(rtio_input_timestamp = rtio::input_timestamp),
         api!(rtio_input_data = rtio::input_data),
         api!(rtio_input_timestamped_data = rtio::input_timestamped_data),
-        api!(rtio_log = rtio::log),
+        api!(rtio_log = rtio_log),
 
         // rtio dma
         api!(dma_record_start = dma::dma_record_start),
