@@ -2,6 +2,7 @@ use libboard_zynq::{gic, mpcore, println, stdio};
 use libcortex_a9::{
     asm,
     regs::{MPIDR, SP},
+    spin_lock_yield, notify_spin_lock
 };
 use libregister::{RegisterR, RegisterW};
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -27,7 +28,7 @@ pub unsafe extern "C" fn IRQ() {
             SP.write(&mut __stack1_start as *mut _ as u32);
             asm::enable_irq();
             CORE1_RESTART.store(false, Ordering::Relaxed);
-            asm::sev();
+            notify_spin_lock();
             main_core1();
         }
     }
@@ -41,6 +42,6 @@ pub fn restart_core1() {
     CORE1_RESTART.store(true, Ordering::Relaxed);
     interrupt_controller.send_sgi(gic::InterruptId(0), gic::CPUCore::Core1.into());
     while CORE1_RESTART.load(Ordering::Relaxed) {
-        asm::wfe();
+        spin_lock_yield();
     }
 }
