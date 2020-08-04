@@ -1,7 +1,9 @@
 use core::ffi::VaList;
 use core::ptr;
+use core::str;
 use libc::{c_char, c_int, size_t};
 use libm;
+use log::{info, warn};
 
 use alloc::vec;
 
@@ -16,7 +18,20 @@ extern "C" {
     fn vsnprintf_(buffer: *mut c_char, count: size_t, format: *const c_char, va: VaList) -> c_int;
 }
 
-pub unsafe extern fn rtio_log(fmt: *const c_char, mut args: ...) {
+unsafe extern fn core_log(fmt: *const c_char, mut args: ...) {
+    let size = vsnprintf_(ptr::null_mut(), 0, fmt, args.as_va_list()) as usize;
+    let mut buf = vec![0; size + 1];
+    vsnprintf_(buf.as_mut_ptr() as *mut i8, size + 1, fmt, args.as_va_list());
+    match str::from_utf8(buf.as_slice()) {
+        Ok(s) => info!("kernel: {}", s),
+        Err(e) => {
+            info!("kernel: {}", (str::from_utf8(&buf.as_slice()[..e.valid_up_to()]).unwrap()));
+            warn!("kernel: invalid utf-8");
+        }
+    }
+}
+
+unsafe extern fn rtio_log(fmt: *const c_char, mut args: ...) {
     let size = vsnprintf_(ptr::null_mut(), 0, fmt, args.as_va_list()) as usize;
     let mut buf = vec![0; size + 1];
     vsnprintf_(buf.as_mut_ptr(), size + 1, fmt, args.as_va_list());
@@ -68,6 +83,9 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(rtio_input_timestamp = rtio::input_timestamp),
         api!(rtio_input_data = rtio::input_data),
         api!(rtio_input_timestamped_data = rtio::input_timestamped_data),
+
+        // log
+        api!(core_log = core_log),
         api!(rtio_log = rtio_log),
 
         // rtio dma
