@@ -24,6 +24,7 @@ async-recursion = "0.3"
 fatfs = { version = "0.3", features = ["core_io"], default-features = false }
 log_buffer = { version = "1.2" }
 libm = { version = "0.2", features = ["unstable"] }
+vcell = "0.1"
 
 libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 libsupport_zynq = { default-features = false, features = ["alloc_core"], git = "https://git.m-labs.hk/M-Labs/zc706.git" }

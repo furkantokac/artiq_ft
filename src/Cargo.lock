@@ -428,6 +428,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "unwind",
+ "vcell",
  "void",
 ]
 
