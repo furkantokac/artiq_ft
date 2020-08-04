@@ -2,7 +2,6 @@ use core::fmt;
 use core::cell::RefCell;
 use core::str::Utf8Error;
 use alloc::rc::Rc;
-use alloc::sync::Arc;
 use alloc::{vec, vec::Vec, string::String};
 use log::{info, warn, error};
 
@@ -126,7 +125,7 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
     control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
     loop {
         let reply = control.borrow_mut().rx.async_recv().await;
-        match *reply {
+        match reply {
             kernel::Message::RpcSend { is_async, data } => {
                 if stream.is_none() {
                     error!("Unexpected RPC from startup/idle kernel!");
@@ -141,7 +140,7 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                     match host_request {
                         Request::RPCReply => {
                             let tag = read_bytes(stream, 512).await?;
-                            let slot = match *control.borrow_mut().rx.async_recv().await {
+                            let slot = match control.borrow_mut().rx.async_recv().await {
                                 kernel::Message::RpcRecvRequest(slot) => slot,
                                 other => panic!("expected root value slot from core1, not {:?}", other),
                             };
@@ -155,7 +154,7 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                                     } else {
                                         let mut control = control.borrow_mut();
                                         control.tx.async_send(kernel::Message::RpcRecvReply(Ok(size))).await;
-                                        match *control.rx.async_recv().await {
+                                        match control.rx.async_recv().await {
                                             kernel::Message::RpcRecvRequest(slot) => slot,
                                             other => panic!("expected nested value slot from kernel CPU, not {:?}", other),
                                         }
@@ -166,7 +165,7 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                         },
                         Request::RPCException => {
                             let mut control = control.borrow_mut();
-                            match *control.rx.async_recv().await {
+                            match control.rx.async_recv().await {
                                 kernel::Message::RpcRecvRequest(_) => (),
                                 other => panic!("expected (ignored) root value slot from kernel CPU, not {:?}", other),
                             }
@@ -233,9 +232,9 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
 
 async fn load_kernel(buffer: Vec<u8>, control: &Rc<RefCell<kernel::Control>>, stream: Option<&TcpStream>) -> Result<()> {
     let mut control = control.borrow_mut();
-    control.tx.async_send(kernel::Message::LoadRequest(Arc::new(buffer))).await;
+    control.tx.async_send(kernel::Message::LoadRequest(buffer)).await;
     let reply = control.rx.async_recv().await;
-    match *reply {
+    match reply {
         kernel::Message::LoadCompleted => {
             if let Some(stream) = stream {
                 write_header(stream, Reply::LoadCompleted).await?;

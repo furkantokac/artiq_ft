@@ -6,13 +6,15 @@
 #![feature(c_variadic)]
 #![feature(const_btree_new)]
 #![feature(ptr_offset_from)]
+#![feature(const_in_array_repeat_expressions)]
+#![feature(naked_functions)]
 
 extern crate alloc;
 
 use core::{cmp, str};
 use log::{info, warn, error};
 
-use libboard_zynq::{timer::GlobalTimer, devc, slcr};
+use libboard_zynq::{timer::GlobalTimer, devc, slcr, mpcore, gic};
 use libasync::{task, block_async};
 use libsupport_zynq::ram;
 use libregister::RegisterW;
@@ -183,7 +185,8 @@ pub fn main_core0() {
 
     info!("NAR3/Zynq7000 starting...");
 
-    ram::init_alloc_linker();
+    ram::init_alloc_core0();
+    gic::InterruptController::new(mpcore::RegisterBlock::new()).enable_interrupts();
 
     init_gateware();
     info!("detected gateware: {}", identifier_read(&mut [0; 64]));

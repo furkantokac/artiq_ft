@@ -1,5 +1,5 @@
 use core::ptr;
-use alloc::{vec::Vec, sync::Arc, string::String};
+use alloc::{vec::Vec, string::String};
 
 use libcortex_a9::{mutex::Mutex, sync_channel};
 use crate::eh_artiq;
@@ -12,7 +12,7 @@ mod rpc;
 mod dma;
 mod cache;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RPCException {
     pub name: String,
     pub message: String,
@@ -23,24 +23,24 @@ pub struct RPCException {
     pub function: String
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Message {
-    LoadRequest(Arc<Vec<u8>>),
+    LoadRequest(Vec<u8>),
     LoadCompleted,
     LoadFailed,
     StartRequest,
     KernelFinished,
     KernelException(&'static eh_artiq::Exception<'static>, &'static [usize]),
-    RpcSend { is_async: bool, data: Arc<Vec<u8>> },
+    RpcSend { is_async: bool, data: Vec<u8> },
     RpcRecvRequest(*mut ()),
     RpcRecvReply(Result<usize, RPCException>),
 }
 
-static CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<Message>>> = Mutex::new(None);
-static CHANNEL_1TO0: Mutex<Option<sync_channel::Sender<Message>>> = Mutex::new(None);
+static CHANNEL_0TO1: Mutex<Option<sync_channel::Sender<'static, Message>>> = Mutex::new(None);
+static CHANNEL_1TO0: Mutex<Option<sync_channel::Receiver<'static, Message>>> = Mutex::new(None);
 
-static KERNEL_CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<Message>>> = Mutex::new(None);
-static KERNEL_CHANNEL_1TO0: Mutex<Option<sync_channel::Sender<Message>>> = Mutex::new(None);
+static KERNEL_CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<'static, Message>>> = Mutex::new(None);
+static KERNEL_CHANNEL_1TO0: Mutex<Option<sync_channel::Sender<'static, Message>>> = Mutex::new(None);
 
 static mut KERNEL_IMAGE: *const core1::KernelImage = ptr::null();
 

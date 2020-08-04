@@ -34,6 +34,12 @@ SECTIONS
         __bss_end = .;
     } > OCM3
 
+    .heap (NOLOAD) : ALIGN(8)
+    {
+        __heap0_start = .;
+        __heap0_end = .;
+    } > OCM3
+
     .stack1 (NOLOAD) : ALIGN(8)
     {
         __stack1_end = .;

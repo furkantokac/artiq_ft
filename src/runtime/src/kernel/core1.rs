@@ -9,7 +9,10 @@ use libcortex_a9::{
     enable_fpu,
     cache::{dcci_slice, iciallu, bpiall},
     asm::{dsb, isb},
+    sync_channel,
 };
+use libboard_zynq::{mpcore, gic};
+use libsupport_zynq::ram;
 use dyld::{self, Library};
 use crate::eh_artiq;
 use super::{
@@ -138,23 +141,23 @@ pub fn main_core1() {
     enable_fpu();
     debug!("FPU enabled on Core1");
 
-    let mut core1_tx = None;
-    while core1_tx.is_none() {
-        core1_tx = CHANNEL_1TO0.lock().take();
-    }
-    let mut core1_tx = core1_tx.unwrap();
+    ram::init_alloc_core1();
+    gic::InterruptController::new(mpcore::RegisterBlock::new()).enable_interrupts();
 
-    let mut core1_rx = None;
-    while core1_rx.is_none() {
-        core1_rx = CHANNEL_0TO1.lock().take();
+    let (mut core0_tx, mut core1_rx) = sync_channel!(Message, 4);
+    let (mut core1_tx, core0_rx) = sync_channel!(Message, 4);
+    unsafe {
+        core0_tx.reset();
+        core1_tx.reset();
     }
-    let mut core1_rx = core1_rx.unwrap();
+    *CHANNEL_0TO1.lock() = Some(core0_tx);
+    *CHANNEL_1TO0.lock() = Some(core0_rx);
 
     // set on load, cleared on start
     let mut loaded_kernel = None;
     loop {
         let message = core1_rx.recv();
-        match *message {
+        match message {
             Message::LoadRequest(data) => {
                 let result = dyld::load(&data, &resolve)
                     .and_then(KernelImage::new);
@@ -213,8 +216,6 @@ pub fn terminate(exception: &'static eh_artiq::Exception<'static>, backtrace: &'
         let mut core1_tx = KERNEL_CHANNEL_1TO0.lock();
         core1_tx.as_mut().unwrap().send(Message::KernelException(exception, &backtrace[..cursor]));
     }
-    // TODO: remove after implementing graceful kernel termination.
-    error!("Core1 uncaught exception");
     loop {}
 }
 

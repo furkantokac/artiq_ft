@@ -1,6 +1,6 @@
 //! Kernel-side RPC API
 
-use alloc::{vec::Vec, sync::Arc};
+use alloc::vec::Vec;
 use cslice::{CSlice, AsCSlice};
 
 use crate::eh_artiq;
@@ -14,7 +14,7 @@ fn rpc_send_common(is_async: bool, service: u32, tag: &CSlice<u8>, data: *const 
     let mut core1_tx = KERNEL_CHANNEL_1TO0.lock();
     let mut buffer = Vec::<u8>::new();
     send_args(&mut buffer, service, tag.as_ref(), data).expect("RPC encoding failed");
-    core1_tx.as_mut().unwrap().send(Message::RpcSend { is_async, data: Arc::new(buffer) });
+    core1_tx.as_mut().unwrap().send(Message::RpcSend { is_async, data: buffer });
 }
 
 pub extern fn rpc_send(service: u32, tag: &CSlice<u8>, data: *const *const ()) {
@@ -32,7 +32,7 @@ pub extern fn rpc_recv(slot: *mut ()) -> usize {
         core1_tx.as_mut().unwrap().send(Message::RpcRecvRequest(slot));
         core1_rx.as_mut().unwrap().recv()
     };
-    match *reply {
+    match reply {
         Message::RpcRecvReply(Ok(alloc_size)) => alloc_size,
         Message::RpcRecvReply(Err(exception)) => unsafe {
             eh_artiq::raise(&eh_artiq::Exception {
