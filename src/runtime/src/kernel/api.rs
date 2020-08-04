@@ -22,10 +22,11 @@ unsafe extern fn core_log(fmt: *const c_char, mut args: ...) {
     let size = vsnprintf_(ptr::null_mut(), 0, fmt, args.as_va_list()) as usize;
     let mut buf = vec![0; size + 1];
     vsnprintf_(buf.as_mut_ptr() as *mut i8, size + 1, fmt, args.as_va_list());
-    match str::from_utf8(buf.as_slice()) {
+    let buf: &[u8] = &buf.as_slice()[..size-1]; // strip \n and NUL
+    match str::from_utf8(buf) {
         Ok(s) => info!("kernel: {}", s),
         Err(e) => {
-            info!("kernel: {}", (str::from_utf8(&buf.as_slice()[..e.valid_up_to()]).unwrap()));
+            info!("kernel: {}", (str::from_utf8(&buf[..e.valid_up_to()]).unwrap()));
             warn!("kernel: invalid utf-8");
         }
     }
