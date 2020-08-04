@@ -2,6 +2,9 @@ use libcortex_a9::sync_channel::{Sender, Receiver};
 use libsupport_zynq::boot::Core1;
 
 use super::{CHANNEL_0TO1, CHANNEL_1TO0, Message};
+use crate::irq::restart_core1;
+
+use core::mem::{forget, replace};
 
 pub struct Control {
     pub tx: Sender<'static, Message>,
@@ -33,6 +36,14 @@ impl Control {
             tx: core0_tx,
             rx: core0_rx,
         }
+    }
+
+    pub fn restart(&mut self) {
+        restart_core1();
+        let (core0_tx, core0_rx) = get_channels();
+        // dangling pointer here, so we forget it
+        forget(replace(&mut self.tx, core0_tx));
+        forget(replace(&mut self.rx, core0_rx));
     }
 }
 

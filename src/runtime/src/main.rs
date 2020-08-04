@@ -40,6 +40,7 @@ mod panic;
 mod logger;
 mod mgmt;
 mod analyzer;
+mod irq;
 
 fn init_gateware() {
     // Set up PS->PL clocks

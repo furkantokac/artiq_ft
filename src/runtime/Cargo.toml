@@ -26,7 +26,7 @@ log_buffer = { version = "1.2" }
 libm = { version = "0.2", features = ["unstable"] }
 
 libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
-libsupport_zynq = { default-features = false, features = ["alloc_core", "dummy_irq_handler"], git = "https://git.m-labs.hk/M-Labs/zc706.git" }
+libsupport_zynq = { default-features = false, features = ["alloc_core"], git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 libasync = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
 libregister = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
