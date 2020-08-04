@@ -166,6 +166,8 @@ class KernelInitiator(Module, AutoCSR):
 
         self.counter = CSRStatus(64)
         self.counter_update = CSR()
+        self.o_status = CSRStatus(3)
+        self.i_status = CSRStatus(4)
 
         self.submodules.engine = Engine(bus, user)
         self.cri = rtio.cri.Interface()
@@ -250,5 +252,9 @@ class KernelInitiator(Module, AutoCSR):
             If(cmd_write, Case(self.engine.din_index, din_cases_cmdwrite)),
         ]
 
-        # RTIO counter access
+        # CRI CSRs
         self.sync += If(self.counter_update.re, self.counter.status.eq(tsc.full_ts_cri))
+        self.comb += [
+            self.o_status.status.eq(self.cri.o_status),
+            self.i_status.status.eq(self.cri.i_status),
+        ]
