@@ -94,15 +94,15 @@ class ZC706(SoCCore):
         self.csr_devices.append("rtio_core")
 
         if self.acpki:
-            self.rustc_cfg["ki_impl"] = "csr"
-            self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
-            self.csr_devices.append("rtio")
-        else:
             self.rustc_cfg["ki_impl"] = "acp"
             self.submodules.rtio = acpki.KernelInitiator(self.rtio_tsc,
                                                          bus=self.ps7.s_axi_acp,
                                                          user=self.ps7.s_axi_acp_user,
                                                          evento=self.ps7.event.o)
+            self.csr_devices.append("rtio")
+        else:
+            self.rustc_cfg["ki_impl"] = "csr"
+            self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
             self.csr_devices.append("rtio")
 
         self.submodules.rtio_dma = dma.DMA(self.ps7.s_axi_hp0)
