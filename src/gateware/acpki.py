@@ -190,16 +190,10 @@ class KernelInitiator(Module, AutoCSR):
         ]
 
         dout_cases = {}
-        dout_lw = Signal(32)
-        dout_hw = Signal(32)
-        self.comb += [
-            dout_lw.eq(self.engine.dout[:32]),
-            dout_hw.eq(self.engine.dout[32:])
-        ]
         dout_cases[0] = [
-            cmd.eq(dout_lw[24:]),
-            cri.chan_sel.eq(dout_lw[:24]),
-            cri.o_address.eq(dout_hw[:16])
+            cmd.eq(self.engine.dout[:8]),
+            cri.chan_sel.eq(self.engine.dout[40:]),
+            cri.o_address.eq(self.engine.dout[32:40])
         ]
         dout_cases[1] = [
             cri.o_timestamp.eq(self.engine.dout)
