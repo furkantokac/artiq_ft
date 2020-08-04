@@ -144,6 +144,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         // RTABI chapter 4.3.1
         api!(__aeabi_idiv),
         api!(__aeabi_ldivmod),
+        api!(__aeabi_idivmod),
         api!(__aeabi_uidiv),
         api!(__aeabi_uldivmod),
         // 4.3.4 Memory copying, clearing, and setting
