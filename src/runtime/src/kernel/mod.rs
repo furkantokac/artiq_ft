@@ -10,6 +10,7 @@ pub mod core1;
 mod api;
 mod rpc;
 mod dma;
+pub use dma::DmaRecorder;
 mod cache;
 
 #[derive(Debug, Clone)]
@@ -34,6 +35,15 @@ pub enum Message {
     RpcSend { is_async: bool, data: Vec<u8> },
     RpcRecvRequest(*mut ()),
     RpcRecvReply(Result<usize, RPCException>),
+
+    CacheGetRequest(String),
+    CacheGetReply(Vec<i32>),
+    CachePutRequest(String, Vec<i32>),
+
+    DmaPutRequest(DmaRecorder),
+    DmaEraseRequest(String),
+    DmaGetRequest(String),
+    DmaGetReply(Option<(Vec<u8>, i64)>),
 }
 
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Sender<'static, Message>>> = Mutex::new(None);

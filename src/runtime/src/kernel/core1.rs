@@ -22,7 +22,7 @@ use super::{
     KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0,
     KERNEL_IMAGE,
     Message,
-    cache
+    dma,
 };
 
 // linker symbols
@@ -149,6 +149,7 @@ pub fn main_core1() {
     unsafe {
         core0_tx.reset();
         core1_tx.reset();
+        dma::init_dma_recorder();
     }
     *CHANNEL_0TO1.lock() = Some(core0_tx);
     *CHANNEL_1TO0.lock() = Some(core0_rx);
@@ -186,7 +187,6 @@ pub fn main_core1() {
                     core1_rx = core::mem::replace(&mut *KERNEL_CHANNEL_0TO1.lock(), None).unwrap();
                     core1_tx = core::mem::replace(&mut *KERNEL_CHANNEL_1TO0.lock(), None).unwrap();
                 }
-                unsafe { cache::unborrow(); }
                 info!("kernel finished");
                 core1_tx.send(Message::KernelFinished);
             }
@@ -197,8 +197,6 @@ pub fn main_core1() {
 
 /// Called by eh_artiq
 pub fn terminate(exception: &'static eh_artiq::Exception<'static>, backtrace: &'static mut [usize]) -> ! {
-    unsafe { cache::unborrow(); }
-
     let load_addr = unsafe {
         KERNEL_IMAGE.as_ref().unwrap().get_load_addr()
     };

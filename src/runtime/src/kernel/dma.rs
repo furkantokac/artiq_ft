@@ -3,110 +3,15 @@ use crate::{
     artiq_raise,
     rtio,
 };
-use alloc::{vec::Vec, string::String, collections::BTreeMap, str};
+use alloc::{vec::Vec, string::String, boxed::Box};
 use cslice::CSlice;
-use super::KERNEL_IMAGE;
+use super::{KERNEL_IMAGE, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
 use core::mem;
 use log::debug;
 
-use libcortex_a9::{
-    cache::dcci_slice,
-    asm::dsb,
-};
+use libcortex_a9::cache::dcci_slice;
 
 const ALIGNMENT: usize = 16 * 8;
-const DMA_BUFFER_SIZE: usize = 16 * 8 * 1024;
-
-struct DmaRecorder {
-    active:   bool,
-    data_len: usize,
-    buffer:   [u8; DMA_BUFFER_SIZE],
-}
-
-static mut DMA_RECORDER: DmaRecorder = DmaRecorder {
-    active:   false,
-    data_len: 0,
-    buffer:   [0; DMA_BUFFER_SIZE],
-};
-
-#[derive(Debug)]
-struct Entry {
-    trace: Vec<u8>,
-    padding_len: usize,
-    duration: u64
-}
-
-#[derive(Debug)]
-pub struct Manager {
-    entries: BTreeMap<String, Entry>,
-    recording_name: String,
-    recording_trace: Vec<u8>
-}
-
-// Copied from https://github.com/m-labs/artiq/blob/master/artiq/firmware/runtime/rtio_dma.rs
-// basically without modification except removing some warnings.
-impl Manager {
-    pub const fn new() -> Manager {
-        Manager {
-            entries: BTreeMap::new(),
-            recording_name: String::new(),
-            recording_trace: Vec::new(),
-        }
-    }
-
-    pub fn record_start(&mut self, name: &str) {
-        self.recording_name = String::from(name);
-        self.recording_trace = Vec::new();
-
-        // or we could needlessly OOM replacing a large trace
-        self.entries.remove(name);
-    }
-
-    pub fn record_append(&mut self, data: &[u8]) {
-        self.recording_trace.extend_from_slice(data);
-    }
-
-    pub fn record_stop(&mut self, duration: u64) {
-        let mut trace = Vec::new();
-        mem::swap(&mut self.recording_trace, &mut trace);
-        trace.push(0);
-        let data_len = trace.len();
-
-        // Realign.
-        trace.reserve(ALIGNMENT - 1);
-        let padding = ALIGNMENT - trace.as_ptr() as usize % ALIGNMENT;
-        let padding = if padding == ALIGNMENT { 0 } else { padding };
-        for _ in 0..padding {
-            // Vec guarantees that this will not reallocate
-            trace.push(0)
-        }
-        for i in 1..data_len + 1 {
-            trace[data_len + padding - i] = trace[data_len - i]
-        }
-
-        let mut name = String::new();
-        mem::swap(&mut self.recording_name, &mut name);
-        self.entries.insert(name, Entry {
-            trace, duration,
-            padding_len: padding,
-        });
-    }
-
-    pub fn erase(&mut self, name: &str) {
-        self.entries.remove(name);
-    }
-
-    pub fn with_trace<F, R>(&self, name: &str, f: F) -> R
-            where F: FnOnce(Option<&[u8]>, u64) -> R {
-        match self.entries.get(name) {
-            Some(entry) => f(Some(&entry.trace[entry.padding_len..]), entry.duration),
-            None => f(None, 0)
-        }
-    }
-}
-
-
-static mut DMA_MANAGER: Manager = Manager::new();
 
 #[repr(C)]
 pub struct DmaTrace {
@@ -114,18 +19,26 @@ pub struct DmaTrace {
     address:  i32,
 }
 
-fn dma_record_flush() {
-    unsafe {
-        DMA_MANAGER.record_append(&DMA_RECORDER.buffer[..DMA_RECORDER.data_len]);
-        DMA_RECORDER.data_len = 0;
-    }
+#[derive(Clone, Debug)]
+pub struct DmaRecorder {
+    pub name: String,
+    pub buffer: Vec<u8>,
+    pub duration: i64,
+}
+
+static mut RECORDER: Option<DmaRecorder> = None;
+
+pub unsafe fn init_dma_recorder() {
+    // as static would remain after restart, we have to reset it,
+    // without running its destructor.
+    mem::forget(mem::replace(&mut RECORDER, None));
 }
 
 pub extern fn dma_record_start(name: CSlice<u8>) {
-    let name = str::from_utf8(name.as_ref()).unwrap();
-
+    let name = String::from_utf8(name.as_ref().to_vec()).unwrap();
+    KERNEL_CHANNEL_1TO0.lock().as_mut().unwrap().send(Message::DmaEraseRequest(name.clone()));
     unsafe {
-        if DMA_RECORDER.active {
+        if RECORDER.is_some() {
             artiq_raise!("DMAError", "DMA is already recording")
         }
 
@@ -135,16 +48,17 @@ pub extern fn dma_record_start(name: CSlice<u8>) {
         library.rebind(b"rtio_output_wide",
                        dma_record_output_wide as *const ()).unwrap();
 
-        DMA_RECORDER.active = true;
-        DMA_MANAGER.record_start(name);
+        RECORDER = Some(DmaRecorder {
+            name,
+            buffer: Vec::new(),
+            duration: 0,
+        });
     }
 }
 
-pub extern fn dma_record_stop(duration: i64) {
+pub extern fn dma_record_stop(_: i64) {
     unsafe {
-        dma_record_flush();
-
-        if !DMA_RECORDER.active {
+        if RECORDER.is_none() {
             artiq_raise!("DMAError", "DMA is not recording")
         }
 
@@ -154,29 +68,22 @@ pub extern fn dma_record_stop(duration: i64) {
         library.rebind(b"rtio_output_wide",
                        rtio::output_wide as *const ()).unwrap();
 
-        DMA_RECORDER.active = false;
-        DMA_MANAGER.record_stop(duration as u64);
+        KERNEL_CHANNEL_1TO0.lock().as_mut().unwrap().send(
+            Message::DmaPutRequest(RECORDER.take().unwrap())
+        );
     }
 }
 
 #[inline(always)]
 unsafe fn dma_record_output_prepare(timestamp: i64, target: i32,
-                                    words: usize) -> &'static mut [u8] {
+                                    words: usize) {
     // See gateware/rtio/dma.py.
     const HEADER_LENGTH: usize = /*length*/1 + /*channel*/3 + /*timestamp*/8 + /*address*/1;
     let length = HEADER_LENGTH + /*data*/words * 4;
 
-    if DMA_RECORDER.buffer.len() - DMA_RECORDER.data_len < length {
-        dma_record_flush()
-    }
-
-    let record = &mut DMA_RECORDER.buffer[DMA_RECORDER.data_len..
-                                          DMA_RECORDER.data_len + length];
-    DMA_RECORDER.data_len += length;
-
-    let (header, data) = record.split_at_mut(HEADER_LENGTH);
-
-    header.copy_from_slice(&[
+    let buffer = &mut RECORDER.as_mut().unwrap().buffer;
+    buffer.reserve(length);
+    buffer.extend_from_slice(&[
         (length    >>  0) as u8,
         (target    >>  8) as u8,
         (target    >>  16) as u8,
@@ -191,15 +98,13 @@ unsafe fn dma_record_output_prepare(timestamp: i64, target: i32,
         (timestamp >> 56) as u8,
         (target    >>  0) as u8,
     ]);
-
-    data
 }
 
 pub extern fn dma_record_output(target: i32, word: i32) {
     unsafe {
         let timestamp = rtio::now_mu();
-        let data = dma_record_output_prepare(timestamp, target, 1);
-        data.copy_from_slice(&[
+        dma_record_output_prepare(timestamp, target, 1);
+        RECORDER.as_mut().unwrap().buffer.extend_from_slice(&[
             (word >>  0) as u8,
             (word >>  8) as u8,
             (word >> 16) as u8,
@@ -213,53 +118,60 @@ pub extern fn dma_record_output_wide(target: i32, words: CSlice<i32>) {
 
     unsafe {
         let timestamp = rtio::now_mu();
-        let mut data = dma_record_output_prepare(timestamp, target, words.len());
+        dma_record_output_prepare(timestamp, target, words.len());
+        let buffer = &mut RECORDER.as_mut().unwrap().buffer;
         for word in words.as_ref().iter() {
-            data[..4].copy_from_slice(&[
+            buffer.extend_from_slice(&[
                 (word >>  0) as u8,
                 (word >>  8) as u8,
                 (word >> 16) as u8,
                 (word >> 24) as u8,
             ]);
-            data = &mut data[4..];
         }
     }
 }
 
 pub extern fn dma_erase(name: CSlice<u8>) {
-    let name = str::from_utf8(name.as_ref()).unwrap();
-
-    unsafe {
-        DMA_MANAGER.erase(name);
-    };
+    let name = String::from_utf8(name.as_ref().to_vec()).unwrap();
+    KERNEL_CHANNEL_1TO0.lock().as_mut().unwrap().send(Message::DmaEraseRequest(name));
 }
 
 pub extern fn dma_retrieve(name: CSlice<u8>) -> DmaTrace {
-    let name = str::from_utf8(name.as_ref()).unwrap();
-
-    let (trace, duration) = unsafe {
-        DMA_MANAGER.with_trace(name, |trace, duration| (trace.map(|v| {
-            dcci_slice(v);
-            dsb();
-            v.as_ptr()
-        }), duration))
-    };
-    match trace {
-        Some(ptr) => Ok(DmaTrace {
-            address: ptr as i32,
-            duration: duration as i64,
-        }),
-        None => Err(())
-    }.unwrap_or_else(|_| {
-        artiq_raise!("DMAError", "DMA trace not found");
-    })
+    let name = String::from_utf8(name.as_ref().to_vec()).unwrap();
+    KERNEL_CHANNEL_1TO0.lock().as_mut().unwrap().send(Message::DmaGetRequest(name));
+    match KERNEL_CHANNEL_0TO1.lock().as_mut().unwrap().recv() {
+        Message::DmaGetReply(None) => (),
+        Message::DmaGetReply(Some((mut v, duration))) => {
+            v.reserve(ALIGNMENT - 1);
+            let original_length = v.len();
+            let padding = ALIGNMENT - v.as_ptr() as usize % ALIGNMENT;
+            let padding = if padding == ALIGNMENT { 0 } else { padding };
+            for _ in 0..padding {
+                v.push(0);
+            }
+            v.copy_within(0..original_length, padding);
+            let v = Box::new(v);
+            let address = Box::into_raw(v) as *mut Vec<u8> as i32;
+            return DmaTrace {
+                address,
+                duration,
+            };
+        },
+        _ => panic!("Expected DmaGetReply after DmaGetRequest!"),
+    }
+    // we have to defer raising error as we have to drop the message first...
+    artiq_raise!("DMAError", "DMA trace not found");
 }
 
 pub extern fn dma_playback(timestamp: i64, ptr: i32) {
-    assert!(ptr % ALIGNMENT as i32 == 0);
-
     debug!("DMA playback started");
     unsafe {
+        let v = Box::from_raw(ptr as *mut Vec<u8>);
+        let padding = ALIGNMENT - v.as_ptr() as usize % ALIGNMENT;
+        let padding = if padding == ALIGNMENT { 0 } else { padding };
+        dcci_slice(&v[padding..]);
+        let ptr = v.as_ptr().add(padding) as i32;
+
         csr::rtio_dma::base_address_write(ptr as u32);
         csr::rtio_dma::time_offset_write(timestamp as u64);
 
@@ -268,6 +180,7 @@ pub extern fn dma_playback(timestamp: i64, ptr: i32) {
         while csr::rtio_dma::enable_read() != 0 {}
         csr::cri_con::selected_write(0);
 
+        mem::drop(v);
         debug!("DMA playback finished");
 
         let error = csr::rtio_dma::error_read();

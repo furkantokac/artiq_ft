@@ -1,78 +1,27 @@
-use alloc::{string::String, vec::Vec, collections::BTreeMap};
-use libcortex_a9::mutex::Mutex;
+use alloc::string::String;
 use cslice::{CSlice, AsCSlice};
 use core::mem::transmute;
-use core::str;
-
-use crate::artiq_raise;
-
-
-#[derive(Debug)]
-struct Entry {
-    data: Vec<i32>,
-    borrowed: bool
-}
-
-#[derive(Debug)]
-struct Cache {
-    entries: BTreeMap<String, Entry>
-}
-
-impl Cache {
-    pub const fn new() -> Cache {
-        Cache { entries: BTreeMap::new() }
-    }
-
-    pub fn get(&mut self, key: &str) -> *const [i32] {
-        match self.entries.get_mut(key) {
-            None => &[],
-            Some(ref mut entry) => {
-                entry.borrowed = true;
-                &entry.data[..]
-            }
-        }
-    }
-
-    pub fn put(&mut self, key: &str, data: &[i32]) -> Result<(), ()> {
-        match self.entries.get_mut(key) {
-            None => (),
-            Some(ref mut entry) => {
-                if entry.borrowed { return Err(()) }
-                entry.data = Vec::from(data);
-                return Ok(())
-            }
-        }
-
-        self.entries.insert(String::from(key), Entry {
-            data: Vec::from(data),
-            borrowed: false
-        });
-        Ok(())
-    }
-
-    pub unsafe fn unborrow(&mut self) {
-        for (_key, entry) in self.entries.iter_mut() {
-            entry.borrowed = false;
-        }
-    }
-}
-
-static CACHE: Mutex<Cache> = Mutex::new(Cache::new());
+use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
 
 pub extern fn get(key: CSlice<u8>) -> CSlice<'static, i32> {
-    let value = CACHE.lock().get(str::from_utf8(key.as_ref()).unwrap());
-    unsafe {
-        transmute::<*const [i32], &'static [i32]>(value).as_c_slice()
+    let key = String::from_utf8(key.as_ref().to_vec()).unwrap();
+    KERNEL_CHANNEL_1TO0.lock().as_mut().unwrap().send(Message::CacheGetRequest(key));
+    let msg = KERNEL_CHANNEL_0TO1.lock().as_mut().unwrap().recv();
+    if let Message::CacheGetReply(v) = msg {
+        let slice = v.as_c_slice();
+        // we intentionally leak the memory here,
+        // which does not matter as core1 would restart
+        unsafe {
+            transmute(slice)
+        }
+    } else {
+        panic!("Expected CacheGetReply for CacheGetRequest");
     }
 }
 
 pub extern fn put(key: CSlice<u8>, list: CSlice<i32>) {
-    let result = CACHE.lock().put(str::from_utf8(key.as_ref()).unwrap(), list.as_ref());
-    if result.is_err() {
-        artiq_raise!("CacheError", "cannot put into a busy cache row");
-    }
+    let key = String::from_utf8(key.as_ref().to_vec()).unwrap();
+    let value = list.as_ref().to_vec();
+    KERNEL_CHANNEL_1TO0.lock().as_mut().unwrap().send(Message::CachePutRequest(key, value));
 }
 
-pub unsafe fn unborrow() {
-    CACHE.lock().unborrow();
-}

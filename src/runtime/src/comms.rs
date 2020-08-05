@@ -1,8 +1,7 @@
 use core::fmt;
 use core::cell::RefCell;
 use core::str::Utf8Error;
-use alloc::rc::Rc;
-use alloc::{vec, vec::Vec, string::String};
+use alloc::{vec, vec::Vec, string::String, collections::BTreeMap, rc::Rc};
 use log::{info, warn, error};
 
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -18,7 +17,7 @@ use libboard_zynq::{
     },
     timer::GlobalTimer,
 };
-use libcortex_a9::semaphore::Semaphore;
+use libcortex_a9::{semaphore::Semaphore, mutex::Mutex};
 use futures::{select_biased, future::FutureExt};
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
 
@@ -82,6 +81,9 @@ enum Reply {
     WatchdogExpired = 14,
     ClockFailure = 15,
 }
+
+static CACHE_STORE: Mutex<BTreeMap<String, Vec<i32>>> = Mutex::new(BTreeMap::new());
+static DMA_RECORD_STORE: Mutex<BTreeMap<String, (Vec<u8>, i64)>> = Mutex::new(BTreeMap::new());
 
 async fn write_header(stream: &TcpStream, reply: Reply) -> Result<()> {
     stream.send([0x5a, 0x5a, 0x5a, 0x5a, reply.to_u8().unwrap()].iter().copied()).await?;
@@ -223,6 +225,25 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                 }
                 break;
             }
+            kernel::Message::CachePutRequest(key, value) => {
+                CACHE_STORE.lock().insert(key, value);
+            },
+            kernel::Message::CacheGetRequest(key) => {
+                const DEFAULT: Vec<i32> = Vec::new();
+                let value = CACHE_STORE.lock().get(&key).unwrap_or(&DEFAULT).clone();
+                control.borrow_mut().tx.async_send(kernel::Message::CacheGetReply(value)).await;
+            },
+            kernel::Message::DmaPutRequest(recorder) => {
+                DMA_RECORD_STORE.lock().insert(recorder.name, (recorder.buffer, recorder.duration));
+            },
+            kernel::Message::DmaEraseRequest(name) => {
+                // prevent possible OOM when we have large DMA record replacement.
+                DMA_RECORD_STORE.lock().remove(&name);
+            },
+            kernel::Message::DmaGetRequest(name) => {
+                let result = DMA_RECORD_STORE.lock().get(&name).map(|v| v.clone());
+                control.borrow_mut().tx.async_send(kernel::Message::DmaGetReply(result)).await;
+            },
             _ => {
                 panic!("unexpected message from core1 while kernel was running: {:?}", reply);
             }
