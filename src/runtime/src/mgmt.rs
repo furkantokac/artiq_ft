@@ -98,9 +98,9 @@ async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>) ->
         let msg: Request = FromPrimitive::from_i8(msg?).ok_or(Error::UnrecognizedPacket)?;
         match msg {
             Request::GetLog => {
-                let mut buffer = get_logger_buffer().await;
+                let buffer = get_logger_buffer().await.extract().as_bytes().to_vec();
                 write_i8(stream, Reply::LogContent as i8).await?;
-                write_chunk(stream, buffer.extract().as_bytes()).await?;
+                write_chunk(stream, &buffer).await?;
             }
             Request::ClearLog => {
                 let mut buffer = get_logger_buffer().await;
@@ -115,24 +115,22 @@ async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>) ->
                 };
                 loop {
                     let mut buffer = get_logger_buffer_pred(|b| !b.is_empty()).await;
-                    let bytes = buffer.extract().as_bytes();
                     if id != *pull_id.borrow() {
                         // another connection attempts to pull the log...
                         // abort this connection...
                         break;
                     }
-                    write_chunk(stream, bytes).await?;
-                    if log::max_level() == LevelFilter::Trace {
-                        // Hold exclusive access over the logger until we get positive
-                        // acknowledgement; otherwise we get an infinite loop of network
-                        // trace messages being transmitted and causing more network
-                        // trace messages to be emitted.
-                        //
-                        // Any messages unrelated to this management socket that arrive
-                        // while it is flushed are lost, but such is life.
-                        stream.flush().await?;
-                    }
+                    let bytes = buffer.extract().as_bytes().to_vec();
                     buffer.clear();
+                    core::mem::drop(buffer);
+                    write_chunk(stream, &bytes).await?;
+                    if log::max_level() == LevelFilter::Trace {
+                        // temporarily discard all trace level log
+                        let logger = unsafe { BufferLogger::get_logger().as_mut().unwrap() };
+                        logger.set_buffer_log_level(LevelFilter::Debug);
+                        stream.flush().await?;
+                        logger.set_buffer_log_level(LevelFilter::Trace);
+                    }
                 }
             },
             Request::SetLogFilter => {

@@ -38,7 +38,8 @@ impl<'a> Drop for LogBufferRef<'a> {
 
 pub struct BufferLogger {
     buffer:      Mutex<LogBuffer<&'static mut [u8]>>,
-    uart_filter: Cell<LevelFilter>
+    uart_filter: Cell<LevelFilter>,
+    buffer_filter: Cell<LevelFilter>,
 }
 
 static mut LOGGER: Option<BufferLogger> = None;
@@ -48,6 +49,7 @@ impl BufferLogger {
         BufferLogger {
             buffer: Mutex::new(LogBuffer::new(buffer)),
             uart_filter: Cell::new(LevelFilter::Info),
+            buffer_filter: Cell::new(LevelFilter::Trace),
         }
     }
 
@@ -76,6 +78,15 @@ impl BufferLogger {
     pub fn set_uart_log_level(&self, max_level: LevelFilter) {
         self.uart_filter.set(max_level)
     }
+
+    pub fn buffer_log_level(&self) -> LevelFilter {
+        self.buffer_filter.get()
+    }
+
+    /// this should be reserverd for mgmt module
+    pub fn set_buffer_log_level(&self, max_level: LevelFilter) {
+        self.buffer_filter.set(max_level)
+    }
 }
 
 // required for impl Log
@@ -94,7 +105,8 @@ impl Log for BufferLogger {
             let seconds   = timestamp / 1_000_000;
             let micros    = timestamp % 1_000_000;
 
-            if let Some(mut buffer) = self.buffer.try_lock() {
+            if record.level() <= self.buffer_log_level() {
+                let mut buffer = self.buffer.lock();
                 writeln!(buffer, "[{:6}.{:06}s] {:>5}({}): {}", seconds, micros,
                          record.level(), record.target(), record.args()).unwrap();
             }
