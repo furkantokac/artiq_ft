@@ -83,7 +83,7 @@ impl BufferLogger {
         self.buffer_filter.get()
     }
 
-    /// this should be reserverd for mgmt module
+    /// this should be reserved for mgmt module
     pub fn set_buffer_log_level(&self, max_level: LevelFilter) {
         self.buffer_filter.set(max_level)
     }
