@@ -54,3 +54,5 @@ static KERNEL_CHANNEL_1TO0: Mutex<Option<sync_channel::Sender<'static, Message>>
 
 static mut KERNEL_IMAGE: *const core1::KernelImage = ptr::null();
 
+static INIT_LOCK: Mutex<()> = Mutex::new(());
+

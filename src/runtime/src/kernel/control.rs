@@ -1,7 +1,7 @@
 use libcortex_a9::sync_channel::{Sender, Receiver};
 use libsupport_zynq::boot::Core1;
 
-use super::{CHANNEL_0TO1, CHANNEL_1TO0, Message};
+use super::{CHANNEL_0TO1, CHANNEL_1TO0, INIT_LOCK, Message};
 use crate::irq::restart_core1;
 
 use core::mem::{forget, replace};
@@ -39,7 +39,13 @@ impl Control {
     }
 
     pub fn restart(&mut self) {
-        restart_core1();
+        {
+            INIT_LOCK.lock();
+            restart_core1();
+            unsafe {
+                self.tx.drop_elements();
+            }
+        }
         let (core0_tx, core0_rx) = get_channels();
         // dangling pointer here, so we forget it
         forget(replace(&mut self.tx, core0_tx));
