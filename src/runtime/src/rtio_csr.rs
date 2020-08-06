@@ -124,7 +124,6 @@ pub extern fn input_timestamp(timeout: i64, channel: i32) -> i64 {
         }
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
-            csr::rtio::i_overflow_reset_write(1);
             artiq_raise!("RTIOOverflow",
                          "RTIO input overflow on channel {0}",
                          channel as i64, 0, 0);
@@ -153,7 +152,6 @@ pub extern fn input_data(channel: i32) -> i32 {
         }
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
-            csr::rtio::i_overflow_reset_write(1);
             artiq_raise!("RTIOOverflow",
                          "RTIO input overflow on channel {0}",
                          channel as i64, 0, 0);
@@ -179,7 +177,6 @@ pub extern fn input_timestamped_data(timeout: i64, channel: i32) -> TimestampedD
         }
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
-            csr::rtio::i_overflow_reset_write(1);
             artiq_raise!("RTIOOverflow",
                          "RTIO input overflow on channel {0}",
                          channel as i64, 0, 0);
