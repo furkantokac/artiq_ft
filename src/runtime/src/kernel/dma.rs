@@ -56,7 +56,7 @@ pub extern fn dma_record_start(name: CSlice<u8>) {
     }
 }
 
-pub extern fn dma_record_stop(_: i64) {
+pub extern fn dma_record_stop(duration: i64) {
     unsafe {
         if RECORDER.is_none() {
             artiq_raise!("DMAError", "DMA is not recording")
@@ -68,8 +68,10 @@ pub extern fn dma_record_stop(_: i64) {
         library.rebind(b"rtio_output_wide",
                        rtio::output_wide as *const ()).unwrap();
 
+        let mut recorder = RECORDER.take().unwrap();
+        recorder.duration = duration;
         KERNEL_CHANNEL_1TO0.lock().as_mut().unwrap().send(
-            Message::DmaPutRequest(RECORDER.take().unwrap())
+            Message::DmaPutRequest(recorder)
         );
     }
 }
