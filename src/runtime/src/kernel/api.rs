@@ -253,6 +253,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api_libm_f64f64!(sin),
         api_libm_f64f64!(sinh),
         api_libm_f64f64!(sqrt),
+        api_libm_f64f64!(tan),
         api_libm_f64f64!(tanh),
         api_libm_f64f64!(tgamma),
         api_libm_f64f64!(trunc),
