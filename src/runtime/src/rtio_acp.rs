@@ -11,7 +11,7 @@ pub const RTIO_O_STATUS_UNDERFLOW:                 i32 = 2;
 pub const RTIO_O_STATUS_DESTINATION_UNREACHABLE:   i32 = 4;
 pub const RTIO_I_STATUS_WAIT_EVENT:                i32 = 1;
 pub const RTIO_I_STATUS_OVERFLOW:                  i32 = 2;
-pub const RTIO_I_STATUS_WAIT_STATUS:               i32 = 4;
+pub const RTIO_I_STATUS_WAIT_STATUS:               i32 = 4; // TODO
 pub const RTIO_I_STATUS_DESTINATION_UNREACHABLE:   i32 = 8;
 
 #[repr(C)]
@@ -32,7 +32,7 @@ struct Transaction {
     padding: i64,
     reply_status: VolatileCell<i32>,
     reply_data: VolatileCell<i32>,
-    reply_timestamp: VolatileCell<u64>
+    reply_timestamp: VolatileCell<i64>
 }
 
 static mut TRANSACTION_BUFFER: Transaction = Transaction {
@@ -69,16 +69,18 @@ pub extern fn get_counter() -> i64 {
     }
 }
 
+static mut NOW: i64 = 0;
+
 pub extern fn now_mu() -> i64 {
-    unsafe { TRANSACTION_BUFFER.request_timestamp }
+    unsafe { NOW }
 }
 
 pub extern fn at_mu(t: i64) {
-    unsafe { TRANSACTION_BUFFER.request_timestamp = t }
+    unsafe { NOW = t }
 }
 
 pub extern fn delay_mu(dt: i64) {
-    unsafe { TRANSACTION_BUFFER.request_timestamp += dt }
+    unsafe { NOW += dt }
 }
 
 #[inline(never)]
@@ -107,6 +109,7 @@ pub extern fn output(target: i32, data: i32) {
 
         TRANSACTION_BUFFER.request_cmd = 0;
         TRANSACTION_BUFFER.request_target = target;
+        TRANSACTION_BUFFER.request_timestamp = NOW;
         TRANSACTION_BUFFER.request_data = data as i64;
 
         asm::dmb();
@@ -133,15 +136,112 @@ pub extern fn output_wide(target: i32, data: CSlice<i32>) {
 }
 
 pub extern fn input_timestamp(timeout: i64, channel: i32) -> i64 {
-   unimplemented!();
+   unsafe {
+        // Clear status so we can observe response
+        TRANSACTION_BUFFER.reply_status.set(0);
+
+        TRANSACTION_BUFFER.request_cmd = 1;
+        TRANSACTION_BUFFER.request_timestamp = NOW;
+        TRANSACTION_BUFFER.request_target = channel << 8;
+
+        asm::dmb();
+        asm::sev();
+
+        let mut status;
+        loop {
+            status = TRANSACTION_BUFFER.reply_status.get();
+            if status != 0 {
+                break
+            }
+        }
+
+        if status & RTIO_I_STATUS_OVERFLOW != 0 {
+            artiq_raise!("RTIOOverflow",
+                         "RTIO input overflow on channel {0}",
+                         channel as i64, 0, 0);
+        }
+        if status & RTIO_I_STATUS_WAIT_EVENT != 0 {
+            return -1
+        }
+        if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
+            artiq_raise!("RTIODestinationUnreachable",
+                         "RTIO destination unreachable, input, on channel {0}",
+                         channel as i64, 0, 0);
+        }
+
+        TRANSACTION_BUFFER.reply_timestamp.get()
+    }
 }
 
 pub extern fn input_data(channel: i32) -> i32 {
-    unimplemented!();
+    unsafe {
+        TRANSACTION_BUFFER.reply_status.set(0);
+
+        TRANSACTION_BUFFER.request_cmd = 1;
+        TRANSACTION_BUFFER.request_timestamp = -1;
+        TRANSACTION_BUFFER.request_target = channel << 8;
+
+        asm::dmb();
+        asm::sev();
+
+        let mut status;
+        loop {
+            status = TRANSACTION_BUFFER.reply_status.get();
+            if status != 0 {
+                break
+            }
+        }
+
+        if status & RTIO_I_STATUS_OVERFLOW != 0 {
+            artiq_raise!("RTIOOverflow",
+                         "RTIO input overflow on channel {0}",
+                         channel as i64, 0, 0);
+        }
+        if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
+            artiq_raise!("RTIODestinationUnreachable",
+                         "RTIO destination unreachable, input, on channel {0}",
+                         channel as i64, 0, 0);
+        }
+
+        TRANSACTION_BUFFER.reply_data.get()
+    }
 }
 
 pub extern fn input_timestamped_data(timeout: i64, channel: i32) -> TimestampedData {
-    unimplemented!();
+    unsafe {
+        TRANSACTION_BUFFER.reply_status.set(0);
+
+        TRANSACTION_BUFFER.request_cmd = 1;
+        TRANSACTION_BUFFER.request_timestamp = timeout;
+        TRANSACTION_BUFFER.request_target = channel << 8;
+
+        asm::dmb();
+        asm::sev();
+
+        let mut status;
+        loop {
+            status = TRANSACTION_BUFFER.reply_status.get();
+            if status != 0 {
+                break
+            }
+        }
+
+        if status & RTIO_I_STATUS_OVERFLOW != 0 {
+            artiq_raise!("RTIOOverflow",
+                         "RTIO input overflow on channel {0}",
+                         channel as i64, 0, 0);
+        }
+        if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
+            artiq_raise!("RTIODestinationUnreachable",
+                         "RTIO destination unreachable, input, on channel {0}",
+                         channel as i64, 0, 0);
+        }
+
+        TimestampedData {
+            timestamp: TRANSACTION_BUFFER.reply_timestamp.get(),
+            data: TRANSACTION_BUFFER.reply_data.get(),
+        }
+    }
 }
 
 pub fn write_log(data: &[i8]) {
