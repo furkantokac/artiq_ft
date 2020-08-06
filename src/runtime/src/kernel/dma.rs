@@ -180,7 +180,7 @@ pub extern fn dma_playback(timestamp: i64, ptr: i32) {
         while csr::rtio_dma::enable_read() != 0 {}
         csr::cri_con::selected_write(0);
 
-        mem::drop(v);
+        mem::forget(v);
         debug!("DMA playback finished");
 
         let error = csr::rtio_dma::error_read();

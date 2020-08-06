@@ -1,6 +1,6 @@
 use alloc::string::String;
 use cslice::{CSlice, AsCSlice};
-use core::mem::transmute;
+use core::mem::{transmute, forget};
 use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
 
 pub extern fn get(key: CSlice<u8>) -> CSlice<'static, i32> {
@@ -8,12 +8,11 @@ pub extern fn get(key: CSlice<u8>) -> CSlice<'static, i32> {
     KERNEL_CHANNEL_1TO0.lock().as_mut().unwrap().send(Message::CacheGetRequest(key));
     let msg = KERNEL_CHANNEL_0TO1.lock().as_mut().unwrap().recv();
     if let Message::CacheGetReply(v) = msg {
-        let slice = v.as_c_slice();
+        let slice = unsafe { transmute(v.as_c_slice()) };
         // we intentionally leak the memory here,
         // which does not matter as core1 would restart
-        unsafe {
-            transmute(slice)
-        }
+        forget(v);
+        slice
     } else {
         panic!("Expected CacheGetReply for CacheGetRequest");
     }
