@@ -9,17 +9,12 @@ members = [
   "szl"
 ]
 
-[profile.dev]
-panic = "abort"
-lto = false
-
 [profile.release]
 panic = "abort"
 debug = true
-# Link-Time Optimization:
-# turn off if you get unusable debug symbols.
+codegen-units = 1
+opt-level = 'z'
 lto = true
-opt-level = 'z'  # Optimize for size.
 
 [patch.crates-io]
 core_io = { path = "./libcoreio" }
