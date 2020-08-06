@@ -190,30 +190,80 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__artiq_reraise = eh_artiq::reraise),
 
         // libm
-        api_libm_f64f64!(sqrt),
-        api_libm_f64f64!(round),
+        api_libm_f64f64!(acos),
+        api_libm_f64f64!(acosh),
+        api_libm_f64f64!(asin),
+        api_libm_f64f64!(asinh),
+        api_libm_f64f64!(atan),
+        {
+            extern fn atan2(y: f64, x: f64) -> f64 {
+                libm::atan2(y, x)
+            }
+            api!(atan2 = atan2)
+        },
+        api_libm_f64f64!(cbrt),
+        api_libm_f64f64!(ceil),
+        api_libm_f64f64!(cos),
+        api_libm_f64f64!(cosh),
+        api_libm_f64f64!(erf),
+        api_libm_f64f64!(erfc),
+        api_libm_f64f64!(exp),
+        api_libm_f64f64!(exp2),
+        api_libm_f64f64!(exp10),
+        api_libm_f64f64!(expm1),
+        api_libm_f64f64!(fabs),
         api_libm_f64f64!(floor),
+        {
+            extern fn fma(x: f64, y: f64, z: f64) -> f64 {
+                libm::fma(x, y, z)
+            }
+            api!(fma = fma)
+        },
         {
             extern fn fmod(x: f64, y: f64) -> f64 {
                 libm::fmod(x, y)
             }
             api!(fmod = fmod)
         },
+        {
+            extern fn hypot(x: f64, y: f64) -> f64 {
+                libm::hypot(x, y)
+            }
+            api!(hypot = hypot)
+        },
+        api_libm_f64f64!(j0),
+        api_libm_f64f64!(j1),
+        {
+            extern fn jn(n: i32, x: f64) -> f64 {
+                libm::jn(n, x)
+            }
+            api!(jn = jn)
+        },
+        api_libm_f64f64!(lgamma),
         api_libm_f64f64!(log),
+        api_libm_f64f64!(log2),
         api_libm_f64f64!(log10),
-        api_libm_f64f64!(exp),
         {
             extern fn pow(x: f64, y: f64) -> f64 {
                 libm::pow(x, y)
             }
             api!(pow = pow)
         },
+        api_libm_f64f64!(round),
         api_libm_f64f64!(sin),
-        api_libm_f64f64!(cos),
-        api_libm_f64f64!(tan),
-        api_libm_f64f64!(asin),
-        api_libm_f64f64!(acos),
-        api_libm_f64f64!(atan),
+        api_libm_f64f64!(sinh),
+        api_libm_f64f64!(sqrt),
+        api_libm_f64f64!(tanh),
+        api_libm_f64f64!(tgamma),
+        api_libm_f64f64!(trunc),
+        api_libm_f64f64!(y0),
+        api_libm_f64f64!(y1),
+        {
+            extern fn yn(n: i32, x: f64) -> f64 {
+                libm::yn(n, x)
+            }
+            api!(yn = yn)
+        },
     ];
     api.iter()
        .find(|&&(exported, _)| exported.as_bytes() == required)
