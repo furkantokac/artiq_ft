@@ -151,6 +151,8 @@ pub extern fn dma_retrieve(name: CSlice<u8>) -> DmaTrace {
             for _ in 0..padding {
                 v.push(0);
             }
+            // trailing zero to indicate end of buffer
+            v.push(0);
             v.copy_within(0..original_length, padding);
             let v = Box::new(v);
             let address = Box::into_raw(v) as *mut Vec<u8> as i32;
