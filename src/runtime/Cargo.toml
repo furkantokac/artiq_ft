@@ -26,11 +26,11 @@ log_buffer = { version = "1.2" }
 libm = { version = "0.2", features = ["unstable"] }
 vcell = "0.1"
 
-libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
-libsupport_zynq = { default-features = false, features = ["alloc_core"], git = "https://git.m-labs.hk/M-Labs/zc706.git" }
-libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
-libasync = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
-libregister = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
+libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libsupport_zynq = { default-features = false, features = ["alloc_core"], git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libasync = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libregister = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
 
 dyld = { path = "../libdyld" }
 dwarf = { path = "../libdwarf" }

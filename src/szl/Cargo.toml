@@ -12,9 +12,9 @@ default = ["target_zc706"]
 [dependencies]
 log = "0.4"
 cstr_core = { version = "0.2", default-features = false }
-libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
-libsupport_zynq = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
-libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zc706.git" }
+libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libsupport_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
 
 [build-dependencies]
 cc = { version = "1.0.1" }
