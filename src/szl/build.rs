@@ -32,7 +32,8 @@ pub fn compile_unlzma() {
     cfg.flag("-fPIC");
     cfg.flag("-fno-stack-protector");
     cfg.flag("--target=armv7-none-eabihf");
-    cfg.flag("-Os");
+    cfg.flag("-Oz");
+    cfg.flag("-flto=full");
 
     let sources = vec![
         "unlzma.c",

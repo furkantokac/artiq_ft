@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![feature(panic_info_message)]
 
 extern crate log;
 
@@ -15,6 +16,7 @@ use libcortex_a9::{
 use libboard_zynq::{
     self as zynq, println,
     clocks::Clocks, clocks::source::{ClockSource, ArmPll, IoPll},
+    stdio,
     logger,
     timer::GlobalTimer,
 };
@@ -28,7 +30,17 @@ extern "C" {
 }
 
 extern fn lzma_error(message: *const u8) {
-    error!("LZMA error: {}", unsafe { CStr::from_ptr(message) }.to_str().unwrap());
+    let msg = unsafe {CStr::from_ptr(message)}.to_str();
+    if let Ok(msg) = msg {
+        println!("LZMA error: {}", msg);
+    }
+}
+
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    stdio::drop_uart();
+    println!("panicked!");
+    loop {}
 }
 
 #[no_mangle]
