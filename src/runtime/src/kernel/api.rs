@@ -204,6 +204,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
             }
             api!(atan2 = atan2)
         },
+        api_libm_f64f64!(atanh),
         api_libm_f64f64!(cbrt),
         api_libm_f64f64!(ceil),
         api_libm_f64f64!(cos),
