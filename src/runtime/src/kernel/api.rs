@@ -189,6 +189,9 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__artiq_raise = eh_artiq::raise),
         api!(__artiq_reraise = eh_artiq::reraise),
 
+        // Implementations for LLVM math intrinsics
+        api!(__powidf2),
+
         // libm
         api_libm_f64f64!(acos),
         api_libm_f64f64!(acosh),
