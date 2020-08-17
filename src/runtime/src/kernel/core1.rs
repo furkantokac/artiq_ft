@@ -143,7 +143,7 @@ pub fn main_core1() {
     debug!("FPU enabled on Core1");
 
     ram::init_alloc_core1();
-    gic::InterruptController::new(mpcore::RegisterBlock::new()).enable_interrupts();
+    gic::InterruptController::gic(mpcore::RegisterBlock::mpcore()).enable_interrupts();
 
     let (mut core0_tx, mut core1_rx) = sync_channel!(Message, 4);
     let (mut core1_tx, core0_rx) = sync_channel!(Message, 4);

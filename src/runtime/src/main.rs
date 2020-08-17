@@ -192,7 +192,7 @@ pub fn main_core0() {
     info!("NAR3/Zynq7000 starting...");
 
     ram::init_alloc_core0();
-    gic::InterruptController::new(mpcore::RegisterBlock::new()).enable_interrupts();
+    gic::InterruptController::gic(mpcore::RegisterBlock::mpcore()).enable_interrupts();
 
     init_gateware();
     info!("detected gateware: {}", identifier_read(&mut [0; 64]));

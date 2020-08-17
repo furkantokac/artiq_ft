@@ -69,7 +69,7 @@ pub fn main_core0() {
     Clocks::set_cpu_freq(CPU_FREQ);
     IoPll::setup(1_000_000_000);
     libboard_zynq::stdio::drop_uart(); // reinitialize UART after clocking change
-    let mut ddr = zynq::ddr::DdrRam::new();
+    let mut ddr = zynq::ddr::DdrRam::ddrram();
 
     let payload = include_bytes!("../../../build/szl-payload.bin.lzma");
     info!("decompressing payload");

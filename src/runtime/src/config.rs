@@ -68,7 +68,7 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Result<'static, Self> {
-        let sdio = sdio::SDIO::sdio0(true);
+        let sdio = sdio::Sdio::sdio0(true);
         if !sdio.is_card_inserted() {
             Err(sdio::sd_card::CardInitializationError::NoCardInserted)?;
         }

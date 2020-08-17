@@ -319,7 +319,7 @@ pub fn main(timer: GlobalTimer, cfg: &config::Config) {
     let net_addresses = net_settings::get_adresses(cfg);
     info!("network addresses: {}", net_addresses);
 
-    let eth = zynq::eth::Eth::default(net_addresses.hardware_addr.0.clone());
+    let eth = zynq::eth::Eth::eth0(net_addresses.hardware_addr.0.clone());
     const RX_LEN: usize = 8;
     // Number of transmission buffers (minimum is two because with
     // one, duplicate packet transmission occurs)

@@ -153,7 +153,7 @@ pub fn load_bitstream<File: Read + Seek>(
 }
 
 pub fn load_bitstream_from_sd() -> Result<(), PlLoadingError> {
-    let sdio0 = sdio::SDIO::sdio0(true);
+    let sdio0 = sdio::Sdio::sdio0(true);
     if sdio0.is_card_inserted() {
         info!("Card inserted. Mounting file system.");
         let sd = sdio::sd_card::SdCard::from_sdio(sdio0).unwrap();

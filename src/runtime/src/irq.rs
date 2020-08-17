@@ -19,8 +19,8 @@ static CORE1_RESTART: AtomicBool = AtomicBool::new(false);
 #[naked]
 pub unsafe extern "C" fn IRQ() {
     if MPIDR.read().cpu_id() == 1 {
-        let mpcore = mpcore::RegisterBlock::new();
-        let mut gic = gic::InterruptController::new(mpcore);
+        let mpcore = mpcore::RegisterBlock::mpcore();
+        let mut gic = gic::InterruptController::gic(mpcore);
         let id = gic.get_interrupt_id();
         if id.0 == 0 {
             gic.end_interrupt(id);
@@ -38,7 +38,7 @@ pub unsafe extern "C" fn IRQ() {
 }
 
 pub fn restart_core1() {
-    let mut interrupt_controller = gic::InterruptController::new(mpcore::RegisterBlock::new());
+    let mut interrupt_controller = gic::InterruptController::gic(mpcore::RegisterBlock::mpcore());
     CORE1_RESTART.store(true, Ordering::Relaxed);
     interrupt_controller.send_sgi(gic::InterruptId(0), gic::CPUCore::Core1.into());
     while CORE1_RESTART.load(Ordering::Relaxed) {
