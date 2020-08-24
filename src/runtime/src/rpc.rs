@@ -2,6 +2,7 @@ use core::str;
 use core::future::Future;
 use cslice::{CSlice, CMutSlice};
 use log::trace;
+use byteorder::{NetworkEndian, ByteOrder};
 
 use core_io::{Write, Error};
 use libboard_zynq::smoltcp;
@@ -76,14 +77,40 @@ async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, da
             #[repr(C)]
             struct List { elements: *mut (), length: u32 };
             consume_value!(List, |ptr| {
-                (*ptr).length = proto_async::read_i32(stream).await? as u32;
-
+                let length = proto_async::read_i32(stream).await? as usize;
+                (*ptr).length  = length as u32;
                 let tag = it.clone().next().expect("truncated tag");
-                (*ptr).elements = alloc(tag.size() * (*ptr).length as usize).await;
+                let mut data = alloc(tag.size() * length as usize).await;
 
-                let mut data = (*ptr).elements;
-                for _ in 0..(*ptr).length as usize {
-                    recv_value(stream, tag, &mut data, alloc).await?
+                (*ptr).elements = data;
+                match tag {
+                    Tag::Bool => {
+                        let ptr = align_ptr_mut::<u8>(data);
+                        let dest = core::slice::from_raw_parts_mut(ptr, length);
+                        proto_async::read_chunk(stream, dest).await?;
+                    },
+                    Tag::Int32 => {
+                        let ptr = align_ptr_mut::<u32>(data);
+                        // reading as raw bytes and do endianness conversion later
+                        let dest = core::slice::from_raw_parts_mut(ptr as *mut u8, length * 4);
+                        proto_async::read_chunk(stream, dest).await?;
+                        drop(dest);
+                        let dest = core::slice::from_raw_parts_mut(ptr, length);
+                        NetworkEndian::from_slice_u32(dest);
+                    },
+                    Tag::Int64 | Tag::Float64 => {
+                        let ptr = align_ptr_mut::<u64>(data);
+                        let dest = core::slice::from_raw_parts_mut(ptr as *mut u8, length * 8);
+                        proto_async::read_chunk(stream, dest).await?;
+                        drop(dest);
+                        let dest = core::slice::from_raw_parts_mut(ptr, length);
+                        NetworkEndian::from_slice_u64(dest);
+                    },
+                    _ => {
+                        for _ in 0..(*ptr).length as usize {
+                            recv_value(stream, tag, &mut data, alloc).await?
+                        }
+                    }
                 }
                 Ok(())
             })
@@ -100,9 +127,35 @@ async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, da
                 let elt_tag = it.clone().next().expect("truncated tag");
                 *buffer = alloc(elt_tag.size() * total_len as usize).await;
 
+                let length = total_len as usize;
                 let mut data = *buffer;
-                for _ in 0..total_len {
-                    recv_value(stream, elt_tag, &mut data, alloc).await?
+                match elt_tag {
+                    Tag::Bool => {
+                        let ptr = align_ptr_mut::<u8>(data);
+                        let dest = core::slice::from_raw_parts_mut(ptr, length);
+                        proto_async::read_chunk(stream, dest).await?;
+                    },
+                    Tag::Int32 => {
+                        let ptr = align_ptr_mut::<u32>(data);
+                        let dest = core::slice::from_raw_parts_mut(ptr as *mut u8, length * 4);
+                        proto_async::read_chunk(stream, dest).await?;
+                        drop(dest);
+                        let dest = core::slice::from_raw_parts_mut(ptr, length);
+                        NetworkEndian::from_slice_u32(dest);
+                    },
+                    Tag::Int64 | Tag::Float64 => {
+                        let ptr = align_ptr_mut::<u64>(data);
+                        let dest = core::slice::from_raw_parts_mut(ptr as *mut u8, length * 8);
+                        proto_async::read_chunk(stream, dest).await?;
+                        drop(dest);
+                        let dest = core::slice::from_raw_parts_mut(ptr, length);
+                        NetworkEndian::from_slice_u64(dest);
+                    },
+                    _ => {
+                        for _ in 0..length {
+                            recv_value(stream, elt_tag, &mut data, alloc).await?
+                        }
+                    }
                 }
                 Ok(())
             })
@@ -177,12 +230,47 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
             #[repr(C)]
             struct List { elements: *const (), length: u32 };
             consume_value!(List, |ptr| {
+                let length = (*ptr).length as isize;
                 writer.write_u32((*ptr).length)?;
                 let tag = it.clone().next().expect("truncated tag");
                 let mut data = (*ptr).elements;
-                for _ in 0..(*ptr).length as usize {
-                    send_value(writer, tag, &mut data)?;
-                }
+                writer.write_u8(tag.as_u8())?;
+                match tag {
+                    Tag::Bool => {
+                        // we can pretend this is u8...
+                        let ptr1 = align_ptr::<u8>(data);
+                        let slice = core::slice::from_raw_parts(ptr1, length as usize);
+                        writer.write_all(slice)?;
+                    },
+                    Tag::Int32 => {
+                        let ptr1 = align_ptr::<i32>(data);
+                        let slice = core::slice::from_raw_parts(ptr1, length as usize);
+                        let mut v: alloc::vec::Vec<i32> = slice.to_vec();
+                        NetworkEndian::from_slice_i32(&mut v);
+                        let slice2 = core::slice::from_raw_parts(
+                            v.as_ptr() as usize as *const u8,
+                            length as usize * 4
+                        );
+                        writer.write_all(slice2)?;
+                    },
+                    Tag::Int64 | Tag::Float64 => {
+                        let ptr1 = align_ptr::<i64>(data);
+                        let slice = core::slice::from_raw_parts(ptr1, length as usize);
+                        let mut v: alloc::vec::Vec<i64> = slice.to_vec();
+                        NetworkEndian::from_slice_i64(&mut v);
+                        let slice2 = core::slice::from_raw_parts(
+                            v.as_ptr() as usize as *const u8,
+                            length as usize * 8
+                        );
+                        writer.write_all(slice2)?;
+                    },
+                    // non-primitive types, not sure if this would happen but we can handle it...
+                    _ => {
+                        for _ in 0..length {
+                            send_value(writer, tag, &mut data)?;
+                        }
+                    }
+                };
                 Ok(())
             })
         }
@@ -199,9 +287,43 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
                     })
                 }
                 let mut data = *buffer;
-                for _ in 0..total_len as usize {
-                    send_value(writer, elt_tag, &mut data)?;
-                }
+                let length = total_len as isize;
+                writer.write_u8(elt_tag.as_u8())?;
+                match elt_tag {
+                    Tag::Bool => {
+                        let ptr1 = align_ptr::<u8>(data);
+                        let slice = core::slice::from_raw_parts(ptr1, length as usize);
+                        writer.write_all(slice)?;
+                    },
+                    Tag::Int32 => {
+                        let ptr1 = align_ptr::<i32>(data);
+                        let slice = core::slice::from_raw_parts(ptr1, length as usize);
+                        let mut v: alloc::vec::Vec<i32> = slice.to_vec();
+                        NetworkEndian::from_slice_i32(&mut v);
+                        let slice2 = core::slice::from_raw_parts(
+                            v.as_ptr() as usize as *const u8,
+                            length as usize * 4
+                        );
+                        writer.write_all(slice2)?;
+                    },
+                    Tag::Int64 | Tag::Float64 => {
+                        let ptr1 = align_ptr::<i64>(data);
+                        let slice = core::slice::from_raw_parts(ptr1, length as usize);
+                        let mut v: alloc::vec::Vec<i64> = slice.to_vec();
+                        NetworkEndian::from_slice_i64(&mut v);
+                        let slice2 = core::slice::from_raw_parts(
+                            v.as_ptr() as usize as *const u8,
+                            length as usize * 8
+                        );
+                        writer.write_all(slice2)?;
+                    },
+                    // non-primitive types, not sure if this would happen but we can handle it...
+                    _ => {
+                        for _ in 0..length {
+                            send_value(writer, elt_tag, &mut data)?;
+                        }
+                    }
+                };
                 Ok(())
             })
         }
