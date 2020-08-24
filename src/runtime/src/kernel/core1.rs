@@ -222,12 +222,6 @@ pub fn terminate(exception: &'static eh_artiq::Exception<'static>, backtrace: &'
 /// Called by llvm_libunwind
 #[no_mangle]
 extern fn dl_unwind_find_exidx(pc: *const u32, len_ptr: *mut u32) -> *const u32 {
-    let exidx = unsafe {
-        KERNEL_IMAGE.as_ref()
-            .expect("dl_unwind_find_exidx kernel image")
-            .library.get().as_ref().unwrap().exidx()
-    };
-
     let length;
     let start: *const u32;
     unsafe {
@@ -235,6 +229,9 @@ extern fn dl_unwind_find_exidx(pc: *const u32, len_ptr: *mut u32) -> *const u32 
             length = (&__exidx_end as *const u32).offset_from(&__exidx_start) as u32;
             start = &__exidx_start;
         } else {
+            let exidx = KERNEL_IMAGE.as_ref()
+                .expect("dl_unwind_find_exidx kernel image")
+                .library.get().as_ref().unwrap().exidx();
             length = exidx.len() as u32;
             start = exidx.as_ptr();
         }
