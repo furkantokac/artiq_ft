@@ -13,8 +13,16 @@ members = [
 panic = "abort"
 debug = true
 codegen-units = 1
-opt-level = 'z'
+opt-level = 's'
 lto = true
+
+[profile.release.package.smoltcp]
+opt-level = 2
+[profile.release.package.libasync]
+opt-level = 2
+[profile.release.package.libboard_zynq]
+opt-level = 2
 
 [patch.crates-io]
 core_io = { path = "./libcoreio" }
+compiler_builtins = { git = "https://git.m-labs.hk/pca006132/compiler-builtins-zynq.git"}

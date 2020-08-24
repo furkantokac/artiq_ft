@@ -1,0 +1,13 @@
+diff --git a/src/sysroot.rs b/src/sysroot.rs
+index 1f3c8d1..e5615ee 100644
+--- a/src/sysroot.rs
++++ b/src/sysroot.rs
+@@ -163,7 +163,7 @@ version = "0.0.0"
+ edition = "2018"
+ 
+ [dependencies.compiler_builtins]
+-version = "0.1.0"
++git = "https://git.m-labs.hk/pca006132/compiler-builtins-zynq.git"
+ "#;
+ 
+     let mut stoml = TOML.to_owned();

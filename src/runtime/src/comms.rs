@@ -86,7 +86,7 @@ static CACHE_STORE: Mutex<BTreeMap<String, Vec<i32>>> = Mutex::new(BTreeMap::new
 static DMA_RECORD_STORE: Mutex<BTreeMap<String, (Vec<u8>, i64)>> = Mutex::new(BTreeMap::new());
 
 async fn write_header(stream: &TcpStream, reply: Reply) -> Result<()> {
-    stream.send([0x5a, 0x5a, 0x5a, 0x5a, reply.to_u8().unwrap()].iter().copied()).await?;
+    stream.send_slice(&[0x5a, 0x5a, 0x5a, 0x5a, reply.to_u8().unwrap()]).await?;
     Ok(())
 }
 
@@ -138,7 +138,7 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                 let stream = stream.unwrap();
                 write_header(stream, Reply::RPCRequest).await?;
                 write_bool(stream, is_async).await?;
-                stream.send(data.iter().copied()).await?;
+                stream.send_slice(&data).await?;
                 if !is_async {
                     let host_request = read_request(stream, false).await?.unwrap();
                     match host_request {
@@ -298,7 +298,7 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
         match request {
             Request::SystemInfo => {
                 write_header(stream, Reply::SystemInfo).await?;
-                stream.send("ARZQ".bytes()).await?;
+                stream.send_slice("ARZQ".as_bytes()).await?;
             },
             Request::LoadKernel => {
                 let buffer = read_bytes(stream, 1024*1024).await?;
@@ -320,10 +320,10 @@ pub fn main(timer: GlobalTimer, cfg: &config::Config) {
     info!("network addresses: {}", net_addresses);
 
     let eth = zynq::eth::Eth::eth0(net_addresses.hardware_addr.0.clone());
-    const RX_LEN: usize = 8;
+    const RX_LEN: usize = 64;
     // Number of transmission buffers (minimum is two because with
     // one, duplicate packet transmission occurs)
-    const TX_LEN: usize = 8;
+    const TX_LEN: usize = 64;
     let eth = eth.start_rx(RX_LEN);
     let mut eth = eth.start_tx(TX_LEN);
 
@@ -377,7 +377,7 @@ pub fn main(timer: GlobalTimer, cfg: &config::Config) {
         let connection = Rc::new(Semaphore::new(1, 1));
         let terminate = Rc::new(Semaphore::new(0, 1));
         loop {
-            let stream = TcpStream::accept(1381, 2048, 2048).await.unwrap();
+            let stream = TcpStream::accept(1381, 0x10_000, 0x10_000).await.unwrap();
 
             if connection.try_wait().is_none() {
                 // there is an existing connection

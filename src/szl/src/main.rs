@@ -10,7 +10,8 @@ use cstr_core::CStr;
 
 use libcortex_a9::{
     enable_fpu,
-    cache::{dcci_slice, iciallu, bpiall},
+    l2c::enable_l2_cache,
+    cache::{dcciall, iciallu, bpiall},
     asm::{dsb, isb},
 };
 use libboard_zynq::{
@@ -46,6 +47,7 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 #[no_mangle]
 pub fn main_core0() {
     GlobalTimer::start();
+    enable_fpu();
     logger::init().unwrap();
     log::set_max_level(log::LevelFilter::Debug);
     println!(r#"
@@ -59,8 +61,8 @@ pub fn main_core0() {
                    (C) 2020 M-Labs
 "#);
     info!("Simple Zynq Loader starting...");
+    enable_l2_cache();
 
-    enable_fpu();
     debug!("FPU enabled on Core0");
 
     const CPU_FREQ: u32 = 800_000_000;
@@ -79,12 +81,9 @@ pub fn main_core0() {
     if result < 0 {
         error!("decompression failed");
     } else {
-        // Flush data cache entries for all of DDR, including
+        // Flush data cache entries for all of L1 cache, including
         // Memory/Instruction Synchronization Barriers
-        dcci_slice(unsafe {
-            core::slice::from_raw_parts(ddr.ptr::<u8>(), ddr.size())
-        });
-        dsb();
+        dcciall();
         iciallu();
         bpiall();
         dsb();

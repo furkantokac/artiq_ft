@@ -5,6 +5,7 @@ let
   rustPlatform = (import ./rustPlatform.nix { inherit pkgs; });
   artiqpkgs = import "${artiq-fast}/default.nix" { inherit pkgs; };
   vivado = import "${artiq-fast}/vivado.nix" { inherit pkgs; };
+  xbuild = (import ./xbuild.nix );
 in
   pkgs.stdenv.mkDerivation {
     name = "artiq-zynq-env";
@@ -15,7 +16,7 @@ in
       pkgs.llvmPackages_9.llvm
       pkgs.llvmPackages_9.clang-unwrapped
       pkgs.cacert
-      pkgs.cargo-xbuild
+      xbuild
 
       pkgs.openocd
       pkgs.openssh pkgs.rsync

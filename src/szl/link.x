@@ -43,7 +43,7 @@ SECTIONS
     .stack1 (NOLOAD) : ALIGN(8)
     {
         __stack1_end = .;
-        . += 0x4000;
+        . += 0x100;
         __stack1_start = .;
     } > OCM3
 

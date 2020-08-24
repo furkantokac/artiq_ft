@@ -120,26 +120,26 @@ pub async fn read_chunk(stream: &TcpStream, destination: &mut [u8]) -> Result<()
 }
 
 pub async fn write_i8(stream: &TcpStream, value: i8) -> Result<()> {
-    stream.send([value as u8].iter().copied()).await?;
+    stream.send_slice(&[value as u8]).await?;
     Ok(())
 }
 
 pub async fn write_bool(stream: &TcpStream, value: bool) -> Result<()> {
-    stream.send([value as u8].iter().copied()).await?;
+    stream.send_slice(&[value as u8]).await?;
     Ok(())
 }
 
 pub async fn write_i32(stream: &TcpStream, value: i32) -> Result<()> {
-    stream.send([
+    stream.send_slice(&[
         (value >> 24) as u8,
         (value >> 16) as u8,
         (value >>  8) as u8,
-         value        as u8].iter().copied()).await?;
+         value        as u8]).await?;
     Ok(())
 }
 
 pub async fn write_i64(stream: &TcpStream, value: i64) -> Result<()> {
-    stream.send([
+    stream.send_slice(&[
         (value >> 56) as u8,
         (value >> 48) as u8,
         (value >> 40) as u8,
@@ -147,12 +147,12 @@ pub async fn write_i64(stream: &TcpStream, value: i64) -> Result<()> {
         (value >> 24) as u8,
         (value >> 16) as u8,
         (value >>  8) as u8,
-         value        as u8].iter().copied()).await?;
+         value        as u8]).await?;
     Ok(())
 }
 
 pub async fn write_chunk(stream: &TcpStream, value: &[u8]) -> Result<()> {
     write_i32(stream, value.len() as i32).await?;
-    stream.send(value.iter().copied()).await?;
+    stream.send_slice(value).await?;
     Ok(())
 }
