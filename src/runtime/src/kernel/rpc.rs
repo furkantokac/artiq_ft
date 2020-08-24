@@ -11,10 +11,10 @@ use super::{
 };
 
 fn rpc_send_common(is_async: bool, service: u32, tag: &CSlice<u8>, data: *const *const ()) {
-    let mut core1_tx = KERNEL_CHANNEL_1TO0.lock();
+    let core1_tx = unsafe { KERNEL_CHANNEL_1TO0.as_mut().unwrap() };
     let mut buffer = Vec::<u8>::new();
     send_args(&mut buffer, service, tag.as_ref(), data).expect("RPC encoding failed");
-    core1_tx.as_mut().unwrap().send(Message::RpcSend { is_async, data: buffer });
+    core1_tx.send(Message::RpcSend { is_async, data: buffer });
 }
 
 pub extern fn rpc_send(service: u32, tag: &CSlice<u8>, data: *const *const ()) {
@@ -26,11 +26,11 @@ pub extern fn rpc_send_async(service: u32, tag: &CSlice<u8>, data: *const *const
 }
 
 pub extern fn rpc_recv(slot: *mut ()) -> usize {
-    let reply = {
-        let mut core1_rx = KERNEL_CHANNEL_0TO1.lock();
-        let mut core1_tx = KERNEL_CHANNEL_1TO0.lock();
-        core1_tx.as_mut().unwrap().send(Message::RpcRecvRequest(slot));
-        core1_rx.as_mut().unwrap().recv()
+    let reply = unsafe {
+        let core1_rx = KERNEL_CHANNEL_0TO1.as_mut().unwrap();
+        let core1_tx = KERNEL_CHANNEL_1TO0.as_mut().unwrap();
+        core1_tx.send(Message::RpcRecvRequest(slot));
+        core1_rx.recv()
     };
     match reply {
         Message::RpcRecvReply(Ok(alloc_size)) => alloc_size,

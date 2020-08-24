@@ -36,7 +36,9 @@ pub unsafe fn init_dma_recorder() {
 
 pub extern fn dma_record_start(name: CSlice<u8>) {
     let name = String::from_utf8(name.as_ref().to_vec()).unwrap();
-    KERNEL_CHANNEL_1TO0.lock().as_mut().unwrap().send(Message::DmaEraseRequest(name.clone()));
+    unsafe {
+        KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(Message::DmaEraseRequest(name.clone()));
+    }
     unsafe {
         if RECORDER.is_some() {
             artiq_raise!("DMAError", "DMA is already recording")
@@ -70,7 +72,7 @@ pub extern fn dma_record_stop(duration: i64) {
 
         let mut recorder = RECORDER.take().unwrap();
         recorder.duration = duration;
-        KERNEL_CHANNEL_1TO0.lock().as_mut().unwrap().send(
+        KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(
             Message::DmaPutRequest(recorder)
         );
     }
@@ -135,13 +137,17 @@ pub extern fn dma_record_output_wide(target: i32, words: CSlice<i32>) {
 
 pub extern fn dma_erase(name: CSlice<u8>) {
     let name = String::from_utf8(name.as_ref().to_vec()).unwrap();
-    KERNEL_CHANNEL_1TO0.lock().as_mut().unwrap().send(Message::DmaEraseRequest(name));
+    unsafe {
+        KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(Message::DmaEraseRequest(name));
+    }
 }
 
 pub extern fn dma_retrieve(name: CSlice<u8>) -> DmaTrace {
     let name = String::from_utf8(name.as_ref().to_vec()).unwrap();
-    KERNEL_CHANNEL_1TO0.lock().as_mut().unwrap().send(Message::DmaGetRequest(name));
-    match KERNEL_CHANNEL_0TO1.lock().as_mut().unwrap().recv() {
+    unsafe {
+        KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(Message::DmaGetRequest(name));
+    }
+    match unsafe {KERNEL_CHANNEL_0TO1.as_mut().unwrap()}.recv() {
         Message::DmaGetReply(None) => (),
         Message::DmaGetReply(Some((mut v, duration))) => {
             v.reserve(ALIGNMENT - 1);

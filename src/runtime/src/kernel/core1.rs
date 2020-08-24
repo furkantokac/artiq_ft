@@ -179,15 +179,15 @@ pub fn main_core1() {
             Message::StartRequest => {
                 info!("kernel starting");
                 if let Some(kernel) = loaded_kernel.take() {
-                    *KERNEL_CHANNEL_0TO1.lock() = Some(core1_rx);
-                    *KERNEL_CHANNEL_1TO0.lock() = Some(core1_tx);
                     unsafe {
+                        KERNEL_CHANNEL_0TO1 = Some(core1_rx);
+                        KERNEL_CHANNEL_1TO0 = Some(core1_tx);
                         KERNEL_IMAGE = &kernel as *const KernelImage;
                         kernel.exec();
                         KERNEL_IMAGE = ptr::null();
+                        core1_rx = KERNEL_CHANNEL_0TO1.take().unwrap();
+                        core1_tx = KERNEL_CHANNEL_1TO0.take().unwrap();
                     }
-                    core1_rx = core::mem::replace(&mut *KERNEL_CHANNEL_0TO1.lock(), None).unwrap();
-                    core1_tx = core::mem::replace(&mut *KERNEL_CHANNEL_1TO0.lock(), None).unwrap();
                 }
                 info!("kernel finished");
                 core1_tx.send(Message::KernelFinished);
@@ -213,8 +213,8 @@ pub fn terminate(exception: &'static eh_artiq::Exception<'static>, backtrace: &'
     }
 
     {
-        let mut core1_tx = KERNEL_CHANNEL_1TO0.lock();
-        core1_tx.as_mut().unwrap().send(Message::KernelException(exception, &backtrace[..cursor]));
+        let core1_tx = unsafe { KERNEL_CHANNEL_1TO0.as_mut().unwrap() };
+        core1_tx.send(Message::KernelException(exception, &backtrace[..cursor]));
     }
     loop {}
 }

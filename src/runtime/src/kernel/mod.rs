@@ -49,8 +49,8 @@ pub enum Message {
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Sender<'static, Message>>> = Mutex::new(None);
 static CHANNEL_1TO0: Mutex<Option<sync_channel::Receiver<'static, Message>>> = Mutex::new(None);
 
-static KERNEL_CHANNEL_0TO1: Mutex<Option<sync_channel::Receiver<'static, Message>>> = Mutex::new(None);
-static KERNEL_CHANNEL_1TO0: Mutex<Option<sync_channel::Sender<'static, Message>>> = Mutex::new(None);
+static mut KERNEL_CHANNEL_0TO1: Option<sync_channel::Receiver<'static, Message>> = None;
+static mut KERNEL_CHANNEL_1TO0: Option<sync_channel::Sender<'static, Message>> = None;
 
 static mut KERNEL_IMAGE: *const core1::KernelImage = ptr::null();
 
