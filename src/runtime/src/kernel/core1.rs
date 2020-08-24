@@ -14,7 +14,7 @@ use libcortex_a9::{
 use libboard_zynq::{mpcore, gic};
 use libsupport_zynq::ram;
 use dyld::{self, Library};
-use crate::eh_artiq;
+use crate::{eh_artiq, rtio};
 use super::{
     api::resolve,
     rpc::rpc_send_async,
@@ -137,10 +137,8 @@ impl KernelImage {
 
 #[no_mangle]
 pub fn main_core1() {
-    debug!("Core1 started");
-
     enable_fpu();
-    debug!("FPU enabled on Core1");
+    debug!("Core1 started");
 
     ram::init_alloc_core1();
     gic::InterruptController::gic(mpcore::RegisterBlock::mpcore()).enable_interrupts();
@@ -151,6 +149,12 @@ pub fn main_core1() {
         INIT_LOCK.lock();
         core0_tx.reset();
         core1_tx.reset();
+        if !KERNEL_IMAGE.is_null() {
+            // indicates forceful termination of previous kernel
+            KERNEL_IMAGE = core::ptr::null();
+            debug!("rtio init");
+            rtio::init();
+        }
         dma::init_dma_recorder();
     }
     *CHANNEL_0TO1.lock() = Some(core0_tx);
