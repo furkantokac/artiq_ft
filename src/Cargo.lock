@@ -49,8 +49,8 @@ checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
 
 [[package]]
 name = "compiler_builtins"
-version = "0.1.32"
-source = "git+https://git.m-labs.hk/pca006132/compiler-builtins-zynq.git#6dd42338c6731941614cdf979280fdffd96d532e"
+version = "0.1.33"
+source = "git+https://git.m-labs.hk/pca006132/compiler-builtins-zynq.git#62a622ba62c671aaadce7c108854551086df41f8"
 dependencies = [
  "cc",
 ]
@@ -203,7 +203,7 @@ dependencies = [
 [[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#671968bac32ad4e98b1cbd6a117f41461cd44971"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#273f9ea72b738c1c85fdc398c3486c2f0564881e"
 dependencies = [
  "embedded-hal",
  "libcortex_a9",
@@ -215,7 +215,7 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#671968bac32ad4e98b1cbd6a117f41461cd44971"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#273f9ea72b738c1c85fdc398c3486c2f0564881e"
 dependencies = [
  "bit_field",
  "embedded-hal",
@@ -239,7 +239,7 @@ dependencies = [
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#671968bac32ad4e98b1cbd6a117f41461cd44971"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#273f9ea72b738c1c85fdc398c3486c2f0564881e"
 dependencies = [
  "bit_field",
  "libregister",
@@ -255,7 +255,7 @@ checksum = "c7d73b3f436185384286bd8098d17ec07c9a7d2388a6599f824d8502b529702a"
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#671968bac32ad4e98b1cbd6a117f41461cd44971"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#273f9ea72b738c1c85fdc398c3486c2f0564881e"
 dependencies = [
  "bit_field",
  "vcell",
@@ -265,7 +265,7 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#671968bac32ad4e98b1cbd6a117f41461cd44971"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#273f9ea72b738c1c85fdc398c3486c2f0564881e"
 dependencies = [
  "compiler_builtins",
  "libboard_zynq",
