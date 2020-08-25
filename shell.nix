@@ -5,7 +5,7 @@ let
   rustPlatform = (import ./rustPlatform.nix { inherit pkgs; });
   artiqpkgs = import "${artiq-fast}/default.nix" { inherit pkgs; };
   vivado = import "${artiq-fast}/vivado.nix" { inherit pkgs; };
-  xbuild = (import ./xbuild.nix );
+  xbuild = import ./xbuild.nix { inherit pkgs; };
 in
   pkgs.stdenv.mkDerivation {
     name = "artiq-zynq-env";

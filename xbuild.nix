@@ -1,12 +1,9 @@
-let
-  pkgs = import <nixpkgs> {};
-in
-with pkgs;
+{ pkgs }:
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "cargo-xbuild";
   version = "0.5.21";
 
-  src = fetchFromGitHub {
+  src = pkgs.fetchFromGitHub {
     owner = "rust-osdev";
     repo = pname;
     rev = "v${version}";
@@ -17,7 +14,7 @@ pkgs.rustPlatform.buildRustPackage rec {
 
   cargoSha256 = "1pj4x8y5vfpnn8vhxqqm3vicn29870r3jh0b17q3riq4vz1a2afp";
 
-  meta = with stdenv.lib; {
+  meta = with pkgs.stdenv.lib; {
     description = "Automatically cross-compiles the sysroot crates core, compiler_builtins, and alloc";
     homepage = "https://github.com/rust-osdev/cargo-xbuild";
     license = with licenses; [ mit asl20 ];
