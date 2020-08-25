@@ -50,7 +50,7 @@ checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
 [[package]]
 name = "compiler_builtins"
 version = "0.1.33"
-source = "git+https://git.m-labs.hk/pca006132/compiler-builtins-zynq.git#62a622ba62c671aaadce7c108854551086df41f8"
+source = "git+https://git.m-labs.hk/M-Labs/compiler-builtins-zynq.git#62a622ba62c671aaadce7c108854551086df41f8"
 dependencies = [
  "cc",
 ]

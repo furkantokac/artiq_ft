@@ -25,4 +25,4 @@ opt-level = 2
 
 [patch.crates-io]
 core_io = { path = "./libcoreio" }
-compiler_builtins = { git = "https://git.m-labs.hk/pca006132/compiler-builtins-zynq.git"}
+compiler_builtins = { git = "https://git.m-labs.hk/M-Labs/compiler-builtins-zynq.git"}
