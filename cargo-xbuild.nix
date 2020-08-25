@@ -10,7 +10,7 @@ pkgs.rustPlatform.buildRustPackage rec {
     sha256 = "08mpnj3l6bcm1jg22lw1gcs0lkm4320fwl4p5y1s44w64963kzf7";
   };
 
-  patches = [./xbuild.patch];
+  patches = [ ./cargo-xbuild.patch ];
 
   cargoSha256 = "1pj4x8y5vfpnn8vhxqqm3vicn29870r3jh0b17q3riq4vz1a2afp";
 
