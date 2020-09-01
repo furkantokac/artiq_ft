@@ -1,4 +1,4 @@
-use crate::sd_reader;
+use super::sd_reader;
 use core_io::{Error, Read, Seek, SeekFrom};
 use libboard_zynq::{devc, sdio};
 use log::{info, debug};

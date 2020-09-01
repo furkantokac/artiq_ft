@@ -237,6 +237,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libconfig"
+version = "0.1.0"
+dependencies = [
+ "core_io",
+ "fatfs",
+ "libboard_zynq",
+ "log",
+]
+
+[[package]]
 name = "libcortex_a9"
 version = "0.0.0"
 source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#273f9ea72b738c1c85fdc398c3486c2f0564881e"
@@ -416,11 +426,11 @@ dependencies = [
  "dwarf",
  "dyld",
  "embedded-hal",
- "fatfs",
  "futures",
  "libasync",
  "libboard_zynq",
  "libc",
+ "libconfig",
  "libcortex_a9",
  "libm",
  "libregister",

@@ -2,6 +2,7 @@
 members = [
   "libc",
   "libdyld",
+  "libconfig",
   "libcoreio",
   "libdwarf",
   "libunwind",

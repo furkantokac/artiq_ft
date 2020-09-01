@@ -20,9 +20,8 @@ use libboard_zynq::{
 use libcortex_a9::{semaphore::Semaphore, mutex::Mutex};
 use futures::{select_biased, future::FutureExt};
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
+use libconfig::{Config, net_settings};
 
-use crate::config;
-use crate::net_settings;
 use crate::proto_async::*;
 use crate::kernel;
 use crate::rpc;
@@ -315,7 +314,7 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
     }
 }
 
-pub fn main(timer: GlobalTimer, cfg: &config::Config) {
+pub fn main(timer: GlobalTimer, cfg: &Config) {
     let net_addresses = net_settings::get_adresses(cfg);
     info!("network addresses: {}", net_addresses);
 

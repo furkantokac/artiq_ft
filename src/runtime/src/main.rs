@@ -21,10 +21,8 @@ use libregister::RegisterW;
 use nb;
 use void::Void;
 use embedded_hal::blocking::delay::DelayMs;
+use libconfig::{Config, load_pl};
 
-mod sd_reader;
-mod config;
-mod net_settings;
 mod proto_core_io;
 mod proto_async;
 mod comms;
@@ -39,7 +37,6 @@ mod rtio;
 mod rtio;
 mod kernel;
 mod moninj;
-mod load_pl;
 mod eh_artiq;
 mod panic;
 mod logger;
@@ -99,7 +96,7 @@ fn identifier_read(buf: &mut [u8]) -> &str {
     }
 }
 
-fn init_rtio(timer: &mut GlobalTimer, cfg: &config::Config) {
+fn init_rtio(timer: &mut GlobalTimer, cfg: &Config) {
     let clock_sel =
         if let Ok(rtioclk) = cfg.read_str("rtioclk") {
             match rtioclk.as_ref() {
@@ -197,11 +194,11 @@ pub fn main_core0() {
     init_gateware();
     info!("detected gateware: {}", identifier_read(&mut [0; 64]));
 
-    let cfg = match config::Config::new() {
+    let cfg = match Config::new() {
         Ok(cfg) => cfg,
         Err(err) => {
             warn!("config initialization failed: {}", err);
-            config::Config::new_dummy()
+            Config::new_dummy()
         }
     };
 

@@ -1,0 +1,15 @@
+[package]
+name = "libconfig"
+version = "0.1.0"
+authors = ["M-Labs"]
+edition = "2018"
+
+[dependencies]
+libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+core_io = { version = "0.1", features = ["collections"] }
+fatfs = { version = "0.3", features = ["core_io"], default-features = false }
+log = "0.4"
+
+[features]
+ipv6 = []
+

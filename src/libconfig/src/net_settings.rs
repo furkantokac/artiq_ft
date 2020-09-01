@@ -1,8 +1,7 @@
 use core::fmt;
 
 use libboard_zynq::smoltcp::wire::{EthernetAddress, IpAddress};
-
-use crate::config;
+use super::Config;
 
 pub struct NetAddresses {
     pub hardware_addr: EthernetAddress,
@@ -23,7 +22,7 @@ impl fmt::Display for NetAddresses {
     }
 }
 
-pub fn get_adresses(cfg: &config::Config) -> NetAddresses {
+pub fn get_adresses(cfg: &Config) -> NetAddresses {
     let mut hardware_addr = EthernetAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x52]);
     let mut ipv4_addr = IpAddress::v4(192, 168, 1, 52);
     let mut ipv6_addr = None;
