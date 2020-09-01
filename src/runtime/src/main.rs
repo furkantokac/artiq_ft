@@ -14,14 +14,14 @@ extern crate alloc;
 use core::{cmp, str};
 use log::{info, warn, error};
 
-use libboard_zynq::{timer::GlobalTimer, devc, slcr, mpcore, gic};
+use libboard_zynq::{timer::GlobalTimer, mpcore, gic, slcr};
 use libasync::{task, block_async};
 use libsupport_zynq::ram;
-use libregister::RegisterW;
 use nb;
 use void::Void;
 use embedded_hal::blocking::delay::DelayMs;
-use libconfig::{Config, load_pl};
+use libconfig::Config;
+use libregister::RegisterW;
 
 mod proto_core_io;
 mod proto_async;
@@ -65,22 +65,6 @@ fn init_gateware() {
             slcr::FpgaRstCtrl::zeroed()
         );
     });
-    if devc::DevC::new().is_done() {
-        info!("gateware already loaded");
-        // Do not load again: assume that the gateware already present is
-        // what we want (e.g. gateware configured via JTAG before PS
-        // startup, or by FSBL).
-        // Make sure that the PL/PS interface is enabled (e.g. OpenOCD does not enable it).
-        slcr::RegisterBlock::unlocked(|slcr| {
-            slcr.init_postload_fpga();
-        });
-    } else {
-        // Load from SD card
-        match load_pl::load_bitstream_from_sd() {
-            Ok(_) => info!("Bitstream loaded successfully!"),
-            Err(e) => info!("Failure loading bitstream: {}", e),
-        }
-    }
 }
 
 fn identifier_read(buf: &mut [u8]) -> &str {
@@ -193,7 +177,6 @@ pub fn main_core0() {
 
     init_gateware();
     info!("detected gateware: {}", identifier_read(&mut [0; 64]));
-
     let cfg = match Config::new() {
         Ok(cfg) => cfg,
         Err(err) => {
