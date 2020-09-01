@@ -1,46 +1,38 @@
-use super::sd_reader;
+use alloc::vec::Vec;
 use core_io::{Error, Read, Seek, SeekFrom};
-use libboard_zynq::{devc, sdio};
-use log::{info, debug};
+use libboard_zynq::devc;
+use log::debug;
 
 #[derive(Debug)]
-pub enum PlLoadingError {
-    BootImageNotFound,
+pub enum BootgenLoadingError {
     InvalidBootImageHeader,
-    MissingBitstreamPartition,
+    MissingPartition,
     EncryptedBitstream,
     IoError(Error),
     DevcError(devc::DevcError),
 }
 
-impl From<Error> for PlLoadingError {
+impl From<Error> for BootgenLoadingError {
     fn from(error: Error) -> Self {
-        PlLoadingError::IoError(error)
+        BootgenLoadingError::IoError(error)
     }
 }
 
-impl From<devc::DevcError> for PlLoadingError {
+impl From<devc::DevcError> for BootgenLoadingError {
     fn from(error: devc::DevcError) -> Self {
-        PlLoadingError::DevcError(error)
+        BootgenLoadingError::DevcError(error)
     }
 }
 
-impl core::fmt::Display for PlLoadingError {
+impl core::fmt::Display for BootgenLoadingError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use PlLoadingError::*;
+        use BootgenLoadingError::*;
         match self {
-            BootImageNotFound => write!(
-                f,
-                "Boot image not found, make sure `boot.bin` exists and your SD card is plugged in."
-            ),
             InvalidBootImageHeader => write!(
                 f,
                 "Invalid boot image header. Check if the file is correct."
             ),
-            MissingBitstreamPartition => write!(
-                f,
-                "Bitstream partition not found. Check your compile configuration."
-            ),
+            MissingPartition => write!(f, "Partition not found. Check your compile configuration."),
             EncryptedBitstream => write!(f, "Encrypted bitstream is not supported."),
             IoError(e) => write!(f, "Error while reading: {}", e),
             DevcError(e) => write!(f, "PCAP interface error: {}", e),
@@ -66,7 +58,7 @@ struct PartitionHeader {
 }
 
 /// Read a u32 word from the reader.
-fn read_u32<Reader: Read>(reader: &mut Reader) -> Result<u32, PlLoadingError> {
+fn read_u32<Reader: Read>(reader: &mut Reader) -> Result<u32, BootgenLoadingError> {
     let mut buffer: [u8; 4] = [0; 4];
     reader.read_exact(&mut buffer)?;
     let mut result: u32 = 0;
@@ -79,7 +71,7 @@ fn read_u32<Reader: Read>(reader: &mut Reader) -> Result<u32, PlLoadingError> {
 /// Load PL partition header.
 fn load_pl_header<File: Read + Seek>(
     file: &mut File,
-) -> Result<Option<PartitionHeader>, PlLoadingError> {
+) -> Result<Option<PartitionHeader>, BootgenLoadingError> {
     let mut buffer: [u8; 0x40] = [0; 0x40];
     file.read_exact(&mut buffer)?;
     let header = unsafe { core::mem::transmute::<_, PartitionHeader>(buffer) };
@@ -90,56 +82,75 @@ fn load_pl_header<File: Read + Seek>(
     }
 }
 
-/// Locate the PL bitstream from the image, and return the size (in bytes) of the bitstream if successful.
-/// This function would seek the file to the location of the bitstream.
-fn locate_bitstream<File: Read + Seek>(file: &mut File) -> Result<usize, PlLoadingError> {
+fn load_ps_header<File: Read + Seek>(
+    file: &mut File,
+) -> Result<Option<PartitionHeader>, BootgenLoadingError> {
+    let mut buffer: [u8; 0x40] = [0; 0x40];
+    file.read_exact(&mut buffer)?;
+    let header = unsafe { core::mem::transmute::<_, PartitionHeader>(buffer) };
+    if header.attribute_bits & (1 << 4) != 0 {
+        Ok(Some(header))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Locate the partition from the image, and return the size (in bytes) of the partition if successful.
+/// This function would seek the file to the location of the partition.
+fn locate<
+    File: Read + Seek,
+    F: Fn(&mut File) -> Result<Option<PartitionHeader>, BootgenLoadingError>,
+>(
+    file: &mut File,
+    f: F,
+) -> Result<usize, BootgenLoadingError> {
+    file.seek(SeekFrom::Start(0))?;
     const BOOT_HEADER_SIGN: u32 = 0x584C4E58;
     // read boot header signature
     file.seek(SeekFrom::Start(0x24))?;
     if read_u32(file)? != BOOT_HEADER_SIGN {
-        return Err(PlLoadingError::InvalidBootImageHeader);
+        return Err(BootgenLoadingError::InvalidBootImageHeader);
     }
+    // find fsbl offset
+    file.seek(SeekFrom::Start(0x30))?;
+    // the length is in bytes, we have to convert it to words to compare with the partition offset
+    // later
+    let fsbl = read_u32(file)? / 4;
     // read partition header offset
     file.seek(SeekFrom::Start(0x9C))?;
     let ptr = read_u32(file)?;
     debug!("Partition header pointer = {:0X}", ptr);
     file.seek(SeekFrom::Start(ptr as u64))?;
 
-    let mut header_opt = None;
     // at most 3 partition headers
     for _ in 0..3 {
-        let result = load_pl_header(file)?;
-        if let Some(h) = result {
-            header_opt = Some(h);
-            break;
+        if let Some(header) = f(file)? {
+            let encrypted_length = header.encrypted_length;
+            let unencrypted_length = header.unencrypted_length;
+            debug!("Unencrypted length = {:0X}", unencrypted_length);
+            if encrypted_length != unencrypted_length {
+                return Err(BootgenLoadingError::EncryptedBitstream);
+            }
+
+            let start_addr = header.data_offset;
+            // skip fsbl
+            if start_addr == fsbl {
+                continue;
+            }
+            debug!("Partition start address: {:0X}", start_addr);
+            file.seek(SeekFrom::Start(start_addr as u64 * 4))?;
+
+            return Ok(unencrypted_length as usize * 4);
         }
     }
-    let header = match header_opt {
-        None => return Err(PlLoadingError::MissingBitstreamPartition),
-        Some(h) => h,
-    };
-
-    let encrypted_length = header.encrypted_length;
-    let unencrypted_length = header.unencrypted_length;
-    debug!("Unencrypted length = {:0X}", unencrypted_length);
-    if encrypted_length != unencrypted_length {
-        return Err(PlLoadingError::EncryptedBitstream);
-    }
-
-    let start_addr = header.data_offset;
-    debug!("Partition start address: {:0X}", start_addr);
-    file.seek(SeekFrom::Start(start_addr as u64 * 4))?;
-
-    Ok(unencrypted_length as usize * 4)
+    Err(BootgenLoadingError::MissingPartition)
 }
 
 /// Load bitstream from bootgen file.
 /// This function parses the file, locate the bitstream and load it through the PCAP driver.
 /// It requires a large buffer, please enable the DDR RAM before using it.
-pub fn load_bitstream<File: Read + Seek>(
-    file: &mut File,
-) -> Result<(), PlLoadingError> {
-    let size = locate_bitstream(file)?;
+pub fn load_bitstream<File: Read + Seek>(file: &mut File) -> Result<(), BootgenLoadingError> {
+    let size = locate(file, load_pl_header)?;
     unsafe {
         // align to 64 bytes
         let ptr = alloc::alloc::alloc(alloc::alloc::Layout::from_size_align(size, 64).unwrap());
@@ -159,20 +170,12 @@ pub fn load_bitstream<File: Read + Seek>(
     }
 }
 
-pub fn load_bitstream_from_sd() -> Result<(), PlLoadingError> {
-    let sdio0 = sdio::Sdio::sdio0(true);
-    if sdio0.is_card_inserted() {
-        info!("Card inserted. Mounting file system.");
-        let sd = sdio::sd_card::SdCard::from_sdio(sdio0).unwrap();
-        let reader = sd_reader::SdReader::new(sd);
-
-        let fs = reader.mount_fatfs(sd_reader::PartitionEntry::Entry1)?;
-        let root_dir = fs.root_dir();
-        let mut file = root_dir.open_file("/BOOT.BIN").map_err(|_| PlLoadingError::BootImageNotFound)?;
-        info!("Found boot image!");
-        load_bitstream(&mut file)
-    } else {
-        info!("SD card not inserted. Bitstream cannot be loaded.");
-        Err(PlLoadingError::BootImageNotFound)
+pub fn get_runtime<File: Read + Seek>(file: &mut File) -> Result<Vec<u8>, BootgenLoadingError> {
+    let size = locate(file, load_ps_header)?;
+    let mut buffer = Vec::with_capacity(size);
+    unsafe {
+        buffer.set_len(size);
     }
+    file.read_exact(&mut buffer)?;
+    Ok(buffer)
 }

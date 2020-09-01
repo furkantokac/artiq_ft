@@ -2,13 +2,13 @@
 extern crate alloc;
 
 use core::fmt;
-use alloc::{string::FromUtf8Error, string::String, vec::Vec};
+use alloc::{string::FromUtf8Error, string::String, vec::Vec, rc::Rc};
 use core_io::{self as io, BufRead, BufReader, Read};
 use libboard_zynq::sdio;
 
 pub mod sd_reader;
 pub mod net_settings;
-pub mod load_pl;
+pub mod bootgen;
 
 #[derive(Debug)]
 pub enum Error<'a> {
@@ -68,7 +68,7 @@ fn parse_config<'a>(
 }
 
 pub struct Config {
-    fs: Option<fatfs::FileSystem<sd_reader::SdReader>>,
+    fs: Option<Rc<fatfs::FileSystem<sd_reader::SdReader>>>,
 }
 
 impl Config {
@@ -81,7 +81,11 @@ impl Config {
         let reader = sd_reader::SdReader::new(sd);
 
         let fs = reader.mount_fatfs(sd_reader::PartitionEntry::Entry1)?;
-        Ok(Config { fs: Some(fs) })
+        Ok(Config { fs: Some(Rc::new(fs)) })
+    }
+
+    pub fn from_fs(fs: Option<Rc<fatfs::FileSystem<sd_reader::SdReader>>>) -> Self {
+        Config { fs }
     }
 
     pub fn new_dummy() -> Self {
