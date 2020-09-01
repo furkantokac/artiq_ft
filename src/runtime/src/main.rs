@@ -166,9 +166,9 @@ pub fn main_core0() {
     let buffer_logger = unsafe {
         logger::BufferLogger::new(&mut LOG_BUFFER[..])
     };
-    buffer_logger.set_uart_log_level(log::LevelFilter::Debug);
+    buffer_logger.set_uart_log_level(log::LevelFilter::Info);
     buffer_logger.register();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
 
     info!("NAR3/Zynq7000 starting...");
 
