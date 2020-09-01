@@ -25,7 +25,7 @@ log_buffer = { version = "1.2" }
 libm = { version = "0.2", features = ["unstable"] }
 vcell = "0.1"
 
-libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["ipv6"]}
 libsupport_zynq = { default-features = false, features = ["alloc_core"], git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
 libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
 libasync = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
@@ -35,4 +35,4 @@ dyld = { path = "../libdyld" }
 dwarf = { path = "../libdwarf" }
 unwind = { path = "../libunwind" }
 libc = { path = "../libc" }
-libconfig = { path = "../libconfig" }
+libconfig = { path = "../libconfig", features = ["ipv6"]}
