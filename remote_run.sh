@@ -45,9 +45,9 @@ if [ $impure -eq 1 ]; then
     rsync -e "ssh $sshopts" $impure_dir/firmware/armv7-none-eabihf/debug/szl $target_host:$target_folder/szl.elf
 else
     if [ $load_bitstream -eq 1 ]; then
-        load_bitstream_cmd="-g result/top.bit"
+        load_bitstream_cmd="-g $pure_dir/top.bit"
     fi
-    firmware="result/runtime.bin"
+    firmware="$pure_dir/runtime.bin"
     rsync -e "ssh $sshopts" -Lc $pure_dir/szl.elf $target_host:$target_folder
 fi
 echo "Programming board..."
