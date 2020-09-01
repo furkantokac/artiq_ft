@@ -140,16 +140,23 @@ pub fn load_bitstream<File: Read + Seek>(
     file: &mut File,
 ) -> Result<(), PlLoadingError> {
     let size = locate_bitstream(file)?;
-    let mut buffer: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(size);
     unsafe {
-        buffer.set_len(buffer.capacity());
+        // align to 64 bytes
+        let ptr = alloc::alloc::alloc(alloc::alloc::Layout::from_size_align(size, 64).unwrap());
+        let buffer = core::slice::from_raw_parts_mut(ptr, size);
+        file.read_exact(buffer).map_err(|e| {
+            core::ptr::drop_in_place(ptr);
+            e
+        })?;
+        let mut devcfg = devc::DevC::new();
+        devcfg.enable();
+        devcfg.program(&buffer).map_err(|e| {
+            core::ptr::drop_in_place(ptr);
+            e
+        })?;
+        core::ptr::drop_in_place(ptr);
+        Ok(())
     }
-    file.read_exact(&mut buffer)?;
-
-    let mut devcfg = devc::DevC::new();
-    devcfg.enable();
-    devcfg.program(&buffer)?;
-    Ok(())
 }
 
 pub fn load_bitstream_from_sd() -> Result<(), PlLoadingError> {
