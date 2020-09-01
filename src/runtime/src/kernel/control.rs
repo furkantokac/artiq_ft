@@ -1,7 +1,7 @@
 use libcortex_a9::sync_channel::{Sender, Receiver};
 use libsupport_zynq::boot::Core1;
 
-use super::{CHANNEL_0TO1, CHANNEL_1TO0, INIT_LOCK, Message};
+use super::{CHANNEL_0TO1, CHANNEL_1TO0, CHANNEL_SEM, INIT_LOCK, Message};
 use crate::irq::restart_core1;
 
 use core::mem::{forget, replace};
@@ -12,6 +12,7 @@ pub struct Control {
 }
 
 fn get_channels() -> (Sender<'static, Message>, Receiver<'static, Message>) {
+    CHANNEL_SEM.wait();
     let mut core0_tx = None;
     while core0_tx.is_none() {
         core0_tx = CHANNEL_0TO1.lock().take();

@@ -1,7 +1,7 @@
 use core::ptr;
 use alloc::{vec::Vec, string::String};
 
-use libcortex_a9::{mutex::Mutex, sync_channel};
+use libcortex_a9::{mutex::Mutex, sync_channel, semaphore::Semaphore};
 use crate::eh_artiq;
 
 mod control;
@@ -48,6 +48,7 @@ pub enum Message {
 
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Sender<'static, Message>>> = Mutex::new(None);
 static CHANNEL_1TO0: Mutex<Option<sync_channel::Receiver<'static, Message>>> = Mutex::new(None);
+static CHANNEL_SEM: Semaphore = Semaphore::new(0, 1);
 
 static mut KERNEL_CHANNEL_0TO1: Option<sync_channel::Receiver<'static, Message>> = None;
 static mut KERNEL_CHANNEL_1TO0: Option<sync_channel::Sender<'static, Message>> = None;

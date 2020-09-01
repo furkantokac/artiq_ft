@@ -24,7 +24,7 @@ overflow-checks = false
 panic = "abort"
 debug = true
 codegen-units = 1
-opt-level = 's'
+opt-level = 2
 lto = true
 
 [patch.crates-io]

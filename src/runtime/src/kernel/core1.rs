@@ -20,6 +20,7 @@ use super::{
     rpc::rpc_send_async,
     INIT_LOCK,
     CHANNEL_0TO1, CHANNEL_1TO0,
+    CHANNEL_SEM,
     KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0,
     KERNEL_IMAGE,
     Message,
@@ -159,6 +160,7 @@ pub fn main_core1() {
     }
     *CHANNEL_0TO1.lock() = Some(core0_tx);
     *CHANNEL_1TO0.lock() = Some(core0_rx);
+    CHANNEL_SEM.signal();
 
     // set on load, cleared on start
     let mut loaded_kernel = None;
