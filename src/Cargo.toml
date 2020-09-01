@@ -10,19 +10,22 @@ members = [
   "szl"
 ]
 
+# Note: we are using dev profile for szl to override the opt-level only
+[profile.dev]
+panic = "abort"
+debug = true
+codegen-units = 1
+opt-level = 'z'
+lto = true
+debug-assertions = false
+overflow-checks = false
+
 [profile.release]
 panic = "abort"
 debug = true
 codegen-units = 1
 opt-level = 's'
 lto = true
-
-[profile.release.package.smoltcp]
-opt-level = 2
-[profile.release.package.libasync]
-opt-level = 2
-[profile.release.package.libboard_zynq]
-opt-level = 2
 
 [patch.crates-io]
 core_io = { path = "./libcoreio" }

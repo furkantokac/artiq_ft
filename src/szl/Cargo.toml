@@ -11,10 +11,12 @@ default = ["target_zc706"]
 
 [dependencies]
 log = "0.4"
-cstr_core = { version = "0.2", default-features = false }
-libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
-libsupport_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", default-features = false, features = ["dummy_irq_handler"] }
-libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+byteorder = { version = "1.3", default-features = false }
+core_io = { version = "0.1", features = ["collections"] }
 
-[build-dependencies]
-cc = { version = "1.0.1" }
+libconfig = { path = "../libconfig" }
+libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libsupport_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libregister = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+

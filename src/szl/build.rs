@@ -1,14 +1,13 @@
 use std::env;
 use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     let out = env::var("OUT_DIR").unwrap();
     let out_dir = &PathBuf::from(&out);
 
-    compile_unlzma();
     // Put the linker script somewhere the linker can find it
     File::create(out_dir.join("link.x"))
         .unwrap()
@@ -21,29 +20,3 @@ fn main() {
     println!("cargo:rerun-if-changed=link.x");
 }
 
-pub fn compile_unlzma() {
-    let cfg = &mut cc::Build::new();
-    cfg.compiler("clang");
-    cfg.no_default_flags(true);
-    cfg.warnings(false);
-
-    cfg.flag("-nostdlib");
-    cfg.flag("-ffreestanding");
-    cfg.flag("-fPIC");
-    cfg.flag("-fno-stack-protector");
-    cfg.flag("--target=armv7-none-eabihf");
-    cfg.flag("-Oz");
-    cfg.flag("-flto=full");
-
-    let sources = vec![
-        "unlzma.c",
-    ];
-
-    let root = Path::new("./");
-    for src in sources {
-        println!("cargo:rerun-if-changed={}", src);
-        cfg.file(root.join("src").join(src));
-    }
-
-    cfg.compile("unlzma");
-}

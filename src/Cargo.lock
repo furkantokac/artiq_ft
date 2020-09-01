@@ -69,22 +69,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f8cb7306107e4b10e64994de6d3274bd08996a7c1322a27b86482392f96be0a"
 
 [[package]]
-name = "cstr_core"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edf9ff5f1182cea3b0f4269dd3edf146b5bfedc5dc8a29b95edf855f438786b7"
-dependencies = [
- "cty",
- "memchr",
-]
-
-[[package]]
-name = "cty"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7313c0d620d0cb4dbd9d019e461a4beb501071ff46ec0ab933efb4daa76d73e3"
-
-[[package]]
 name = "dwarf"
 version = "0.0.0"
 dependencies = [
@@ -471,10 +455,12 @@ dependencies = [
 name = "szl"
 version = "0.1.0"
 dependencies = [
- "cc",
- "cstr_core",
+ "byteorder",
+ "core_io",
  "libboard_zynq",
+ "libconfig",
  "libcortex_a9",
+ "libregister",
  "libsupport_zynq",
  "log",
 ]

@@ -4,6 +4,7 @@ MEMORY
 {
     /* 256 kB On-Chip Memory */
     OCM : ORIGIN = 0, LENGTH = 0x30000
+    SDRAM : ORIGIN = 0x00100000, LENGTH = 0x1FF00000
     OCM3 : ORIGIN = 0xFFFF0000, LENGTH = 0x10000
 }
 
@@ -25,6 +26,16 @@ SECTIONS
     {
         *(.data .data.*);
     } > OCM
+
+    .heap (NOLOAD) : ALIGN(8)
+    {
+        __runtime_start = .;
+        . += 0x8000000;
+        __runtime_end = .;
+        __heap0_start = .;
+        . += 0x8000000;
+        __heap0_end = .;
+    } > SDRAM
  
     .bss (NOLOAD) : ALIGN(4)
     {
@@ -32,12 +43,6 @@ SECTIONS
         *(.bss .bss.*);
         . = ALIGN(4);
         __bss_end = .;
-    } > OCM3
-
-    .heap (NOLOAD) : ALIGN(8)
-    {
-        __heap0_start = .;
-        __heap0_end = .;
     } > OCM3
 
     .stack1 (NOLOAD) : ALIGN(8)
