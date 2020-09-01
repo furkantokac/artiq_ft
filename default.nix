@@ -15,7 +15,7 @@ let
       version = "0.1.0";
 
       src = ./src;
-      cargoSha256 = "1nk9bnvidgq4r7p9pzx1layiqxl48vkfd4hjncd4sxfj50hxjdx4";
+      cargoSha256 = "0mf4jyhirkz3grcp2459b8rhw36xkx3rhpz6af0j4knyxb2w707n";
 
       nativeBuildInputs = [
         pkgs.gnumake
@@ -32,8 +32,10 @@ let
 
       installPhase = ''
         mkdir -p $out $out/nix-support
+        cp ../build/runtime.bin $out/runtime.bin
         cp ../build/firmware/armv7-none-eabihf/release/runtime $out/runtime.elf
-        cp ../build/firmware/armv7-none-eabihf/release/szl $out/szl.elf
+        cp ../build/firmware/armv7-none-eabihf/debug/szl $out/szl.elf
+        echo file binary-dist $out/runtime.bin >> $out/nix-support/hydra-build-products
         echo file binary-dist $out/runtime.elf >> $out/nix-support/hydra-build-products
         echo file binary-dist $out/szl.elf >> $out/nix-support/hydra-build-products
       '';
@@ -60,6 +62,7 @@ let
       ''
         mkdir $out
         ln -s ${firmware}/szl.elf $out
+        ln -s ${firmware}/runtime.bin $out
         ln -s ${gateware}/top.bit $out
       '';
     sd = pkgs.runCommand "zc706-${variant}-sd"
@@ -72,12 +75,14 @@ let
       bifdir=`mktemp -d`
       cd $bifdir
       ln -s ${firmware}/szl.elf szl.elf
+      ln -s ${firmware}/runtime.elf runtime.elf
       ln -s ${gateware}/top.bit top.bit
       cat > boot.bif << EOF
       the_ROM_image:
       {
         [bootloader]szl.elf
         top.bit
+        runtime.elf
       }
       EOF
       mkdir $out $out/nix-support

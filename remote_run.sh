@@ -8,6 +8,7 @@ pure_dir="result"
 impure_dir="build"
 sshopts=""
 load_bitstream=1
+board_host="192.168.1.52"
 
 while getopts "h:id:o:l" opt; do
     case "$opt" in
@@ -24,29 +25,32 @@ while getopts "h:id:o:l" opt; do
         ;;
     l)  load_bitstream=0
         ;;
+    b)  board_host=$OPTARG
+        ;;
     esac
 done
 
 target_folder="/tmp/zynq-$USER"
 load_bitstream_cmd=""
-if [ $load_bitstream -eq 1 ]; then
-    load_bitstream_cmd="pld load 0 top.bit;"
-fi
 
 echo "Creating $target_folder..."
 ssh $sshopts $target_host "mkdir -p $target_folder"
 echo "Copying files..."
 rsync -e "ssh $sshopts" openocd/* $target_host:$target_folder
 if [ $impure -eq 1 ]; then
-    rsync -e "ssh $sshopts" $impure_dir/firmware/armv7-none-eabihf/release/szl $target_host:$target_folder/szl.elf
     if [ $load_bitstream -eq 1 ]; then
-        rsync -e "ssh $sshopts" $impure_dir/gateware/top.bit $target_host:$target_folder
+        load_bitstream_cmd="-g build/gateware/top.bit"
     fi
+    firmware="build/runtime.bin"
+    rsync -e "ssh $sshopts" $impure_dir/firmware/armv7-none-eabihf/debug/szl $target_host:$target_folder/szl.elf
 else
-    rsync -e "ssh $sshopts" -Lc $pure_dir/szl.elf $target_host:$target_folder
     if [ $load_bitstream -eq 1 ]; then
-        rsync -e "ssh $sshopts" -Lc $pure_dir/top.bit $target_host:$target_folder
+        load_bitstream_cmd="-g result/top.bit"
     fi
+    firmware="result/runtime.bin"
+    rsync -e "ssh $sshopts" -Lc $pure_dir/szl.elf $target_host:$target_folder
 fi
 echo "Programming board..."
-ssh $sshopts $target_host "cd $target_folder; openocd -f zc706.cfg -c'$load_bitstream_cmd load_image szl.elf; resume 0; exit'"
+ssh $sshopts $target_host "cd $target_folder; openocd -f zc706.cfg -c'load_image szl.elf; resume 0; exit'"
+sleep 5
+artiq_netboot $load_bitstream_cmd -f $firmware -b $board_host
