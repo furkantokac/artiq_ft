@@ -17,7 +17,7 @@ use libboard_zynq::{
     },
     timer::GlobalTimer,
 };
-use libcortex_a9::{semaphore::Semaphore, mutex::Mutex};
+use libcortex_a9::{semaphore::Semaphore, mutex::Mutex, sync_channel::{Sender, Receiver}};
 use futures::{select_biased, future::FutureExt};
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
 use libconfig::{Config, net_settings};
@@ -124,6 +124,35 @@ async fn read_string(stream: &TcpStream, max_length: usize) -> Result<String> {
     Ok(String::from_utf8(bytes).map_err(|err| Error::Utf8Error(err.utf8_error()))?)
 }
 
+const RETRY_LIMIT: usize = 100;
+
+async fn fast_send(sender: &mut Sender<'_, kernel::Message>, content: kernel::Message) {
+    let mut content = content;
+    for _ in 0..RETRY_LIMIT {
+        match sender.try_send(content) {
+            Ok(()) => {
+                return
+            },
+            Err(v) => {
+                content = v;
+            }
+        }
+    }
+    sender.async_send(content).await;
+}
+
+async fn fast_recv(receiver: &mut Receiver<'_, kernel::Message>) -> kernel::Message {
+    for _ in 0..RETRY_LIMIT {
+        match receiver.try_recv() {
+            Ok(v) => {
+                return v;
+            },
+            Err(()) => ()
+        }
+    }
+    receiver.async_recv().await
+}
+
 async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kernel::Control>>) -> Result<()> {
     control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
     loop {
@@ -143,7 +172,7 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                     match host_request {
                         Request::RPCReply => {
                             let tag = read_bytes(stream, 512).await?;
-                            let slot = match control.borrow_mut().rx.async_recv().await {
+                            let slot = match fast_recv(&mut control.borrow_mut().rx).await {
                                 kernel::Message::RpcRecvRequest(slot) => slot,
                                 other => panic!("expected root value slot from core1, not {:?}", other),
                             };
@@ -156,8 +185,8 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                                         0 as *mut ()
                                     } else {
                                         let mut control = control.borrow_mut();
-                                        control.tx.async_send(kernel::Message::RpcRecvReply(Ok(size))).await;
-                                        match control.rx.async_recv().await {
+                                        fast_send(&mut control.tx, kernel::Message::RpcRecvReply(Ok(size))).await;
+                                        match fast_recv(&mut control.rx).await {
                                             kernel::Message::RpcRecvRequest(slot) => slot,
                                             other => panic!("expected nested value slot from kernel CPU, not {:?}", other),
                                         }
