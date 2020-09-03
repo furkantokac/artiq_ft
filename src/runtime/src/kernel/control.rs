@@ -41,7 +41,7 @@ impl Control {
 
     pub fn restart(&mut self) {
         {
-            INIT_LOCK.lock();
+            let _lock = INIT_LOCK.lock();
             restart_core1();
             unsafe {
                 self.tx.drop_elements();
