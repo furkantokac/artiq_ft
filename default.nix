@@ -15,7 +15,7 @@ let
       version = "0.1.0";
 
       src = ./src;
-      cargoSha256 = "1r8yjzixkknivawi286iyjjhaf5q8ll3a53q54dc9m9dhx20358b";
+      cargoSha256 = "1m6sw200rq0d1x9g09f2004l74qv5ypa3s6q39y5pf1awj1zfq3i";
 
       nativeBuildInputs = [
         pkgs.gnumake
