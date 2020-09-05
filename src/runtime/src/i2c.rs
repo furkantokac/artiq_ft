@@ -1,34 +1,63 @@
 use libboard_zynq;
 
+use crate::artiq_raise;
+
 static mut I2C_BUS: Option<libboard_zynq::i2c::I2c> = None;
 
-pub extern fn start(_busno: i32) {
+pub extern fn start(busno: i32) {
+    if busno > 0 {
+        artiq_raise!("I2CError", "I2C bus could not be accessed");
+    }
     unsafe {
-        (&mut I2C_BUS).as_mut().unwrap().start().expect("I2C start failed")
+        if (&mut I2C_BUS).as_mut().unwrap().start().is_err() {
+            artiq_raise!("I2CError", "I2C start failed");
+        }
     }
 }
 
-pub extern fn restart(_busno: i32) {
+pub extern fn restart(busno: i32) {
+    if busno > 0 {
+        artiq_raise!("I2CError", "I2C bus could not be accessed");
+    }
     unsafe {
-        (&mut I2C_BUS).as_mut().unwrap().restart().expect("I2C restart failed")
+        if (&mut I2C_BUS).as_mut().unwrap().restart().is_err() {
+            artiq_raise!("I2CError", "I2C restart failed");
+        }
     }
 }
 
-pub extern fn stop(_busno: i32) {
+pub extern fn stop(busno: i32) {
+    if busno > 0 {
+        artiq_raise!("I2CError", "I2C bus could not be accessed");
+    }
     unsafe {
-        (&mut I2C_BUS).as_mut().unwrap().stop().expect("I2C stop failed")
+        if (&mut I2C_BUS).as_mut().unwrap().stop().is_err() {
+            artiq_raise!("I2CError", "I2C stop failed");
+        }
     }
 }
 
-pub extern fn write(_busno: i32, data: i32) -> bool {
+pub extern fn write(busno: i32, data: i32) -> bool {
+    if busno > 0 {
+        artiq_raise!("I2CError", "I2C bus could not be accessed");
+    }
     unsafe {
-        (&mut I2C_BUS).as_mut().unwrap().write(data as u8).expect("I2C write failed")
+        match (&mut I2C_BUS).as_mut().unwrap().write(data as u8) {
+            Ok(r) => r,
+            Err(_) => artiq_raise!("I2CError", "I2C write failed"),
+        }
     }
 }
 
-pub extern fn read(_busno: i32, ack: bool) -> i32 {
+pub extern fn read(busno: i32, ack: bool) -> i32 {
+    if busno > 0 {
+        artiq_raise!("I2CError", "I2C bus could not be accessed");
+    }
     unsafe {
-        (&mut I2C_BUS).as_mut().unwrap().read(ack).expect("I2C read failed") as i32
+        match (&mut I2C_BUS).as_mut().unwrap().read(ack) {
+            Ok(r) => r as i32,
+            Err(_) => artiq_raise!("I2CError", "I2C read failed"),
+        }
     }
 }
 
