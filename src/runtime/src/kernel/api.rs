@@ -9,6 +9,7 @@ use alloc::vec;
 
 use crate::eh_artiq;
 use crate::rtio;
+use crate::i2c;
 use super::rpc::{rpc_send, rpc_send_async, rpc_recv};
 use super::dma;
 use super::cache;
@@ -99,6 +100,13 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         // cache
         api!(cache_get = cache::get),
         api!(cache_put = cache::put),
+
+        // i2c
+        api!(i2c_start = i2c::start),
+        api!(i2c_restart = i2c::restart),
+        api!(i2c_stop = i2c::stop),
+        api!(i2c_write = i2c::write),
+        api!(i2c_read = i2c::read),
 
         // Double-precision floating-point arithmetic helper functions
         // RTABI chapter 4.1.2, Table 2

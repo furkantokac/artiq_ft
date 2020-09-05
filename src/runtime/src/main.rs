@@ -43,6 +43,7 @@ mod logger;
 mod mgmt;
 mod analyzer;
 mod irq;
+mod i2c;
 
 fn init_gateware() {
     // Set up PS->PL clocks
@@ -177,6 +178,9 @@ pub fn main_core0() {
 
     init_gateware();
     info!("detected gateware: {}", identifier_read(&mut [0; 64]));
+
+    i2c::init();
+
     let cfg = match Config::new() {
         Ok(cfg) => cfg,
         Err(err) => {

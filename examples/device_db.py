@@ -22,6 +22,13 @@ device_db = {
         "module": "artiq.coredevice.dma",
         "class": "CoreDMA"
     },
+
+    "i2c_switch": {
+        "type": "local",
+        "module": "artiq.coredevice.i2c",
+        "class": "PCA9548"
+    },
+
     # led? are common to all variants
     "led0": {
         "type": "local",
