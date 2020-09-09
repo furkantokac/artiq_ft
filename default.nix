@@ -1,10 +1,11 @@
 let
-  pkgs = import <nixpkgs> { overlays = [ (import ./mozilla-overlay.nix) ]; };
-  rustPlatform = (import ./rustPlatform.nix { inherit pkgs; });
+  zynq-rs = (import ./zynq-rs.nix);
+  pkgs = import <nixpkgs> { overlays = [ (import "${zynq-rs}/nix/mozilla-overlay.nix") ]; };
+  rustPlatform = (import "${zynq-rs}/nix/rust-platform.nix" { inherit pkgs; });
+  zc706-fsbl = import "${zynq-rs}/nix/fsbl.nix" { inherit pkgs; };
+  mkbootimage = import "${zynq-rs}/nix/mkbootimage.nix" { inherit pkgs; };
   artiqpkgs = import <artiq-fast/default.nix> { inherit pkgs; };
   vivado = import <artiq-fast/vivado.nix> { inherit pkgs; };
-  zc706-fsbl = import ./fsbl.nix { inherit pkgs; };
-  mkbootimage = (import ./mkbootimage.nix { inherit pkgs; });
   build-zc706 = { variant }: let
     firmware = rustPlatform.buildRustPackage rec {
       name = "zc706-${variant}-firmware";
@@ -123,6 +124,5 @@ in
     (build-zc706 { variant = "nist_qc2"; }) //
     (build-zc706 { variant = "acpki_simple"; }) //
     (build-zc706 { variant = "acpki_nist_clock"; }) //
-    (build-zc706 { variant = "acpki_nist_qc2"; }) //
-    { inherit zc706-fsbl; }
+    (build-zc706 { variant = "acpki_nist_qc2"; })
   )

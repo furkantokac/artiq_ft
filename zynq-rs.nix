@@ -1,7 +1,8 @@
-{ pkgs }:
-
+let
+  pkgs = import <nixpkgs> {};
+in
 pkgs.fetchgit {
   url = "https://git.m-labs.hk/M-Labs/zynq-rs.git";
-  rev = "4e18368aaf59c29e703d5ecae6c0eb93ef89c2d2";
-  sha256 = "0jfnjn76pfq5wp6qnxhkqmvldv02cy60wyp1ikaj9n47p69cabj8";
+  rev = "450ccef18e609aa6c88540d6791e0b41d2de01d2";
+  sha256 = "0xlvxczfwyk5zij4gnbxjvcq3hmhjslmfswp6vzl67ddkpc8bb6s";
 }

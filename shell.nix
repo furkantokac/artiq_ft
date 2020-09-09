@@ -1,8 +1,8 @@
 let
-  pkgs = import <nixpkgs> { overlays = [ (import ./mozilla-overlay.nix) ]; };
+  zynq-rs = (import ./zynq-rs.nix);
+  pkgs = import <nixpkgs> { overlays = [ (import "${zynq-rs}/nix/mozilla-overlay.nix") ]; };
+  rustPlatform = (import "${zynq-rs}/nix/rust-platform.nix" { inherit pkgs; });
   artiq-fast = <artiq-fast>;
-  zynq-rs = (import ./zynq-rs.nix { inherit pkgs; });
-  rustPlatform = (import ./rustPlatform.nix { inherit pkgs; });
   artiqpkgs = import "${artiq-fast}/default.nix" { inherit pkgs; };
   vivado = import "${artiq-fast}/vivado.nix" { inherit pkgs; };
   cargo-xbuild = import ./cargo-xbuild.nix { inherit pkgs; };
@@ -25,7 +25,7 @@ in
       vivado
       artiqpkgs.binutils-arm
 
-      (import ./mkbootimage.nix { inherit pkgs; })
+      (import "${zynq-rs}/nix/mkbootimage.nix" { inherit pkgs; })
     ];
 
     XARGO_RUST_SRC = "${rustPlatform.rust.rustc.src}/src";
