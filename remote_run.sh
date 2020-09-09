@@ -36,7 +36,7 @@ load_bitstream_cmd=""
 echo "Creating $target_folder..."
 ssh $sshopts $target_host "mkdir -p $target_folder"
 echo "Copying files..."
-rsync -e "ssh $sshopts" openocd/* $target_host:$target_folder
+rsync -e "ssh $sshopts" $OPENOCD_ZYNQ/* $target_host:$target_folder
 if [ $impure -eq 1 ]; then
     if [ $load_bitstream -eq 1 ]; then
         load_bitstream_cmd="-g build/gateware/top.bit"
