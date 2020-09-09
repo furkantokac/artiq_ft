@@ -1,6 +1,6 @@
 VARIANT := simple
 
-all: ../build/firmware/armv7-none-eabihf/debug/szl ../build/firmware/armv7-none-eabihf/release/runtime ../build/firmware/armv7-none-eabihf/release/runtime.bin
+all: ../build/firmware/armv7-none-eabihf/debug/szl ../build/firmware/armv7-none-eabihf/release/runtime ../build/runtime.bin
 
 .PHONY: all
 
@@ -12,7 +12,7 @@ all: ../build/firmware/armv7-none-eabihf/debug/szl ../build/firmware/armv7-none-
 ../build/firmware/armv7-none-eabihf/release/runtime: ../build/pl.rs ../build/rustc-cfg $(shell find . -path ./szl -prune -o -print)
 	XBUILD_SYSROOT_PATH=`pwd`/../build/sysroot cargo xbuild --release -p runtime --target-dir ../build/firmware
 
-../build/firmware/armv7-none-eabihf/release/runtime.bin: ../build/firmware/armv7-none-eabihf/release/runtime
+../build/runtime.bin: ../build/firmware/armv7-none-eabihf/release/runtime
 	llvm-objcopy -O binary ../build/firmware/armv7-none-eabihf/release/runtime ../build/runtime.bin
 
 ../build/firmware/armv7-none-eabihf/debug/szl: .cargo/* armv7-none-eabihf.json Cargo.lock Cargo.toml szl/* szl/src/*
