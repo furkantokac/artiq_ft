@@ -1,6 +1,5 @@
 let
-  mozillaOverlay = import (builtins.fetchTarball "https://github.com/mozilla/nixpkgs-mozilla/archive/master.tar.gz");
-  pkgs = import <nixpkgs> { overlays = [ mozillaOverlay ]; };
+  pkgs = import <nixpkgs> { overlays = [ (import ./mozilla-overlay.nix) ]; };
   artiq-fast = <artiq-fast>;
   rustPlatform = (import ./rustPlatform.nix { inherit pkgs; });
   artiqpkgs = import "${artiq-fast}/default.nix" { inherit pkgs; };
