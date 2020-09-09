@@ -7,8 +7,7 @@ from misoc.interconnect.csr import *
 
 from artiq.gateware import rtio
 
-
-OUT_BURST_LEN = 4
+OUT_BURST_LEN = 10
 IN_BURST_LEN = 4
 
 
@@ -98,7 +97,7 @@ class Engine(Module, AutoCSR):
         ### Write
         self.comb += [
             w.data.eq(self.din),
-            aw.addr.eq(self.addr_base.storage+32), # Write to next cache line
+            aw.addr.eq(self.addr_base.storage+96),
             w.strb.eq(0xff),
             aw.burst.eq(axi.Burst.incr.value),
             aw.len.eq(IN_BURST_LEN-1), # Number of transfers in burst minus 1
@@ -191,22 +190,31 @@ class KernelInitiator(Module, AutoCSR):
             cmd_read.eq(cmd == 1)
         ]
 
+        out_len = Signal(8)
         dout_cases = {}
         dout_cases[0] = [
             cmd.eq(self.engine.dout[:8]),
+            out_len.eq(self.engine.dout[8:16]),
             cri.chan_sel.eq(self.engine.dout[40:]),
             cri.o_address.eq(self.engine.dout[32:40])
         ]
+        for i in range(8):
+            target = cri.o_data[i*64:(i+1)*64]
+            dout_cases[0] += [If(i >= self.engine.dout[8:16], target.eq(0))]
+
         dout_cases[1] = [
-            cri.o_timestamp.eq(self.engine.dout)
+            cri.o_timestamp.eq(self.engine.dout),
+            cri.i_timeout.eq(self.engine.dout)
         ]
-        dout_cases[2] = [cri.o_data.eq(self.engine.dout)] # only lowest 64 bits
+        for i in range(8):
+            target = cri.o_data[i*64:(i+1)*64]
+            dout_cases[i+2] = [target.eq(self.engine.dout)]
 
         self.sync += [
             cri.cmd.eq(rtio.cri.commands["nop"]),
             If(self.engine.dout_stb,
                 Case(self.engine.dout_index, dout_cases),
-                If(self.engine.dout_index == 2,
+                If(self.engine.dout_index == out_len + 2,
                     If(cmd_write, cri.cmd.eq(rtio.cri.commands["write"])),
                     If(cmd_read, cri.cmd.eq(rtio.cri.commands["read"]))
                 )
@@ -226,7 +234,11 @@ class KernelInitiator(Module, AutoCSR):
         )
         fsm.act("WAIT_OUT_CYCLE",
             self.engine.din_ready.eq(0),
-            If(self.engine.dout_stb & (self.engine.dout_index == 3),
+            If(self.engine.dout_stb & cmd_write & (self.engine.dout_index == out_len + 2),
+               NextState("WAIT_READY")
+            ),
+            # for some reason read requires some delay until the next state
+            If(self.engine.dout_stb & cmd_read & (self.engine.dout_index == out_len + 3),
                 NextState("WAIT_READY")
             )
         )

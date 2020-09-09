@@ -1,8 +1,8 @@
 use cslice::CSlice;
 use vcell::VolatileCell;
 use libcortex_a9::asm;
-
 use crate::artiq_raise;
+use core::sync::atomic::{fence, Ordering};
 
 use crate::pl::csr;
 
@@ -20,33 +20,33 @@ pub struct TimestampedData {
     data: i32,
 }
 
-#[repr(C, align(32))]
+#[repr(C, align(64))]
 struct Transaction {
     request_cmd: i8,
-    padding0: i8,
-    padding1: i8,
-    padding2: i8,
+    data_width: i8,
+    padding0: [i8; 2],
     request_target: i32,
     request_timestamp: i64,
-    request_data: i64,
-    padding: i64,
+    request_data: [i32; 16],
+    padding1: [i64; 2],
     reply_status: VolatileCell<i32>,
     reply_data: VolatileCell<i32>,
-    reply_timestamp: VolatileCell<i64>
+    reply_timestamp: VolatileCell<i64>,
+    padding2: [i64; 2],
 }
 
 static mut TRANSACTION_BUFFER: Transaction = Transaction {
     request_cmd: 0,
-    padding0: 0,
-    padding1: 0,
-    padding2: 0,
+    data_width: 0,
     request_target: 0,
     request_timestamp: 0,
-    request_data: 0,
-    padding: 0,
+    request_data: [0; 16],
     reply_status: VolatileCell::new(0),
     reply_data: VolatileCell::new(0),
-    reply_timestamp: VolatileCell::new(0)
+    reply_timestamp: VolatileCell::new(0),
+    padding0: [0; 2],
+    padding1: [0; 2],
+    padding2: [0; 2]
 };
 
 pub extern fn init() {
@@ -108,13 +108,41 @@ pub extern fn output(target: i32, data: i32) {
         TRANSACTION_BUFFER.reply_status.set(0);
 
         TRANSACTION_BUFFER.request_cmd = 0;
+        TRANSACTION_BUFFER.data_width = 1;
         TRANSACTION_BUFFER.request_target = target;
         TRANSACTION_BUFFER.request_timestamp = NOW;
-        TRANSACTION_BUFFER.request_data = data as i64;
+        TRANSACTION_BUFFER.request_data[0] = data;
 
-        asm::dmb();
+        fence(Ordering::SeqCst);
         asm::sev();
+        let mut status;
+        loop {
+            status = TRANSACTION_BUFFER.reply_status.get();
+            if status != 0 {
+                break;
+            }
+        }
 
+        let status = status & !0x10000;
+        if status != 0 {
+            process_exceptional_status(target >> 8, status);
+        }
+    }
+}
+
+pub extern fn output_wide(target: i32, data: CSlice<i32>) {
+    unsafe {
+        // Clear status so we can observe response
+        TRANSACTION_BUFFER.reply_status.set(0);
+
+        TRANSACTION_BUFFER.request_cmd = 0;
+        TRANSACTION_BUFFER.data_width = data.len() as i8;
+        TRANSACTION_BUFFER.request_target = target;
+        TRANSACTION_BUFFER.request_timestamp = NOW;
+        TRANSACTION_BUFFER.request_data[..data.len()].copy_from_slice(data.as_ref());
+
+        fence(Ordering::SeqCst);
+        asm::sev();
         let mut status;
         loop {
             status = TRANSACTION_BUFFER.reply_status.get();
@@ -130,21 +158,17 @@ pub extern fn output(target: i32, data: i32) {
     }
 }
 
-pub extern fn output_wide(target: i32, data: CSlice<i32>) {
-    // TODO
-    unimplemented!();
-}
-
 pub extern fn input_timestamp(timeout: i64, channel: i32) -> i64 {
    unsafe {
         // Clear status so we can observe response
         TRANSACTION_BUFFER.reply_status.set(0);
 
         TRANSACTION_BUFFER.request_cmd = 1;
-        TRANSACTION_BUFFER.request_timestamp = NOW;
+        TRANSACTION_BUFFER.request_timestamp = timeout;
         TRANSACTION_BUFFER.request_target = channel << 8;
+        TRANSACTION_BUFFER.data_width = 0;
 
-        asm::dmb();
+        fence(Ordering::SeqCst);
         asm::sev();
 
         let mut status;
@@ -180,8 +204,9 @@ pub extern fn input_data(channel: i32) -> i32 {
         TRANSACTION_BUFFER.request_cmd = 1;
         TRANSACTION_BUFFER.request_timestamp = -1;
         TRANSACTION_BUFFER.request_target = channel << 8;
+        TRANSACTION_BUFFER.data_width = 0;
 
-        asm::dmb();
+        fence(Ordering::SeqCst);
         asm::sev();
 
         let mut status;
@@ -214,8 +239,9 @@ pub extern fn input_timestamped_data(timeout: i64, channel: i32) -> TimestampedD
         TRANSACTION_BUFFER.request_cmd = 1;
         TRANSACTION_BUFFER.request_timestamp = timeout;
         TRANSACTION_BUFFER.request_target = channel << 8;
+        TRANSACTION_BUFFER.data_width = 0;
 
-        asm::dmb();
+        fence(Ordering::SeqCst);
         asm::sev();
 
         let mut status;
@@ -245,6 +271,17 @@ pub extern fn input_timestamped_data(timeout: i64, channel: i32) -> TimestampedD
 }
 
 pub fn write_log(data: &[i8]) {
-    // TODO
-    unimplemented!();
+    let mut word: u32 = 0;
+    for i in 0..data.len() {
+        word <<= 8;
+        word |= data[i] as u32;
+        if i % 4 == 3 {
+            output((csr::CONFIG_RTIO_LOG_CHANNEL << 8) as i32, word as i32);
+            word = 0;
+        }
+    }
+
+    if word != 0 {
+        output((csr::CONFIG_RTIO_LOG_CHANNEL << 8) as i32, word as i32);
+    }
 }
