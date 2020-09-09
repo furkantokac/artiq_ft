@@ -6,6 +6,7 @@ let
   artiqpkgs = import "${artiq-fast}/default.nix" { inherit pkgs; };
   vivado = import "${artiq-fast}/vivado.nix" { inherit pkgs; };
   cargo-xbuild = import ./cargo-xbuild.nix { inherit pkgs; };
+  zc706-szl = (import zynq-rs).zc706-szl;
 in
   pkgs.stdenv.mkDerivation {
     name = "artiq-zynq-env";
@@ -30,4 +31,5 @@ in
 
     XARGO_RUST_SRC = "${rustPlatform.rust.rustc.src}/src";
     OPENOCD_ZYNQ = "${zynq-rs}/openocd";
+    SZL = "${zc706-szl}/szl.elf";
   }

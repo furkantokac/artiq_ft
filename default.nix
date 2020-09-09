@@ -2,6 +2,7 @@ let
   zynq-rs = (import ./zynq-rs.nix);
   pkgs = import <nixpkgs> { overlays = [ (import "${zynq-rs}/nix/mozilla-overlay.nix") ]; };
   rustPlatform = (import "${zynq-rs}/nix/rust-platform.nix" { inherit pkgs; });
+  zc706-szl = (import zynq-rs).zc706-szl;
   zc706-fsbl = import "${zynq-rs}/nix/fsbl.nix" { inherit pkgs; };
   mkbootimage = import "${zynq-rs}/nix/mkbootimage.nix" { inherit pkgs; };
   artiqpkgs = import <artiq-fast/default.nix> { inherit pkgs; };
@@ -12,7 +13,7 @@ let
       version = "0.1.0";
 
       src = ./src;
-      cargoSha256 = "0fpnwiqwscd8v48hpjzy0ydmiv3kl68lbl9j06nkybs9flj1r08a";
+      cargoSha256 = "10hap25cy2qgwr7b86jid73i6fp480iym29r3r97jindfxk0svi0";
 
       nativeBuildInputs = [
         pkgs.gnumake
@@ -31,10 +32,8 @@ let
         mkdir -p $out $out/nix-support
         cp ../build/runtime.bin $out/runtime.bin
         cp ../build/firmware/armv7-none-eabihf/release/runtime $out/runtime.elf
-        cp ../build/firmware/armv7-none-eabihf/debug/szl $out/szl.elf
         echo file binary-dist $out/runtime.bin >> $out/nix-support/hydra-build-products
         echo file binary-dist $out/runtime.elf >> $out/nix-support/hydra-build-products
-        echo file binary-dist $out/szl.elf >> $out/nix-support/hydra-build-products
       '';
 
       doCheck = false;
@@ -58,7 +57,7 @@ let
     jtag = pkgs.runCommand "zc706-${variant}-jtag" {}
       ''
         mkdir $out
-        ln -s ${firmware}/szl.elf $out
+        ln -s ${zc706-szl}/szl.elf $out
         ln -s ${firmware}/runtime.bin $out
         ln -s ${gateware}/top.bit $out
       '';
@@ -71,7 +70,7 @@ let
       # can't write software (mkbootimage will segfault).
       bifdir=`mktemp -d`
       cd $bifdir
-      ln -s ${firmware}/szl.elf szl.elf
+      ln -s ${zc706-szl}/szl.elf szl.elf
       ln -s ${firmware}/runtime.elf runtime.elf
       ln -s ${gateware}/top.bit top.bit
       cat > boot.bif << EOF

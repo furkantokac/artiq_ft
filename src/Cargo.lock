@@ -58,6 +58,7 @@ dependencies = [
 [[package]]
 name = "core_io"
 version = "0.1.20200410"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#7360984efbd772ae992ef00af09786b0ae8430f0"
 dependencies = [
  "memchr",
 ]
@@ -187,7 +188,7 @@ dependencies = [
 [[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#4fef8a71929b989e1189736628ab9c186f23f3a5"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#7360984efbd772ae992ef00af09786b0ae8430f0"
 dependencies = [
  "embedded-hal",
  "libcortex_a9",
@@ -199,7 +200,7 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#4fef8a71929b989e1189736628ab9c186f23f3a5"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#7360984efbd772ae992ef00af09786b0ae8430f0"
 dependencies = [
  "bit_field",
  "embedded-hal",
@@ -223,6 +224,7 @@ dependencies = [
 [[package]]
 name = "libconfig"
 version = "0.1.0"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#7360984efbd772ae992ef00af09786b0ae8430f0"
 dependencies = [
  "core_io",
  "fatfs",
@@ -233,7 +235,7 @@ dependencies = [
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#4fef8a71929b989e1189736628ab9c186f23f3a5"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#7360984efbd772ae992ef00af09786b0ae8430f0"
 dependencies = [
  "bit_field",
  "libregister",
@@ -249,7 +251,7 @@ checksum = "c7d73b3f436185384286bd8098d17ec07c9a7d2388a6599f824d8502b529702a"
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#4fef8a71929b989e1189736628ab9c186f23f3a5"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#7360984efbd772ae992ef00af09786b0ae8430f0"
 dependencies = [
  "bit_field",
  "vcell",
@@ -259,7 +261,7 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#4fef8a71929b989e1189736628ab9c186f23f3a5"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#7360984efbd772ae992ef00af09786b0ae8430f0"
 dependencies = [
  "compiler_builtins",
  "libboard_zynq",
@@ -449,20 +451,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-xid",
-]
-
-[[package]]
-name = "szl"
-version = "0.1.0"
-dependencies = [
- "byteorder",
- "core_io",
- "libboard_zynq",
- "libconfig",
- "libcortex_a9",
- "libregister",
- "libsupport_zynq",
- "log",
 ]
 
 [[package]]

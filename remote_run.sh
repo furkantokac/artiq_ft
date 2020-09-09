@@ -2,6 +2,15 @@
 
 set -e
 
+if [ -z "$OPENOCD_ZYNQ" ]; then
+    echo "OPENOCD_ZYNQ environment variable must be set"
+    exit 1
+fi
+if [ -z "$SZL" ]; then
+    echo "SZL environment variable must be set"
+    exit 1
+fi
+
 target_host="rpi-4.m-labs.hk"
 impure=0
 pure_dir="result"
@@ -36,19 +45,18 @@ load_bitstream_cmd=""
 echo "Creating $target_folder..."
 ssh $sshopts $target_host "mkdir -p $target_folder"
 echo "Copying files..."
-rsync -e "ssh $sshopts" $OPENOCD_ZYNQ/* $target_host:$target_folder
+rsync -e "ssh $sshopts" -Lc $OPENOCD_ZYNQ/* $target_host:$target_folder
+rsync -e "ssh $sshopts" -Lc $SZL $target_host:$target_folder
 if [ $impure -eq 1 ]; then
     if [ $load_bitstream -eq 1 ]; then
         load_bitstream_cmd="-g build/gateware/top.bit"
     fi
     firmware="build/runtime.bin"
-    rsync -e "ssh $sshopts" $impure_dir/firmware/armv7-none-eabihf/debug/szl $target_host:$target_folder/szl.elf
 else
     if [ $load_bitstream -eq 1 ]; then
         load_bitstream_cmd="-g $pure_dir/top.bit"
     fi
-    firmware="$pure_dir/runtime.bin"
-    rsync -e "ssh $sshopts" -Lc $pure_dir/szl.elf $target_host:$target_folder
+    firmware="$pure_dir/runtime.bin"    
 fi
 echo "Programming board..."
 ssh $sshopts $target_host "cd $target_folder; openocd -f zc706.cfg -c'load_image szl.elf; resume 0; exit'"

@@ -30,9 +30,9 @@ libsupport_zynq = { default-features = false, features = ["alloc_core"], git = "
 libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
 libasync = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
 libregister = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libconfig = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["ipv6"] }
 
 dyld = { path = "../libdyld" }
 dwarf = { path = "../libdwarf" }
 unwind = { path = "../libunwind" }
 libc = { path = "../libc" }
-libconfig = { path = "../libconfig", features = ["ipv6"]}

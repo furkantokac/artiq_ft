@@ -2,23 +2,10 @@
 members = [
   "libc",
   "libdyld",
-  "libconfig",
-  "libcoreio",
   "libdwarf",
   "libunwind",
   "runtime",
-  "szl"
 ]
-
-# Note: we are using dev profile for szl to override the opt-level only
-[profile.dev]
-panic = "abort"
-debug = true
-codegen-units = 1
-opt-level = 'z'
-lto = true
-debug-assertions = false
-overflow-checks = false
 
 [profile.release]
 panic = "abort"
@@ -28,5 +15,5 @@ opt-level = 2
 lto = true
 
 [patch.crates-io]
-core_io = { path = "./libcoreio" }
+core_io = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
 compiler_builtins = { git = "https://git.m-labs.hk/M-Labs/compiler-builtins-zynq.git"}
