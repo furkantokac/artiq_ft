@@ -7,7 +7,6 @@ use alloc::{vec::Vec, string::String, boxed::Box};
 use cslice::CSlice;
 use super::{KERNEL_IMAGE, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
 use core::mem;
-use log::debug;
 
 use libcortex_a9::cache::dcci_slice;
 
@@ -160,6 +159,7 @@ pub extern fn dma_retrieve(name: CSlice<u8>) -> DmaTrace {
             // trailing zero to indicate end of buffer
             v.push(0);
             v.copy_within(0..original_length, padding);
+            dcci_slice(&v);
             let v = Box::new(v);
             let address = Box::into_raw(v) as *mut Vec<u8> as i32;
             return DmaTrace {
@@ -174,12 +174,10 @@ pub extern fn dma_retrieve(name: CSlice<u8>) -> DmaTrace {
 }
 
 pub extern fn dma_playback(timestamp: i64, ptr: i32) {
-    debug!("DMA playback started");
     unsafe {
         let v = Box::from_raw(ptr as *mut Vec<u8>);
         let padding = ALIGNMENT - v.as_ptr() as usize % ALIGNMENT;
         let padding = if padding == ALIGNMENT { 0 } else { padding };
-        dcci_slice(&v[padding..]);
         let ptr = v.as_ptr().add(padding) as i32;
 
         csr::rtio_dma::base_address_write(ptr as u32);
@@ -190,8 +188,8 @@ pub extern fn dma_playback(timestamp: i64, ptr: i32) {
         while csr::rtio_dma::enable_read() != 0 {}
         csr::cri_con::selected_write(0);
 
+        // leave the handle as we may try to do playback for another time.
         mem::forget(v);
-        debug!("DMA playback finished");
 
         let error = csr::rtio_dma::error_read();
         if error != 0 {
