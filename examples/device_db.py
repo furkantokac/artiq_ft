@@ -65,6 +65,19 @@ for i in range(40):
         "arguments": {"channel": 4+i}
     }
 
+device_db["ad9914dds0"] = {
+    "type": "local",
+    "module": "artiq.coredevice.ad9914",
+    "class": "AD9914",
+    "arguments": {"sysclk": 3e9, "bus_channel": 50, "channel": 0},
+}
+device_db["ad9914dds1"] = {
+    "type": "local",
+    "module": "artiq.coredevice.ad9914",
+    "class": "AD9914",
+    "arguments": {"sysclk": 3e9, "bus_channel": 50, "channel": 1},
+}
+
 # for ARTIQ test suite
 device_db.update(
     loop_out="ttl0",
