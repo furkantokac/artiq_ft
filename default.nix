@@ -10,11 +10,11 @@ let
   vivado = import <artiq-fast/vivado.nix> { inherit pkgs; };
   build-zc706 = { variant }: let
     firmware = rustPlatform.buildRustPackage rec {
-      name = "zc706-${variant}-firmware";
-      version = "0.1.0";
+      # note: due to fetchCargoTarball, cargoSha256 depends on package name
+      name = "zc706-firmware";
 
       src = ./src;
-      cargoSha256 = "1kkh2fscdy2dz5bfbk36hrk6xd4dizbkfvqfihf15jfr5i94gi4x";
+      cargoSha256 = "0hjpxqz9ilr4fxi3w3xswn9dcrsh3g2m42vig80xdkpb7wn9gvs0";
 
       nativeBuildInputs = [
         pkgs.gnumake
