@@ -58,7 +58,7 @@ cd ..
 
 Notes:
 
-- This is known to work with Nixpkgs 20.03 and the ``nixbld.m-labs.hk`` binary substituter can also be used here (see the ARTIQ manual for the public key and instructions).
+- This is developed with Nixpkgs 20.09, and the ``nixbld.m-labs.hk`` binary substituter can also be used here (see the ARTIQ manual for the public key and instructions).
 - The impure build process is also compatible with non-Nix systems.
 - If the board is connected to the local machine, use the ``local_run.sh`` script.
 
