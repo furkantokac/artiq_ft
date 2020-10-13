@@ -2,6 +2,7 @@ let
   zynq-rs = (import ./zynq-rs.nix);
   pkgs = import <nixpkgs> { overlays = [ (import "${zynq-rs}/nix/mozilla-overlay.nix") ]; };
   rustPlatform = (import "${zynq-rs}/nix/rust-platform.nix" { inherit pkgs; });
+  cargo-xbuild = (import zynq-rs).cargo-xbuild;
   zc706-szl = (import zynq-rs).zc706-szl;
   zc706-fsbl = import "${zynq-rs}/nix/fsbl.nix" { inherit pkgs; };
   mkbootimage = import "${zynq-rs}/nix/mkbootimage.nix" { inherit pkgs; };
@@ -13,12 +14,12 @@ let
       version = "0.1.0";
 
       src = ./src;
-      cargoSha256 = "152k0jvx02a66dafyc25pz60wlg7i3kln9hh7nwl2wcanmqzzkbw";
+      cargoSha256 = "1kkh2fscdy2dz5bfbk36hrk6xd4dizbkfvqfihf15jfr5i94gi4x";
 
       nativeBuildInputs = [
         pkgs.gnumake
         (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
-        pkgs.cargo-xbuild
+        cargo-xbuild
         pkgs.llvmPackages_9.llvm
         pkgs.llvmPackages_9.clang-unwrapped
       ];

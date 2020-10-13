@@ -17,7 +17,7 @@ in
       pkgs.llvmPackages_9.llvm
       pkgs.llvmPackages_9.clang-unwrapped
       pkgs.cacert
-      (cargo-xbuild.overrideAttrs(oa: { patches = oa.patches ++ [ ./xbuild_override_compiler_builtins.patch ]; } ))
+      cargo-xbuild
 
       pkgs.openocd
       pkgs.openssh pkgs.rsync
