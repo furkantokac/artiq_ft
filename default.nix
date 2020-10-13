@@ -13,7 +13,7 @@ let
       version = "0.1.0";
 
       src = ./src;
-      cargoSha256 = "10hap25cy2qgwr7b86jid73i6fp480iym29r3r97jindfxk0svi0";
+      cargoSha256 = "152k0jvx02a66dafyc25pz60wlg7i3kln9hh7nwl2wcanmqzzkbw";
 
       nativeBuildInputs = [
         pkgs.gnumake
@@ -23,7 +23,7 @@ let
         pkgs.llvmPackages_9.clang-unwrapped
       ];
       buildPhase = ''
-        export XARGO_RUST_SRC="${rustPlatform.rust.rustc.src}/src"
+        export XARGO_RUST_SRC="${rustPlatform.rust.rustc.src}/library"
         export CARGO_HOME=$(mktemp -d cargo-home.XXX)
         make VARIANT=${variant}
       '';

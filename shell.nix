@@ -2,10 +2,10 @@ let
   zynq-rs = (import ./zynq-rs.nix);
   pkgs = import <nixpkgs> { overlays = [ (import "${zynq-rs}/nix/mozilla-overlay.nix") ]; };
   rustPlatform = (import "${zynq-rs}/nix/rust-platform.nix" { inherit pkgs; });
+  cargo-xbuild = (import zynq-rs).cargo-xbuild;
   artiq-fast = <artiq-fast>;
   artiqpkgs = import "${artiq-fast}/default.nix" { inherit pkgs; };
   vivado = import "${artiq-fast}/vivado.nix" { inherit pkgs; };
-  cargo-xbuild = import ./cargo-xbuild.nix { inherit pkgs; };
   zc706-szl = (import zynq-rs).zc706-szl;
 in
   pkgs.stdenv.mkDerivation {
@@ -17,7 +17,7 @@ in
       pkgs.llvmPackages_9.llvm
       pkgs.llvmPackages_9.clang-unwrapped
       pkgs.cacert
-      cargo-xbuild
+      (cargo-xbuild.overrideAttrs(oa: { patches = oa.patches ++ [ ./xbuild_override_compiler_builtins.patch ]; } ))
 
       pkgs.openocd
       pkgs.openssh pkgs.rsync
@@ -29,7 +29,7 @@ in
       (import "${zynq-rs}/nix/mkbootimage.nix" { inherit pkgs; })
     ];
 
-    XARGO_RUST_SRC = "${rustPlatform.rust.rustc.src}/src";
+    XARGO_RUST_SRC = "${rustPlatform.rust.rustc.src}/library";
     OPENOCD_ZYNQ = "${zynq-rs}/openocd";
     SZL = "${zc706-szl}/szl.elf";
   }
