@@ -22,7 +22,7 @@ in
       pkgs.openocd
       pkgs.openssh pkgs.rsync
 
-      (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
+      (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq artiq-netboot ])))
       vivado
       artiqpkgs.binutils-arm
 
