@@ -1,9 +1,10 @@
 use futures::{future::poll_fn, task::Poll};
 use libasync::{smoltcp::TcpStream, task};
 use libboard_zynq::smoltcp;
+use libconfig::Config;
 use core::cell::RefCell;
-use alloc::rc::Rc;
-use log::{self, info, warn, LevelFilter};
+use alloc::{rc::Rc, vec::Vec, string::String};
+use log::{self, info, debug, warn, error, LevelFilter};
 
 use crate::logger::{BufferLogger, LogBufferRef};
 use crate::proto_async::*;
@@ -44,12 +45,18 @@ pub enum Request {
     PullLog = 7,
     SetLogFilter = 3,
     SetUartLogFilter = 6,
+
+    ConfigRead = 12,
+    ConfigWrite = 13,
+    ConfigRemove = 14,
 }
 
 #[repr(i8)]
 pub enum Reply {
     Success = 1,
     LogContent = 2,
+    Error = 6,
+    ConfigData = 7,
 }
 
 async fn read_log_level_filter(stream: &mut TcpStream) -> Result<log::LevelFilter> {
@@ -85,7 +92,28 @@ async fn get_logger_buffer() -> LogBufferRef<'static> {
     get_logger_buffer_pred(|_| true).await
 }
 
-async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>) -> Result<()> {
+async fn read_key(stream: &mut TcpStream) -> Result<String> {
+    let len = read_i32(stream).await?;
+    if len <= 0 {
+        write_i8(stream, Reply::Error as i8).await?;
+        return Err(Error::UnexpectedPattern);
+    }
+    let mut buffer = Vec::with_capacity(len as usize);
+    for _ in 0..len {
+        buffer.push(0);
+    }
+    read_chunk(stream, &mut buffer).await?;
+    if !buffer.is_ascii() {
+        write_i8(stream, Reply::Error as i8).await?;
+        return Err(Error::UnexpectedPattern);
+    }
+    Ok(String::from_utf8(buffer).unwrap())
+}
+
+async fn handle_connection(
+    stream: &mut TcpStream,
+    pull_id: Rc<RefCell<u32>>,
+    cfg: Rc<Config>) -> Result<()> {
     if !expect(&stream, b"ARTIQ management\n").await? {
         return Err(Error::UnexpectedPattern);
     }
@@ -150,19 +178,70 @@ async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>) ->
                 }
                 write_i8(stream, Reply::Success as i8).await?;
             }
+            Request::ConfigRead => {
+                let key = read_key(stream).await?;
+                debug!("read key: {}", key);
+                let value = cfg.read(&key);
+                if let Ok(value) = value {
+                    debug!("got value");
+                    write_i8(stream, Reply::ConfigData as i8).await?;
+                    write_chunk(stream, &value).await?;
+                } else {
+                    warn!("read error: no such key");
+                    write_i8(stream, Reply::Error as i8).await?;
+                }
+            },
+            Request::ConfigWrite => {
+                let key = read_key(stream).await?;
+                warn!("write key: {}", key);
+                let len = read_i32(stream).await?;
+                let len = if len <= 0 {
+                    0
+                } else {
+                    len as usize
+                };
+                let mut buffer = Vec::with_capacity(len);
+                unsafe {
+                    buffer.set_len(len);
+                }
+                read_chunk(stream, &mut buffer).await?;
+                let value = cfg.write(&key, buffer);
+                if value.is_ok() {
+                    debug!("write success");
+                    write_i8(stream, Reply::Success as i8).await?;
+                } else {
+                    // this is an error because we do not expect write to fail
+                    error!("failed to write: {:?}", value);
+                    write_i8(stream, Reply::Error as i8).await?;
+                }
+            },
+            Request::ConfigRemove => {
+                let key = read_key(stream).await?;
+                debug!("erase key: {}", key);
+                let value = cfg.remove(&key);
+                if value.is_ok() {
+                    debug!("erase success");
+                    write_i8(stream, Reply::Success as i8).await?;
+                } else {
+                    warn!("erase failed");
+                    write_i8(stream, Reply::Error as i8).await?;
+                }
+            }
         }
     }
 }
 
-pub fn start() {
+pub fn start(cfg: Config) {
     task::spawn(async move {
         let pull_id = Rc::new(RefCell::new(0u32));
+        let cfg = Rc::new(cfg);
         loop {
             let mut stream = TcpStream::accept(1380, 2048, 2048).await.unwrap();
             let pull_id = pull_id.clone();
+            let cfg = cfg.clone();
             task::spawn(async move {
                 info!("received connection");
-                let _ = handle_connection(&mut stream, pull_id)
+                let _ = handle_connection(&mut stream, pull_id, cfg)
                     .await
                     .map_err(|e| warn!("connection terminated: {:?}", e));
                 let _ = stream.flush().await;

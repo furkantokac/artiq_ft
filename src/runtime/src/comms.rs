@@ -343,8 +343,8 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
     }
 }
 
-pub fn main(timer: GlobalTimer, cfg: &Config) {
-    let net_addresses = net_settings::get_adresses(cfg);
+pub fn main(timer: GlobalTimer, cfg: Config) {
+    let net_addresses = net_settings::get_adresses(&cfg);
     info!("network addresses: {}", net_addresses);
 
     let eth = zynq::eth::Eth::eth0(net_addresses.hardware_addr.0.clone());
@@ -384,7 +384,6 @@ pub fn main(timer: GlobalTimer, cfg: &Config) {
 
     Sockets::init(32);
 
-    mgmt::start();
     analyzer::start();
     moninj::start(timer);
 
@@ -400,6 +399,8 @@ pub fn main(timer: GlobalTimer, cfg: &Config) {
             error!("Error loading startup kernel!");
         }
     }
+
+    mgmt::start(cfg);
 
     task::spawn(async move {
         let connection = Rc::new(Semaphore::new(1, 1));

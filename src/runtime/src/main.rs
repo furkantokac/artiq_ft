@@ -192,5 +192,5 @@ pub fn main_core0() {
     init_rtio(&mut timer, &cfg);
     task::spawn(report_async_rtio_errors());
 
-    comms::main(timer, &cfg);
+    comms::main(timer, cfg);
 }
