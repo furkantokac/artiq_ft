@@ -5,7 +5,6 @@
 #![feature(panic_info_message)]
 #![feature(c_variadic)]
 #![feature(const_btree_new)]
-#![feature(ptr_offset_from)]
 #![feature(const_in_array_repeat_expressions)]
 #![feature(naked_functions)]
 
