@@ -14,7 +14,7 @@ let
       name = "zc706-firmware";
 
       src = ./src;
-      cargoSha256 = "1hmhnwvkn3z7qw4z6lxhczjl9r402k7xpycp987fnw7rfrqj9cp7";
+      cargoSha256 = "1nibi7xhdx7qg0vi93n981fmc23flhvx67japn48kcmwsq3g46dm";
 
       nativeBuildInputs = [
         pkgs.gnumake
