@@ -64,6 +64,15 @@ macro_rules! api_libm_f64f64 {
     })
 }
 
+macro_rules! api_libm_f64f64f64 {
+    ($i:ident) => ({
+        extern fn $i(x: f64, y: f64) -> f64 {
+            libm::$i(x, y)
+        }
+        api!($i = $i)
+    })
+}
+
 pub fn resolve(required: &[u8]) -> Option<u32> {
     let api = &[
         // timing
@@ -206,15 +215,11 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api_libm_f64f64!(asin),
         api_libm_f64f64!(asinh),
         api_libm_f64f64!(atan),
-        {
-            extern fn atan2(y: f64, x: f64) -> f64 {
-                libm::atan2(y, x)
-            }
-            api!(atan2 = atan2)
-        },
+        api_libm_f64f64f64!(atan2),
         api_libm_f64f64!(atanh),
         api_libm_f64f64!(cbrt),
         api_libm_f64f64!(ceil),
+        api_libm_f64f64f64!(copysign),
         api_libm_f64f64!(cos),
         api_libm_f64f64!(cosh),
         api_libm_f64f64!(erf),
@@ -231,18 +236,10 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
             }
             api!(fma = fma)
         },
-        {
-            extern fn fmod(x: f64, y: f64) -> f64 {
-                libm::fmod(x, y)
-            }
-            api!(fmod = fmod)
-        },
-        {
-            extern fn hypot(x: f64, y: f64) -> f64 {
-                libm::hypot(x, y)
-            }
-            api!(hypot = hypot)
-        },
+        api_libm_f64f64f64!(fmax),
+        api_libm_f64f64f64!(fmin),
+        api_libm_f64f64f64!(fmod),
+        api_libm_f64f64f64!(hypot),
         api_libm_f64f64!(j0),
         api_libm_f64f64!(j1),
         {
@@ -255,12 +252,8 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api_libm_f64f64!(log),
         api_libm_f64f64!(log2),
         api_libm_f64f64!(log10),
-        {
-            extern fn pow(x: f64, y: f64) -> f64 {
-                libm::pow(x, y)
-            }
-            api!(pow = pow)
-        },
+        api_libm_f64f64f64!(nextafter),
+        api_libm_f64f64f64!(pow),
         api_libm_f64f64!(round),
         api_libm_f64f64!(sin),
         api_libm_f64f64!(sinh),
