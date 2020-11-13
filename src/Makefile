@@ -1,3 +1,4 @@
+TARGET := zc706
 VARIANT := simple
 
 all: ../build/firmware/armv7-none-eabihf/release/runtime ../build/runtime.bin
@@ -7,10 +8,14 @@ all: ../build/firmware/armv7-none-eabihf/release/runtime ../build/runtime.bin
 
 ../build/pl.rs ../build/rustc-cfg: gateware/*
 	mkdir -p ../build
-	python gateware/zc706.py -r ../build/pl.rs -c ../build/rustc-cfg -V $(VARIANT)
+	python gateware/$(TARGET).py -r ../build/pl.rs -c ../build/rustc-cfg -V $(VARIANT)
 
 ../build/firmware/armv7-none-eabihf/release/runtime: ../build/pl.rs ../build/rustc-cfg $(shell find . -print)
-	XBUILD_SYSROOT_PATH=`pwd`/../build/sysroot cargo xbuild --release -p runtime --target-dir ../build/firmware
+	cd runtime && \
+	XBUILD_SYSROOT_PATH=`pwd`/../../build/sysroot \
+	cargo xbuild --release \
+		--target-dir ../../build/firmware \
+		--no-default-features --features=target_$(TARGET)
 
 ../build/runtime.bin: ../build/firmware/armv7-none-eabihf/release/runtime
 	llvm-objcopy -O binary ../build/firmware/armv7-none-eabihf/release/runtime ../build/runtime.bin

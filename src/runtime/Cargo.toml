@@ -7,6 +7,8 @@ edition = "2018"
 
 [features]
 target_zc706 = ["libboard_zynq/target_zc706", "libsupport_zynq/target_zc706", "libconfig/target_zc706"]
+target_coraz7 = ["libboard_zynq/target_coraz7", "libsupport_zynq/target_coraz7", "libconfig/target_coraz7"]
+target_redpitaya = ["libboard_zynq/target_redpitaya", "libsupport_zynq/target_redpitaya", "libconfig/target_redpitaya"]
 default = ["target_zc706"]
 
 [dependencies]

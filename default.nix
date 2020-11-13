@@ -3,18 +3,24 @@ let
   pkgs = import <nixpkgs> { overlays = [ (import "${zynq-rs}/nix/mozilla-overlay.nix") ]; };
   rustPlatform = (import "${zynq-rs}/nix/rust-platform.nix" { inherit pkgs; });
   cargo-xbuild = (import zynq-rs).cargo-xbuild;
-  zc706-szl = (import zynq-rs).zc706-szl;
-  zc706-fsbl = import "${zynq-rs}/nix/fsbl.nix" { inherit pkgs; };
   mkbootimage = import "${zynq-rs}/nix/mkbootimage.nix" { inherit pkgs; };
   artiqpkgs = import <artiq-fast/default.nix> { inherit pkgs; };
   vivado = import <artiq-fast/vivado.nix> { inherit pkgs; };
-  build-zc706 = { variant }: let
+  # FSBL configuration supplied by Vivado 2020.1 for these boards:
+  fsblTargets = ["zc702" "zc706" "zed"];
+  build = { target, variant }: let
+    szl = (import zynq-rs)."${target}-szl";
+    fsbl = import "${zynq-rs}/nix/fsbl.nix" {
+      inherit pkgs;
+      board = target;
+    };
+
     firmware = rustPlatform.buildRustPackage rec {
       # note: due to fetchCargoTarball, cargoSha256 depends on package name
-      name = "zc706-firmware";
+      name = "firmware";
 
       src = ./src;
-      cargoSha256 = "1nibi7xhdx7qg0vi93n981fmc23flhvx67japn48kcmwsq3g46dm";
+      cargoSha256 = "17313zy3vjna0pri4jpikcfbpydngxxpq48n3j5mwyw8d6jwhs3q";
 
       nativeBuildInputs = [
         pkgs.gnumake
@@ -26,7 +32,7 @@ let
       buildPhase = ''
         export XARGO_RUST_SRC="${rustPlatform.rust.rustc.src}/library"
         export CARGO_HOME=$(mktemp -d cargo-home.XXX)
-        make VARIANT=${variant}
+        make TARGET=${target} VARIANT=${variant}
       '';
 
       installPhase = ''
@@ -40,7 +46,7 @@ let
       doCheck = false;
       dontFixup = true;
     };
-    gateware = pkgs.runCommand "zc706-${variant}-gateware"
+    gateware = pkgs.runCommand "${target}-${variant}-gateware"
       {
         nativeBuildInputs = [ 
           (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
@@ -48,21 +54,21 @@ let
         ];
       }
       ''
-        python ${./src/gateware}/zc706.py -g build -V ${variant}
+        python ${./src/gateware}/${target}.py -g build -V ${variant}
         mkdir -p $out $out/nix-support
         cp build/top.bit $out
         echo file binary-dist $out/top.bit >> $out/nix-support/hydra-build-products
       '';
 
     # SZL startup
-    jtag = pkgs.runCommand "zc706-${variant}-jtag" {}
+    jtag = pkgs.runCommand "${target}-${variant}-jtag" {}
       ''
         mkdir $out
-        ln -s ${zc706-szl}/szl.elf $out
+        ln -s ${szl}/szl.elf $out
         ln -s ${firmware}/runtime.bin $out
         ln -s ${gateware}/top.bit $out
       '';
-    sd = pkgs.runCommand "zc706-${variant}-sd"
+    sd = pkgs.runCommand "${target}-${variant}-sd"
       {
         buildInputs = [ mkbootimage ];
       }
@@ -71,7 +77,7 @@ let
       # can't write software (mkbootimage will segfault).
       bifdir=`mktemp -d`
       cd $bifdir
-      ln -s ${zc706-szl}/szl.elf szl.elf
+      ln -s ${szl}/szl.elf szl.elf
       ln -s ${firmware}/runtime.elf runtime.elf
       ln -s ${gateware}/top.bit top.bit
       cat > boot.bif << EOF
@@ -88,14 +94,14 @@ let
       '';
 
     # FSBL startup
-    fsbl-sd = pkgs.runCommand "zc706-${variant}-fsbl-sd"
+    fsbl-sd = pkgs.runCommand "${target}-${variant}-fsbl-sd"
       {
         buildInputs = [ mkbootimage ];
       }
       ''
       bifdir=`mktemp -d`
       cd $bifdir
-      ln -s ${zc706-fsbl}/fsbl.elf fsbl.elf
+      ln -s ${fsbl}/fsbl.elf fsbl.elf
       ln -s ${gateware}/top.bit top.bit
       ln -s ${firmware}/runtime.elf runtime.elf
       cat > boot.bif << EOF
@@ -111,19 +117,30 @@ let
       echo file binary-dist $out/boot.bin >> $out/nix-support/hydra-build-products
       '';
   in {
-    "zc706-${variant}-firmware" = firmware;
-    "zc706-${variant}-gateware" = gateware;
-    "zc706-${variant}-jtag" = jtag;
-    "zc706-${variant}-sd" = sd;
-    "zc706-${variant}-fsbl-sd" = fsbl-sd;
-  };
+    "${target}-${variant}-firmware" = firmware;
+    "${target}-${variant}-gateware" = gateware;
+    "${target}-${variant}-jtag" = jtag;
+    "${target}-${variant}-sd" = sd;
+  } // (
+    if builtins.elem target fsblTargets
+    then {
+      "${target}-${variant}-fsbl-sd" = fsbl-sd;
+    }
+    else {}
+  );
 in
   (
-    (build-zc706 { variant = "simple"; }) //
-    (build-zc706 { variant = "nist_clock"; }) //
-    (build-zc706 { variant = "nist_qc2"; }) //
-    (build-zc706 { variant = "acpki_simple"; }) //
-    (build-zc706 { variant = "acpki_nist_clock"; }) //
-    (build-zc706 { variant = "acpki_nist_qc2"; }) //
+    (build { target = "zc706"; variant = "simple"; }) //
+    (build { target = "zc706"; variant = "nist_clock"; }) //
+    (build { target = "zc706"; variant = "nist_qc2"; }) //
+    (build { target = "zc706"; variant = "acpki_simple"; }) //
+    (build { target = "zc706"; variant = "acpki_nist_clock"; }) //
+    (build { target = "zc706"; variant = "acpki_nist_qc2"; }) //
+    (build { target = "coraz7"; variant = "10"; }) //
+    (build { target = "coraz7"; variant = "07s"; }) //
+    (build { target = "coraz7"; variant = "acpki_10"; }) //
+    (build { target = "coraz7"; variant = "acpki_07s"; }) //
+    (build { target = "redpitaya"; variant = "simple"; }) //
+    (build { target = "redpitaya"; variant = "acpki_simple"; }) //
     { inherit zynq-rs; }
   )
