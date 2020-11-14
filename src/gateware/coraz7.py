@@ -139,9 +139,6 @@ class Simple(CoraZ7):
         self.add_rtio(rtio_channels)
 
 
-VARIANTS = {cls.__name__.lower(): cls for cls in [Simple]}
-
-
 def write_csr_file(soc, filename):
     with open(filename, "w") as f:
         f.write(cpu_interface.get_csr_rust(
