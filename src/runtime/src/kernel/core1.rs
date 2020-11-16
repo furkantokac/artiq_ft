@@ -29,13 +29,9 @@ use super::{
 
 // linker symbols
 extern "C" {
-    #[no_mangle]
     static __text_start: u32;
-    #[no_mangle]
     static __text_end: u32;
-    #[no_mangle]
     static __exidx_start: u32;
-    #[no_mangle]
     static __exidx_end: u32;
 }
 
