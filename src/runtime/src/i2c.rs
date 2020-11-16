@@ -1,7 +1,6 @@
-use libboard_zynq;
-
 #[cfg(feature = "target_zc706")]
 mod i2c {
+    use libboard_zynq;
     use crate::artiq_raise;
 
     static mut I2C_BUS: Option<libboard_zynq::i2c::I2c> = None;

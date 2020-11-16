@@ -430,10 +430,10 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
                         if let Some(buffer) = &*idle_kernel {
                             info!("Loading idle kernel");
                             let _ = load_kernel(&buffer, &control, None)
-                                .await.map_err(|e| warn!("error loading idle kernel"));
+                                .await.map_err(|_| warn!("error loading idle kernel"));
                             info!("Running idle kernel");
                             let _ = handle_run_kernel(None, &control)
-                                .await.map_err(|e| warn!("error running idle kernel"));
+                                .await.map_err(|_| warn!("error running idle kernel"));
                             info!("Idle kernel terminated");
                         }
                     }).fuse() => (),
