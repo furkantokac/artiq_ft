@@ -20,7 +20,7 @@ let
       name = "firmware";
 
       src = ./src;
-      cargoSha256 = "10panw1jrgwn6g7fa0ii0yihgn75blxrbwr761lx0v33kkmi35vs";
+      cargoSha256 = "1rag33pafmkal4rj5zz1kzsr7m33j0pdwm8fhsfzkqmc0jyd04ga";
 
       nativeBuildInputs = [
         pkgs.gnumake

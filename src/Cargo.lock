@@ -37,9 +37,9 @@ checksum = "08c48aae112d48ed9f069b33538ea9e3e90aa263cfa3d1c24309612b1f7472de"
 
 [[package]]
 name = "cc"
-version = "1.0.64"
+version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92cc7b4cfeaa608da27ccbd00af8e1485761334821791ccf5ce88e9a2bb949e7"
+checksum = "4c0496836a84f8d0495758516b8621a622beb77c0fed418570e50764093ced48"
 
 [[package]]
 name = "cfg-if"
@@ -56,7 +56,7 @@ checksum = "e3fcd8aba10d17504c87ef12d4f62ef404c6a4703d16682a9eb5543e6cf24455"
 [[package]]
 name = "core_io"
 version = "0.1.20200410"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#1cd40563702a310eeec535f59e464720ec7265d6"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#8432ff3e30a792b723e81d7bd130637dadc23268"
 dependencies = [
  "memchr",
 ]
@@ -186,7 +186,7 @@ dependencies = [
 [[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#1cd40563702a310eeec535f59e464720ec7265d6"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#8432ff3e30a792b723e81d7bd130637dadc23268"
 dependencies = [
  "embedded-hal",
  "libcortex_a9",
@@ -198,7 +198,7 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#1cd40563702a310eeec535f59e464720ec7265d6"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#8432ff3e30a792b723e81d7bd130637dadc23268"
 dependencies = [
  "bit_field",
  "embedded-hal",
@@ -223,7 +223,7 @@ dependencies = [
 [[package]]
 name = "libconfig"
 version = "0.1.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#1cd40563702a310eeec535f59e464720ec7265d6"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#8432ff3e30a792b723e81d7bd130637dadc23268"
 dependencies = [
  "core_io",
  "fatfs",
@@ -234,7 +234,7 @@ dependencies = [
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#1cd40563702a310eeec535f59e464720ec7265d6"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#8432ff3e30a792b723e81d7bd130637dadc23268"
 dependencies = [
  "bit_field",
  "libregister",
@@ -250,7 +250,7 @@ checksum = "c7d73b3f436185384286bd8098d17ec07c9a7d2388a6599f824d8502b529702a"
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#1cd40563702a310eeec535f59e464720ec7265d6"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#8432ff3e30a792b723e81d7bd130637dadc23268"
 dependencies = [
  "bit_field",
  "vcell",
@@ -260,7 +260,7 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#1cd40563702a310eeec535f59e464720ec7265d6"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#8432ff3e30a792b723e81d7bd130637dadc23268"
 dependencies = [
  "compiler_builtins",
  "libboard_zynq",
@@ -272,9 +272,9 @@ dependencies = [
 
 [[package]]
 name = "linked_list_allocator"
-version = "0.8.6"
+version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84565678e403453d1a27a0886882b3b271701e65146d972d9d7d9a4c4a0ff498"
+checksum = "4e6766dff3bf932e0d1c7f1cf27c0a46008f7839f85b015a312c276a4570a399"
 
 [[package]]
 name = "log"
@@ -387,9 +387,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.7"
+version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa563d17ecb180e500da1cfd2b028310ac758de548efdd203e18f283af693f37"
+checksum = "991431c3519a3f36861882da93630ce66b52918dcf1b8e2fd66b397fc96f28df"
 dependencies = [
  "proc-macro2",
 ]
@@ -443,9 +443,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.48"
+version = "1.0.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc371affeffc477f42a221a1e4297aedcea33d47d19b61455588bd9d8f6b19ac"
+checksum = "a571a711dddd09019ccc628e1b17fe87c59b09d513c06c026877aa708334f37a"
 dependencies = [
  "proc-macro2",
  "quote",
