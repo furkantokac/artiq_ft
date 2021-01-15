@@ -30,7 +30,7 @@ let
         pkgs.llvmPackages_9.clang-unwrapped
       ];
       buildPhase = ''
-        export XARGO_RUST_SRC="${rustPlatform.rust.rustc.src}/library"
+        export XARGO_RUST_SRC="${rustPlatform.rust.rustc}/lib/rustlib/src/rust/library"
         export CARGO_HOME=$(mktemp -d cargo-home.XXX)
         make TARGET=${target} VARIANT=${variant}
       '';

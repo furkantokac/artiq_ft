@@ -29,7 +29,7 @@ in
       (import "${zynq-rs}/nix/mkbootimage.nix" { inherit pkgs; })
     ];
 
-    XARGO_RUST_SRC = "${rustPlatform.rust.rustc.src}/library";
+    XARGO_RUST_SRC = "${rustPlatform.rust.rustc}/lib/rustlib/src/rust/library";
     OPENOCD_ZYNQ = "${zynq-rs}/openocd";
     SZL = "${zc706-szl}/szl.elf";
   }
