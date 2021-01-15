@@ -75,7 +75,7 @@ async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, da
         }
         Tag::List(it) => {
             #[repr(C)]
-            struct List { elements: *mut (), length: u32 };
+            struct List { elements: *mut (), length: u32 }
             consume_value!(List, |ptr| {
                 let length = proto_async::read_i32(stream).await? as usize;
                 (*ptr).length  = length as u32;
@@ -228,7 +228,7 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
         }
         Tag::List(it) => {
             #[repr(C)]
-            struct List { elements: *const (), length: u32 };
+            struct List { elements: *const (), length: u32 }
             consume_value!(List, |ptr| {
                 let length = (*ptr).length as isize;
                 writer.write_u32((*ptr).length)?;
@@ -336,7 +336,7 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
         }
         Tag::Keyword(it) => {
             #[repr(C)]
-            struct Keyword<'a> { name: CSlice<'a, u8> };
+            struct Keyword<'a> { name: CSlice<'a, u8> }
             consume_value!(Keyword, |ptr| {
                 writer.write_string(str::from_utf8((*ptr).name.as_ref()).unwrap())?;
                 let tag = it.clone().next().expect("truncated tag");
@@ -348,7 +348,7 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
         }
         Tag::Object => {
             #[repr(C)]
-            struct Object { id: u32 };
+            struct Object { id: u32 }
             consume_value!(*const Object, |ptr|
                 writer.write_u32((**ptr).id))
         }

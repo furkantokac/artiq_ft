@@ -3,7 +3,7 @@ use core::{
     mem,
     slice,
 };
-use alloc::alloc::{alloc_zeroed, dealloc, Layout, LayoutErr};
+use alloc::alloc::{alloc_zeroed, dealloc, Layout, LayoutError};
 use super::{
     elf::*,
     Error,
@@ -27,7 +27,7 @@ pub struct Image {
 }
 
 impl Image {
-    pub fn new(size: usize, align: usize) -> Result<Self, LayoutErr> {
+    pub fn new(size: usize, align: usize) -> Result<Self, LayoutError> {
         let layout = Layout::from_size_align(size, align)?;
         let data = unsafe {
             let ptr = alloc_zeroed(layout);

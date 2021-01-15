@@ -6,7 +6,6 @@
 #![feature(c_variadic)]
 #![feature(const_btree_new)]
 #![feature(const_in_array_repeat_expressions)]
-#![feature(naked_functions)]
 
 extern crate alloc;
 
