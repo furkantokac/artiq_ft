@@ -16,6 +16,7 @@ static CORE1_RESTART: AtomicBool = AtomicBool::new(false);
 
 #[link_section = ".text.boot"]
 #[no_mangle]
+#[naked]
 pub unsafe extern "C" fn IRQ() {
     if MPIDR.read().cpu_id() == 1 {
         let mpcore = mpcore::RegisterBlock::mpcore();
