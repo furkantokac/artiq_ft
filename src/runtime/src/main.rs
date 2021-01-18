@@ -7,6 +7,7 @@
 #![feature(const_btree_new)]
 #![feature(const_in_array_repeat_expressions)]
 #![feature(naked_functions)]
+#![feature(asm)]
 
 extern crate alloc;
 
