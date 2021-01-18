@@ -118,7 +118,7 @@ impl KernelImage {
         dsb();
         isb();
 
-        (mem::transmute::<u32, fn()>(self.__modinit__))();
+        (mem::transmute::<u32, extern "C" fn()>(self.__modinit__))();
 
         if let Some(typeinfo) = self.typeinfo {
             attribute_writeback(typeinfo as *const ());
@@ -133,7 +133,7 @@ impl KernelImage {
 }
 
 #[no_mangle]
-pub fn main_core1() {
+pub extern "C" fn main_core1() {
     enable_fpu();
     debug!("Core1 started");
 
