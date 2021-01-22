@@ -54,13 +54,13 @@ pub async fn read_i8(stream: &TcpStream) -> Result<i8> {
 pub async fn read_i32(stream: &TcpStream) -> Result<i32> {
     let mut buffer: [u8; 4] = [0; 4];
     read_chunk(stream, &mut buffer).await?;
-    Ok(i32::from_be_bytes(buffer))
+    Ok(i32::from_le_bytes(buffer))
 }
 
 pub async fn read_i64(stream: &TcpStream) -> Result<i64> {
     let mut buffer: [u8; 8] = [0; 8];
     read_chunk(stream, &mut buffer).await?;
-    Ok(i64::from_be_bytes(buffer))
+    Ok(i64::from_le_bytes(buffer))
 }
 
 pub async fn read_chunk(stream: &TcpStream, destination: &mut [u8]) -> Result<()> {
@@ -90,12 +90,12 @@ pub async fn write_bool(stream: &TcpStream, value: bool) -> Result<()> {
 }
 
 pub async fn write_i32(stream: &TcpStream, value: i32) -> Result<()> {
-    stream.send_slice(&value.to_be_bytes()).await?;
+    stream.send_slice(&value.to_le_bytes()).await?;
     Ok(())
 }
 
 pub async fn write_i64(stream: &TcpStream, value: i64) -> Result<()> {
-    stream.send_slice(&value.to_be_bytes()).await?;
+    stream.send_slice(&value.to_le_bytes()).await?;
     Ok(())
 }
 

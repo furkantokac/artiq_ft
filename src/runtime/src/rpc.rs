@@ -2,7 +2,7 @@ use core::str;
 use core::future::Future;
 use cslice::{CSlice, CMutSlice};
 use log::trace;
-use byteorder::{NetworkEndian, ByteOrder};
+use byteorder::{NativeEndian, ByteOrder};
 
 use core_io::{Write, Error};
 use libboard_zynq::smoltcp;
@@ -96,7 +96,7 @@ async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, da
                         proto_async::read_chunk(stream, dest).await?;
                         drop(dest);
                         let dest = core::slice::from_raw_parts_mut(ptr, length);
-                        NetworkEndian::from_slice_u32(dest);
+                        NativeEndian::from_slice_u32(dest);
                     },
                     Tag::Int64 | Tag::Float64 => {
                         let ptr = align_ptr_mut::<u64>(data);
@@ -104,7 +104,7 @@ async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, da
                         proto_async::read_chunk(stream, dest).await?;
                         drop(dest);
                         let dest = core::slice::from_raw_parts_mut(ptr, length);
-                        NetworkEndian::from_slice_u64(dest);
+                        NativeEndian::from_slice_u64(dest);
                     },
                     _ => {
                         for _ in 0..(*ptr).length as usize {
@@ -141,7 +141,7 @@ async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, da
                         proto_async::read_chunk(stream, dest).await?;
                         drop(dest);
                         let dest = core::slice::from_raw_parts_mut(ptr, length);
-                        NetworkEndian::from_slice_u32(dest);
+                        NativeEndian::from_slice_u32(dest);
                     },
                     Tag::Int64 | Tag::Float64 => {
                         let ptr = align_ptr_mut::<u64>(data);
@@ -149,7 +149,7 @@ async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, da
                         proto_async::read_chunk(stream, dest).await?;
                         drop(dest);
                         let dest = core::slice::from_raw_parts_mut(ptr, length);
-                        NetworkEndian::from_slice_u64(dest);
+                        NativeEndian::from_slice_u64(dest);
                     },
                     _ => {
                         for _ in 0..length {
@@ -244,25 +244,13 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
                     },
                     Tag::Int32 => {
                         let ptr1 = align_ptr::<i32>(data);
-                        let slice = core::slice::from_raw_parts(ptr1, length as usize);
-                        let mut v: alloc::vec::Vec<i32> = slice.to_vec();
-                        NetworkEndian::from_slice_i32(&mut v);
-                        let slice2 = core::slice::from_raw_parts(
-                            v.as_ptr() as usize as *const u8,
-                            length as usize * 4
-                        );
-                        writer.write_all(slice2)?;
+                        let slice = core::slice::from_raw_parts(ptr1 as *const u8, length as usize * 4);
+                        writer.write_all(slice)?;
                     },
                     Tag::Int64 | Tag::Float64 => {
                         let ptr1 = align_ptr::<i64>(data);
-                        let slice = core::slice::from_raw_parts(ptr1, length as usize);
-                        let mut v: alloc::vec::Vec<i64> = slice.to_vec();
-                        NetworkEndian::from_slice_i64(&mut v);
-                        let slice2 = core::slice::from_raw_parts(
-                            v.as_ptr() as usize as *const u8,
-                            length as usize * 8
-                        );
-                        writer.write_all(slice2)?;
+                        let slice = core::slice::from_raw_parts(ptr1 as *const u8, length as usize * 8);
+                        writer.write_all(slice)?;
                     },
                     // non-primitive types, not sure if this would happen but we can handle it...
                     _ => {
@@ -297,25 +285,13 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
                     },
                     Tag::Int32 => {
                         let ptr1 = align_ptr::<i32>(data);
-                        let slice = core::slice::from_raw_parts(ptr1, length as usize);
-                        let mut v: alloc::vec::Vec<i32> = slice.to_vec();
-                        NetworkEndian::from_slice_i32(&mut v);
-                        let slice2 = core::slice::from_raw_parts(
-                            v.as_ptr() as usize as *const u8,
-                            length as usize * 4
-                        );
-                        writer.write_all(slice2)?;
+                        let slice = core::slice::from_raw_parts(ptr1 as *const u8, length as usize * 4);
+                        writer.write_all(slice)?;
                     },
                     Tag::Int64 | Tag::Float64 => {
                         let ptr1 = align_ptr::<i64>(data);
-                        let slice = core::slice::from_raw_parts(ptr1, length as usize);
-                        let mut v: alloc::vec::Vec<i64> = slice.to_vec();
-                        NetworkEndian::from_slice_i64(&mut v);
-                        let slice2 = core::slice::from_raw_parts(
-                            v.as_ptr() as usize as *const u8,
-                            length as usize * 8
-                        );
-                        writer.write_all(slice2)?;
+                        let slice = core::slice::from_raw_parts(ptr1 as *const u8, length as usize * 8);
+                        writer.write_all(slice)?;
                     },
                     // non-primitive types, not sure if this would happen but we can handle it...
                     _ => {

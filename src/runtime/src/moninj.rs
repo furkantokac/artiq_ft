@@ -83,6 +83,7 @@ async fn handle_connection(stream: &TcpStream, timer: GlobalTimer) -> Result<()>
     if !expect(&stream, b"ARTIQ moninj\n").await? {
         return Err(Error::UnexpectedPattern);
     }
+    stream.send_slice("e".as_bytes()).await?;
 
     let mut probe_watch_list: BTreeMap<(i32, i8), Option<i32>> = BTreeMap::new();
     let mut inject_watch_list: BTreeMap<(i32, i8), Option<i8>> = BTreeMap::new();

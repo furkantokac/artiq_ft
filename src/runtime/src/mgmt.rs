@@ -117,6 +117,7 @@ async fn handle_connection(
     if !expect(&stream, b"ARTIQ management\n").await? {
         return Err(Error::UnexpectedPattern);
     }
+    stream.send_slice("e".as_bytes()).await?;
 
     loop {
         let msg = read_i8(stream).await;

@@ -50,6 +50,7 @@ struct Header {
 }
 
 async fn write_header(stream: &mut TcpStream, header: &Header) -> Result<(), Error> {
+    stream.send_slice("e".as_bytes()).await?;
     write_i32(stream, header.sent_bytes as i32).await?;
     write_i64(stream, header.total_byte_count as i64).await?;
     write_i8(stream, header.error_occurred as i8).await?;

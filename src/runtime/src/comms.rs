@@ -317,6 +317,7 @@ async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Contr
     if !expect(stream, b"ARTIQ coredev\n").await? {
         return Err(Error::UnexpectedPattern);
     }
+    stream.send_slice("e".as_bytes()).await?;
     loop {
         let request = read_request(stream, true).await?;
         if request.is_none() {
