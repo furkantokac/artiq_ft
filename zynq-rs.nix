@@ -3,6 +3,6 @@ let
 in
   pkgs.fetchgit {
     url = "https://git.m-labs.hk/M-Labs/zynq-rs.git";
-    rev = "4aa252546f3559c9060ce731943372ad30d16eef";
-    sha256 = "0q9b75w6mbnsyyryainng27glxwhis325bmpv4bvzm7r9almsvks";
+    rev = "6e6612bc3e12e50b4f6e61cde47100c3d4ab982a";
+    sha256 = "14hj77n9g2zack6sjgs7337j8yq9r3jrpdsmc62kmxfbbmy8jhlg";
   }

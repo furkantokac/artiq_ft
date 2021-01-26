@@ -22,6 +22,7 @@ use void::Void;
 use embedded_hal::blocking::delay::DelayMs;
 use libconfig::Config;
 use libregister::RegisterW;
+use libcortex_a9::l2c::enable_l2_cache;
 
 mod proto_core_io;
 mod proto_async;
@@ -162,6 +163,7 @@ static mut LOG_BUFFER: [u8; 1<<17] = [0; 1<<17];
 
 #[no_mangle]
 pub fn main_core0() {
+    enable_l2_cache(0x8);
     let mut timer = GlobalTimer::start();
 
     let buffer_logger = unsafe {
