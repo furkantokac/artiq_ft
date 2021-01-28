@@ -69,4 +69,18 @@ SECTIONS
         . += 0x20000;
         __stack0_start = .;
     } > SDRAM
+
+    .irq_stack1 (NOLOAD) : ALIGN(8)
+    {
+        __irq_stack1_end = .;
+        . += 0x100;
+        __irq_stack1_start = .;
+    } > SDRAM
+
+    .irq_stack0 (NOLOAD) : ALIGN(8)
+    {
+        __irq_stack0_end = .;
+        . += 0x100;
+        __irq_stack0_start = .;
+    } > SDRAM
 }
