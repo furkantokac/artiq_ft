@@ -70,6 +70,26 @@ class RTIOCRG(Module, AutoCSR):
         ]
 
 
+eem_iostandard_dict = {
+     0: "LVDS_25",
+     1: "LVDS_25",
+     2: "LVDS",
+     3: "LVDS",
+     4: "LVDS",
+     5: "LVDS",
+     6: "LVDS",
+     7: "LVDS",
+     8: "LVDS_25",
+     9: "LVDS_25",
+    10: "LVDS",
+    11: "LVDS",
+}
+
+
+def eem_iostandard(eem):
+    return IOStandard(eem_iostandard_dict[eem])
+
+
 class GenericStandalone(SoCCore):
     def __init__(self, description, acpki=False):
         self.acpki = acpki
@@ -99,7 +119,7 @@ class GenericStandalone(SoCCore):
         has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
         if has_grabber:
             self.grabber_csr_group = []
-        eem_7series.add_peripherals(self, description["peripherals"])
+        eem_7series.add_peripherals(self, description["peripherals"], iostandard=eem_iostandard)
 
         self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)
         self.submodules.rtio_core = rtio.Core(self.rtio_tsc, self.rtio_channels)
