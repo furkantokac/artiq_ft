@@ -313,7 +313,9 @@ async fn load_kernel(buffer: &Vec<u8>, control: &Rc<RefCell<kernel::Control>>, s
     }
 }
 
-async fn handle_connection(stream: &TcpStream, control: Rc<RefCell<kernel::Control>>) -> Result<()> {
+async fn handle_connection(stream: &mut TcpStream, control: Rc<RefCell<kernel::Control>>) -> Result<()> {
+    stream.set_ack_delay(None);
+
     if !expect(stream, b"ARTIQ coredev\n").await? {
         return Err(Error::UnexpectedPattern);
     }
@@ -407,7 +409,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
         let connection = Rc::new(Semaphore::new(1, 1));
         let terminate = Rc::new(Semaphore::new(0, 1));
         loop {
-            let stream = TcpStream::accept(1381, 0x10_000, 0x10_000).await.unwrap();
+            let mut stream = TcpStream::accept(1381, 0x10_000, 0x10_000).await.unwrap();
 
             if connection.try_wait().is_none() {
                 // there is an existing connection
@@ -425,7 +427,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
             task::spawn(async move {
                 select_biased! {
                     _ = (async {
-                        let _ = handle_connection(&stream, control.clone())
+                        let _ = handle_connection(&mut stream, control.clone())
                             .await
                             .map_err(|e| warn!("connection terminated: {}", e));
                         if let Some(buffer) = &*idle_kernel {
