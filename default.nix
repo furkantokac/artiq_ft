@@ -8,7 +8,7 @@ let
   vivado = import <artiq-fast/vivado.nix> { inherit pkgs; };
   # FSBL configuration supplied by Vivado 2020.1 for these boards:
   fsblTargets = ["zc702" "zc706" "zed"];
-  build = { target, variant }: let
+  build = { target, variant, json ? null }: let
     szl = (import zynq-rs)."${target}-szl";
     fsbl = import "${zynq-rs}/nix/fsbl.nix" {
       inherit pkgs;
@@ -24,7 +24,7 @@ let
 
       nativeBuildInputs = [
         pkgs.gnumake
-        (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
+        (pkgs.python3.withPackages(ps: (with artiqpkgs; [ ps.jsonschema migen migen-axi misoc artiq ])))
         cargo-xbuild
         pkgs.llvmPackages_9.llvm
         pkgs.llvmPackages_9.clang-unwrapped
@@ -32,7 +32,7 @@ let
       buildPhase = ''
         export XARGO_RUST_SRC="${rustPlatform.rust.rustc}/lib/rustlib/src/rust/library"
         export CARGO_HOME=$(mktemp -d cargo-home.XXX)
-        make TARGET=${target} VARIANT=${variant}
+        make TARGET=${target} GWARGS="${if json == null then "-V ${variant}" else json}"
       '';
 
       installPhase = ''
@@ -49,12 +49,12 @@ let
     gateware = pkgs.runCommand "${target}-${variant}-gateware"
       {
         nativeBuildInputs = [ 
-          (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq ])))
+          (pkgs.python3.withPackages(ps: (with artiqpkgs; [ ps.jsonschema migen migen-axi misoc artiq ])))
           vivado
         ];
       }
       ''
-        python ${./src/gateware}/${target}.py -g build -V ${variant}
+        python ${./src/gateware}/${target}.py -g build ${if json == null then "-V ${variant}" else json}
         mkdir -p $out $out/nix-support
         cp build/top.bit $out
         echo file binary-dist $out/top.bit >> $out/nix-support/hydra-build-products
@@ -136,5 +136,6 @@ in
     (build { target = "zc706"; variant = "acpki_simple"; }) //
     (build { target = "zc706"; variant = "acpki_nist_clock"; }) //
     (build { target = "zc706"; variant = "acpki_nist_qc2"; }) //
+    (build { target = "kasli_soc"; variant = "demo"; json = ./demo.json; }) //
     { inherit zynq-rs; }
   )

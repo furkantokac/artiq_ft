@@ -1,5 +1,5 @@
 TARGET := zc706
-VARIANT := simple
+GWARGS := -V simple
 
 all: ../build/firmware/armv7-none-eabihf/release/runtime ../build/runtime.bin
 
@@ -8,7 +8,7 @@ all: ../build/firmware/armv7-none-eabihf/release/runtime ../build/runtime.bin
 
 ../build/pl.rs ../build/rustc-cfg: gateware/*
 	mkdir -p ../build
-	python gateware/$(TARGET).py -r ../build/pl.rs -c ../build/rustc-cfg -V $(VARIANT)
+	python gateware/$(TARGET).py -r ../build/pl.rs -c ../build/rustc-cfg $(GWARGS)
 
 ../build/firmware/armv7-none-eabihf/release/runtime: ../build/pl.rs ../build/rustc-cfg $(shell find . -print)
 	cd runtime && \
