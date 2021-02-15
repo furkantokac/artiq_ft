@@ -1,0 +1,60 @@
+{
+    "target": "kasli_soc",
+    "variant": "demo",
+    "hw_rev": "v1.0",
+    "base": "standalone",
+    "peripherals": [
+        {
+            "type": "grabber",
+            "ports": [0]
+        },
+        {
+            "type": "dio",
+            "ports": [1],
+            "bank_direction_low": "input",
+            "bank_direction_high": "output"
+        },
+        {
+            "type": "dio",
+            "ports": [2],
+            "bank_direction_low": "output",
+            "bank_direction_high": "output"
+        },
+        {
+            "type": "urukul",
+            "dds": "ad9910",
+            "ports": [3, 4],
+            "clk_sel": 2
+        },
+        {
+            "type": "zotino",
+            "ports": [5]
+        },
+        {
+            "type": "sampler",
+            "ports": [6, 7]
+        },
+        {
+            "type": "mirny",
+            "ports": [8],
+            "clk_sel": 1,
+            "refclk": 125e6
+        },
+        {
+            "type": "fastino",
+            "ports": [9]
+        },
+        {
+            "type": "dio",
+            "ports": [10],
+            "bank_direction_low": "input",
+            "bank_direction_high": "input"
+        },
+        {
+            "type": "dio",
+            "ports": [11],
+            "bank_direction_low": "output",
+            "bank_direction_high": "input"
+        }
+    ]
+}
