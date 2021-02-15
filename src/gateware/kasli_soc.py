@@ -155,7 +155,7 @@ class GenericStandalone(SoCCore):
         self.csr_devices.append("rtio_analyzer")
 
         if has_grabber:
-            self.config["HAS_GRABBER"] = None
+            self.rustc_cfg["has_grabber"] = None
             self.add_csr_group("grabber", self.grabber_csr_group)
             for grabber in self.grabber_csr_group:
                 self.platform.add_false_path_constraints(
