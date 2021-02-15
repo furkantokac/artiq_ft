@@ -136,11 +136,5 @@ in
     (build { target = "zc706"; variant = "acpki_simple"; }) //
     (build { target = "zc706"; variant = "acpki_nist_clock"; }) //
     (build { target = "zc706"; variant = "acpki_nist_qc2"; }) //
-    (build { target = "coraz7"; variant = "10"; }) //
-    (build { target = "coraz7"; variant = "07s"; }) //
-    (build { target = "coraz7"; variant = "acpki_10"; }) //
-    (build { target = "coraz7"; variant = "acpki_07s"; }) //
-    (build { target = "redpitaya"; variant = "simple"; }) //
-    (build { target = "redpitaya"; variant = "acpki_simple"; }) //
     { inherit zynq-rs; }
   )
