@@ -108,6 +108,7 @@ fn init_rtio(timer: &mut GlobalTimer, cfg: &Config) {
     loop {
         unsafe {
             pl::csr::rtio_crg::pll_reset_write(1);
+            #[cfg(has_rtio_crg_clock_sel)]
             pl::csr::rtio_crg::clock_sel_write(clock_sel);
             pl::csr::rtio_crg::pll_reset_write(0);
         }
