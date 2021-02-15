@@ -120,6 +120,8 @@ class GenericStandalone(SoCCore):
         if has_grabber:
             self.grabber_csr_group = []
         eem_7series.add_peripherals(self, description["peripherals"], iostandard=eem_iostandard)
+        self.config["RTIO_LOG_CHANNEL"] = len(self.rtio_channels)
+        self.rtio_channels.append(rtio.LogChannel())
 
         self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)
         self.submodules.rtio_core = rtio.Core(self.rtio_tsc, self.rtio_channels)
