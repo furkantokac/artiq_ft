@@ -45,6 +45,8 @@ mod mgmt;
 mod analyzer;
 mod irq;
 mod i2c;
+#[cfg(feature = "target_kasli_soc")]
+mod si5324;
 
 fn init_gateware() {
     // Set up PS->PL clocks
@@ -160,6 +162,20 @@ async fn report_async_rtio_errors() {
     }
 }
 
+#[cfg(feature = "target_kasli_soc")]
+// 125MHz output, from crystal, 7 Hz
+const SI5324_SETTINGS: si5324::FrequencySettings
+    = si5324::FrequencySettings {
+    n1_hs  : 10,
+    nc1_ls : 4,
+    n2_hs  : 10,
+    n2_ls  : 19972,
+    n31    : 4565,
+    n32    : 4565,
+    bwsel  : 4,
+    crystal_ref: true
+};
+
 static mut LOG_BUFFER: [u8; 1<<17] = [0; 1<<17];
 
 #[no_mangle]
@@ -183,6 +199,9 @@ pub fn main_core0() {
     info!("detected gateware: {}", identifier_read(&mut [0; 64]));
 
     i2c::init();
+    #[cfg(feature = "target_kasli_soc")]
+    si5324::setup(unsafe { (&mut i2c::I2C_BUS).as_mut().unwrap() },
+        &SI5324_SETTINGS, si5324::Input::Ckin1).expect("cannot initialize Si5324");
 
     let cfg = match Config::new() {
         Ok(cfg) => cfg,
