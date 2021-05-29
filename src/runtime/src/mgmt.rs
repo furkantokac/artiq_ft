@@ -121,7 +121,7 @@ async fn handle_connection(
 
     loop {
         let msg = read_i8(stream).await;
-        if let Err(smoltcp::Error::Illegal) = msg {
+        if let Err(smoltcp::Error::Finished) = msg {
             return Ok(());
         }
         let msg: Request = FromPrimitive::from_i8(msg?).ok_or(Error::UnrecognizedPacket)?;

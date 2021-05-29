@@ -184,7 +184,7 @@ pub fn start(timer: GlobalTimer) {
                 info!("received connection");
                 let result = handle_connection(&stream, timer).await;
                 match result {
-                    Err(Error::NetworkError(smoltcp::Error::Illegal)) => info!("peer closed connection"),
+                    Err(Error::NetworkError(smoltcp::Error::Finished)) => info!("peer closed connection"),
                     Err(error) => warn!("connection terminated: {}", error),
                     _ => (),
                 }

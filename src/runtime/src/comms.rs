@@ -94,13 +94,13 @@ async fn read_request(stream: &TcpStream, allow_close: bool) -> Result<Option<Re
         Ok(true) => {}
         Ok(false) =>
             return Err(Error::UnexpectedPattern),
-        Err(smoltcp::Error::Illegal) => {
+        Err(smoltcp::Error::Finished) => {
             if allow_close {
                 info!("peer closed connection");
                 return Ok(None);
             } else {
                 error!("peer unexpectedly closed connection");
-                return Err(smoltcp::Error::Illegal)?;
+                return Err(smoltcp::Error::Finished)?;
             }
         },
         Err(e) =>
