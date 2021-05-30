@@ -14,6 +14,7 @@ from misoc.integration import cpu_interface
 
 from artiq.coredevice import jsondesc
 from artiq.gateware import rtio, eem_7series
+from artiq.gateware.rtio.phy import ttl_simple
 
 import dma
 import analyzer
@@ -111,6 +112,12 @@ class GenericStandalone(SoCCore):
         if has_grabber:
             self.grabber_csr_group = []
         eem_7series.add_peripherals(self, description["peripherals"], iostandard=eem_iostandard)
+        for i in (0, 1):
+            print("USER LED at RTIO channel 0x{:06x}".format(len(self.rtio_channels)))
+            user_led = self.platform.request("user_led", i)
+            phy = ttl_simple.Output(user_led)
+            self.submodules += phy
+            self.rtio_channels.append(rtio.Channel.from_phy(phy))
         self.config["RTIO_LOG_CHANNEL"] = len(self.rtio_channels)
         self.rtio_channels.append(rtio.LogChannel())
 
