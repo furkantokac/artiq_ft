@@ -195,7 +195,7 @@ dependencies = [
 [[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#f83ef218de3420192d9096d7c1c9ce3794858b8a"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#040d41fd76499f6991634ce5fb63bef879c3c694"
 dependencies = [
  "embedded-hal",
  "libcortex_a9",
@@ -207,7 +207,7 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#f83ef218de3420192d9096d7c1c9ce3794858b8a"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#040d41fd76499f6991634ce5fb63bef879c3c694"
 dependencies = [
  "bit_field",
  "embedded-hal",
@@ -232,7 +232,7 @@ dependencies = [
 [[package]]
 name = "libconfig"
 version = "0.1.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#f83ef218de3420192d9096d7c1c9ce3794858b8a"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#040d41fd76499f6991634ce5fb63bef879c3c694"
 dependencies = [
  "core_io",
  "fatfs",
@@ -243,7 +243,7 @@ dependencies = [
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#f83ef218de3420192d9096d7c1c9ce3794858b8a"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#040d41fd76499f6991634ce5fb63bef879c3c694"
 dependencies = [
  "bit_field",
  "libregister",
@@ -259,7 +259,7 @@ checksum = "c7d73b3f436185384286bd8098d17ec07c9a7d2388a6599f824d8502b529702a"
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#f83ef218de3420192d9096d7c1c9ce3794858b8a"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#040d41fd76499f6991634ce5fb63bef879c3c694"
 dependencies = [
  "bit_field",
  "vcell",
@@ -269,7 +269,7 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#f83ef218de3420192d9096d7c1c9ce3794858b8a"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#040d41fd76499f6991634ce5fb63bef879c3c694"
 dependencies = [
  "cc",
  "compiler_builtins",
@@ -437,9 +437,9 @@ checksum = "d4f410fedcf71af0345d7607d246e7ad15faaadd49d240ee3b24e5dc21a820ac"
 
 [[package]]
 name = "smoltcp"
-version = "0.7.3"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11b5647cc4676e9358e6b15b6536b34e5b413e5ae946a06b3f85e713132bcdfa"
+checksum = "a4ec49aa038736b0bc852ccd9a0eadc8f7832fe8f9c8eec4e8a740b36d665614"
 dependencies = [
  "bitflags",
  "byteorder",
@@ -448,9 +448,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.72"
+version = "1.0.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1e8cdbefb79a9a5a65e0db8b47b723ee907b7c7f8496c76a1770b5c310bab82"
+checksum = "f71489ff30030d2ae598524f61326b902466f72a0fb1a8564c001cc63425bcc7"
 dependencies = [
  "proc-macro2",
  "quote",
