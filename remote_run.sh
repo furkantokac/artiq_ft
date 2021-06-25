@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# Only ZC706 supported for now.
+
 set -e
 
 if [ -z "$OPENOCD_ZYNQ" ]; then
@@ -46,7 +48,7 @@ echo "Creating $target_folder..."
 ssh $sshopts $target_host "mkdir -p $target_folder"
 echo "Copying files..."
 rsync -e "ssh $sshopts" -Lc $OPENOCD_ZYNQ/* $target_host:$target_folder
-rsync -e "ssh $sshopts" -Lc $SZL $target_host:$target_folder
+rsync -e "ssh $sshopts" -Lc $SZL/szl-zc706.elf $target_host:$target_folder/szl.elf
 if [ $impure -eq 1 ]; then
     if [ $load_bitstream -eq 1 ]; then
         load_bitstream_cmd="-g build/gateware/top.bit"

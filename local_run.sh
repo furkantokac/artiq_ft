@@ -13,9 +13,9 @@ fi
 
 impure=0
 load_bitstream=1
-board_host="192.168.1.52"
+board_type="kasli_soc"
 
-while getopts "ilb:" opt; do
+while getopts "ilb:t:" opt; do
     case "$opt" in
     \?) exit 1
         ;;
@@ -25,15 +25,25 @@ while getopts "ilb:" opt; do
         ;;
     b)  board_host=$OPTARG
         ;;
+    t)  board_type=$OPTARG
+        ;;
     esac
 done
+
+if [ -z "$board_host" ]; then
+    case $board_type in
+    kasli_soc) board_host="192.168.1.56";;
+    zc706) board_host="192.168.1.52";;
+    *) echo "Unknown board type"; exit 1;;
+    esac
+fi
 
 load_bitstream_cmd=""
 
 build_dir=`pwd`/build
 result_dir=`pwd`/result
 cd $OPENOCD_ZYNQ
-openocd -f zc706.cfg -c "load_image $SZL; resume 0; exit"
+openocd -f $board_type.cfg -c "load_image $SZL/szl-$board_type.elf; resume 0; exit"
 sleep 5
 if [ $impure -eq 1 ]; then
     if [ $load_bitstream -eq 1 ]; then

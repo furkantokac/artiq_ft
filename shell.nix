@@ -6,7 +6,6 @@ let
   artiq-fast = <artiq-fast>;
   artiqpkgs = import "${artiq-fast}/default.nix" { inherit pkgs; };
   vivado = import "${artiq-fast}/vivado.nix" { inherit pkgs; };
-  kasli_soc-szl = (import zynq-rs).kasli_soc-szl;
 in
   pkgs.stdenv.mkDerivation {
     name = "artiq-zynq-env";
@@ -32,5 +31,5 @@ in
     XARGO_RUST_SRC = "${rustPlatform.rust.rustc}/lib/rustlib/src/rust/library";
     CLANG_EXTRA_INCLUDE_DIR = "${pkgs.llvmPackages_9.clang-unwrapped.lib}/lib/clang/9.0.1/include";
     OPENOCD_ZYNQ = "${zynq-rs}/openocd";
-    SZL = "${kasli_soc-szl}/szl.elf";
+    SZL = "${(import zynq-rs).szl}";
   }
