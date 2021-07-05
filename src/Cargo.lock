@@ -195,7 +195,7 @@ dependencies = [
 [[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c7e9f85de2b204d6889c1c44b8ef4e587d0eb6a9"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#2c161720fa12f8b7abecaf60f77b062b08ac9bc1"
 dependencies = [
  "embedded-hal",
  "libcortex_a9",
@@ -207,7 +207,7 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c7e9f85de2b204d6889c1c44b8ef4e587d0eb6a9"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#2c161720fa12f8b7abecaf60f77b062b08ac9bc1"
 dependencies = [
  "bit_field",
  "embedded-hal",
@@ -232,7 +232,7 @@ dependencies = [
 [[package]]
 name = "libconfig"
 version = "0.1.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c7e9f85de2b204d6889c1c44b8ef4e587d0eb6a9"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#2c161720fa12f8b7abecaf60f77b062b08ac9bc1"
 dependencies = [
  "core_io",
  "fatfs",
@@ -243,7 +243,7 @@ dependencies = [
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c7e9f85de2b204d6889c1c44b8ef4e587d0eb6a9"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#2c161720fa12f8b7abecaf60f77b062b08ac9bc1"
 dependencies = [
  "bit_field",
  "libregister",
@@ -259,7 +259,7 @@ checksum = "c7d73b3f436185384286bd8098d17ec07c9a7d2388a6599f824d8502b529702a"
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c7e9f85de2b204d6889c1c44b8ef4e587d0eb6a9"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#2c161720fa12f8b7abecaf60f77b062b08ac9bc1"
 dependencies = [
  "bit_field",
  "vcell",
@@ -269,7 +269,7 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c7e9f85de2b204d6889c1c44b8ef4e587d0eb6a9"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#2c161720fa12f8b7abecaf60f77b062b08ac9bc1"
 dependencies = [
  "cc",
  "compiler_builtins",
@@ -344,9 +344,9 @@ dependencies = [
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc0e1f259c92177c30a4c9d177246edd0a3568b25756a977d0632cf8fa37e905"
+checksum = "8d31d11c69a6b52a174b42bdc0c30e5e11670f90788b2c471c31c1d17d449443"
 
 [[package]]
 name = "pin-utils"
@@ -437,9 +437,9 @@ checksum = "d4f410fedcf71af0345d7607d246e7ad15faaadd49d240ee3b24e5dc21a820ac"
 
 [[package]]
 name = "smoltcp"
-version = "0.7.4"
+version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4ec49aa038736b0bc852ccd9a0eadc8f7832fe8f9c8eec4e8a740b36d665614"
+checksum = "3e4a069bef843d170df47e7c0a8bf8d037f217d9f5b325865acc3e466ffe40d3"
 dependencies = [
  "bitflags",
  "byteorder",
