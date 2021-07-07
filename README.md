@@ -36,7 +36,7 @@ Development instructions
 Configure Nix channels:
 
 ```shell
-nix-channel --add https://nixbld.m-labs.hk/channel/custom/artiq/fast/artiq-fast
+nix-channel --add https://nixbld.m-labs.hk/channel/custom/artiq/fast-beta/artiq-fast
 nix-channel --update
 ```
 
