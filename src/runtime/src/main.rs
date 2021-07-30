@@ -201,7 +201,7 @@ pub fn main_core0() {
     i2c::init();
     #[cfg(feature = "target_kasli_soc")]
     si5324::setup(unsafe { (&mut i2c::I2C_BUS).as_mut().unwrap() },
-        &SI5324_SETTINGS, si5324::Input::Ckin1).expect("cannot initialize Si5324");
+        &SI5324_SETTINGS, si5324::Input::Ckin2).expect("cannot initialize Si5324");
 
     let cfg = match Config::new() {
         Ok(cfg) => cfg,
