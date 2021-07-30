@@ -28,6 +28,15 @@ class RTIOCRG(Module, AutoCSR):
         self.clock_domains.cd_rtio = ClockDomain()
         self.clock_domains.cd_rtiox4 = ClockDomain(reset_less=True)
 
+        clk_synth = platform.request("cdr_clk_clean_fabric")
+        clk_synth_se = Signal()
+        platform.add_period_constraint(clk_synth.p, 8.0)
+        self.specials += [
+            Instance("IBUFGDS",
+                p_DIFF_TERM="TRUE", p_IBUF_LOW_PWR="FALSE",
+                i_I=clk_synth.p, i_IB=clk_synth.n, o_O=clk_synth_se),
+        ]
+
         pll_locked = Signal()
         rtio_clk = Signal()
         rtiox4_clk = Signal()
@@ -38,7 +47,7 @@ class RTIOCRG(Module, AutoCSR):
                      p_BANDWIDTH="HIGH",
                      p_REF_JITTER1=0.001,
                      p_CLKIN1_PERIOD=8.0, p_CLKIN2_PERIOD=8.0,
-                     i_CLKIN2=ClockSignal(),
+                     i_CLKIN2=clk_synth_se,
                      # Warning: CLKINSEL=0 means CLKIN2 is selected
                      i_CLKINSEL=0,
 
