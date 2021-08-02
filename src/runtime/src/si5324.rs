@@ -169,7 +169,6 @@ fn monitor_lock(i2c: &mut I2c) -> Result<()> {
 }
 
 fn init(i2c: &mut I2c) -> Result<()> {
-    info!("init test");
     #[cfg(feature = "target_kasli_soc")]
     {
         i2c.pca9548_select(0x70, 0)?;
