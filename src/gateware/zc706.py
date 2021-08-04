@@ -11,6 +11,7 @@ from migen_axi.integration.soc_core import SoCCore
 from migen_axi.platforms import zc706
 from misoc.interconnect.csr import *
 from misoc.integration import cpu_interface
+from misoc.cores import gpio
 
 from artiq.gateware import rtio, nist_clock, nist_qc2
 from artiq.gateware.rtio.phy import ttl_simple, ttl_serdes_7series, dds, spi2
@@ -80,6 +81,10 @@ class ZC706(SoCCore):
 
         platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
         platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
+
+        self.rustc_cfg["HAS_SI5324"] = None
+        self.submodules.si5324_rst_n = gpio.GPIOOut(platform.request("si5324").rst_n)
+        self.csr_devices.append("si5324_rst_n")
 
         self.submodules.rtio_crg = RTIOCRG(self.platform, self.ps7.cd_sys.clk)
         self.csr_devices.append("rtio_crg")

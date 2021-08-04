@@ -1,10 +1,21 @@
 use core::result;
 use log::info;
-use libboard_zynq::i2c::I2c;
+use libboard_zynq::{i2c::I2c, timer::GlobalTimer, time::Milliseconds};
+use embedded_hal::blocking::delay::DelayUs;
+#[cfg(not(si5324_soft_reset))]
+use pl::csr;
 
 type Result<T> = result::Result<T, &'static str>;
 
 const ADDRESS: u8 = 0x68;
+
+#[cfg(not(si5324_soft_reset))]
+fn hard_reset(timer: GlobalTimer) {
+    unsafe { csr::si5324_rst_n::out_write(0); }
+    timer.delay_us(1_000);
+    unsafe { csr::si5324_rst_n::out_write(1); }
+    timer.delay_us(10_000);
+}
 
 // NOTE: the logical parameters DO NOT MAP to physical values written
 // into registers. They have to be mapped; see the datasheet.
@@ -134,9 +145,10 @@ fn ident(i2c: &mut I2c) -> Result<u16> {
     Ok(((read(i2c, 134)? as u16) << 8) | (read(i2c, 135)? as u16))
 }
 
-fn soft_reset(i2c: &mut I2c) -> Result<()> {
-    //TODO write_no_ack_value(i2c, 136, read(136)? | 0x80)?;
-    //TODO clock::spin_us(10_000);
+#[cfg(si5324_soft_reset)]
+fn soft_reset(i2c: &mut I2c, timer: GlobalTimer) -> Result<()> {
+    write_no_ack_value(i2c, 136, read(i2c, 136)? | 0x80)?;
+    timer.delay_us(10_000);
     Ok(())
 }
 
@@ -155,20 +167,23 @@ fn locked(i2c: &mut I2c) -> Result<bool> {
     Ok((read(i2c, 130)? & 0x01) == 0)  // LOL_INT=0
 }
 
-fn monitor_lock(i2c: &mut I2c) -> Result<()> {
+fn monitor_lock(i2c: &mut I2c, timer: GlobalTimer) -> Result<()> {
     info!("waiting for Si5324 lock...");
-    // TODO let t = clock::get_ms();
+    let timeout = timer.get_time() + Milliseconds(20_000);
     while !locked(i2c)? {
         // Yes, lock can be really slow.
-        /*if clock::get_ms() > t + 20000 {
+        if timer.get_time() > timeout {
             return Err("Si5324 lock timeout");
-        }*/
+        }
     }
     info!("  ...locked");
     Ok(())
 }
 
-fn init(i2c: &mut I2c) -> Result<()> {
+fn init(i2c: &mut I2c, timer: GlobalTimer) -> Result<()> {
+    #[cfg(not(si5324_soft_reset))]
+    hard_reset(timer);
+
     #[cfg(feature = "target_kasli_soc")]
     {
         i2c.pca9548_select(0x70, 0)?;
@@ -179,16 +194,17 @@ fn init(i2c: &mut I2c) -> Result<()> {
         return Err("Si5324 does not have expected product number");
     }
 
-    soft_reset(i2c)?;
+    #[cfg(si5324_soft_reset)]
+    soft_reset(i2c, timer)?;
     Ok(())
 }
 
-pub fn bypass(i2c: &mut I2c, input: Input) -> Result<()> {
+pub fn bypass(i2c: &mut I2c, input: Input, timer: GlobalTimer) -> Result<()> {
     let cksel_reg = match input {
         Input::Ckin1 => 0b00,
         Input::Ckin2 => 0b01,
     };
-    init(i2c)?;
+    init(i2c, timer)?;
     rmw(i2c, 21,  |v| v & 0xfe)?;                        // CKSEL_PIN=0
     rmw(i2c, 3,   |v| (v & 0x3f) | (cksel_reg << 6))?;   // CKSEL_REG
     rmw(i2c, 4,   |v| (v & 0x3f) | (0b00 << 6))?;        // AUTOSEL_REG=b00
@@ -197,14 +213,14 @@ pub fn bypass(i2c: &mut I2c, input: Input) -> Result<()> {
     Ok(())
 }
 
-pub fn setup(i2c: &mut I2c, settings: &FrequencySettings, input: Input) -> Result<()> {
+pub fn setup(i2c: &mut I2c, settings: &FrequencySettings, input: Input, timer: GlobalTimer) -> Result<()> {
     let s = map_frequency_settings(settings)?;
     let cksel_reg = match input {
         Input::Ckin1 => 0b00,
         Input::Ckin2 => 0b01,
     };
 
-    init(i2c)?;
+    init(i2c, timer)?;
     if settings.crystal_ref {
         rmw(i2c, 0,   |v| v | 0x40)?;                     // FREE_RUN=1
     }
@@ -239,11 +255,11 @@ pub fn setup(i2c: &mut I2c, settings: &FrequencySettings, input: Input) -> Resul
         return Err("Si5324 misses clock input signal");
     }
 
-    monitor_lock(i2c)?;
+    monitor_lock(i2c, timer)?;
     Ok(())
 }
 
-pub fn select_input(i2c: &mut I2c, input: Input) -> Result<()> {
+pub fn select_input(i2c: &mut I2c, input: Input, timer: GlobalTimer) -> Result<()> {
     let cksel_reg = match input {
         Input::Ckin1 => 0b00,
         Input::Ckin2 => 0b01,
@@ -252,6 +268,6 @@ pub fn select_input(i2c: &mut I2c, input: Input) -> Result<()> {
     if !has_ckin(i2c, input)? {
         return Err("Si5324 misses clock input signal");
     }
-    monitor_lock(i2c)?;
+    monitor_lock(i2c, timer)?;
     Ok(())
 }

@@ -108,6 +108,9 @@ class GenericStandalone(SoCCore):
         platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
         platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
 
+        self.rustc_cfg["HAS_SI5324"] = None
+        self.rustc_cfg["SI5324_SOFT_RESET"] = None
+
         self.crg = self.ps7 # HACK for eem_7series to find the clock
         self.submodules.rtio_crg = RTIOCRG(self.platform)
         self.csr_devices.append("rtio_crg")
