@@ -6,7 +6,7 @@ use core::cell::RefCell;
 use alloc::{rc::Rc, vec::Vec, string::String};
 use log::{self, info, debug, warn, error, LevelFilter};
 
-use crate::logger::{BufferLogger, LogBufferRef};
+use libboard_artiq::logger::{BufferLogger, LogBufferRef};
 use crate::proto_async::*;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;

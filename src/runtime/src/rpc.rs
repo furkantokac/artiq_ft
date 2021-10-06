@@ -10,7 +10,7 @@ use libasync::smoltcp::TcpStream;
 use alloc::boxed::Box;
 use async_recursion::async_recursion;
 
-use crate::proto_core_io::ProtoWrite;
+use io::proto::ProtoWrite;
 use crate::proto_async;
 use self::tag::{Tag, TagIterator, split_tag};
 

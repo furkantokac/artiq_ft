@@ -1,17 +1,19 @@
-use core::fmt;
-use alloc::collections::BTreeMap;
-use log::{debug, info, warn};
+use core::{fmt, cell::RefCell};
+use alloc::{collections::BTreeMap, rc::Rc};
+use log::{debug, info, warn, error};
 use void::Void;
+
+use libboard_artiq::drtio_routing;
 
 use libboard_zynq::{smoltcp, timer::GlobalTimer, time::Milliseconds};
 use libasync::{task, smoltcp::TcpStream, block_async, nb};
+use libcortex_a9::mutex::Mutex;
 
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use futures::{pin_mut, select_biased, FutureExt};
 
 use crate::proto_async::*;
-use crate::pl::csr;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,7 +21,6 @@ pub enum Error {
     NetworkError(smoltcp::Error),
     UnexpectedPattern,
     UnrecognizedPacket,
-
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -54,32 +55,108 @@ enum DeviceMessage {
     InjectionStatus = 1
 }
 
-fn read_probe(channel: i32, probe: i8) -> i32 {
-    unsafe {
-        csr::rtio_moninj::mon_chan_sel_write(channel as _);
-        csr::rtio_moninj::mon_probe_sel_write(probe as _);
-        csr::rtio_moninj::mon_value_update_write(1);
-        csr::rtio_moninj::mon_value_read() as i32
+#[cfg(has_drtio)]
+mod remote_moninj {
+    use super::*;
+    use libboard_artiq::drtioaux;
+    use crate::rtio_mgt::drtio;
+
+    pub fn read_probe(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, probe: i8) -> i32 {
+        let reply = task::block_on(drtio::aux_transact(aux_mutex, linkno, &drtioaux::Packet::MonitorRequest { 
+            destination: destination,
+            channel: channel as _,
+            probe: probe as _},
+            timer));
+        match reply {
+            Ok(drtioaux::Packet::MonitorReply { value }) => return value as i32,
+            Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
+            Err(e) => error!("aux packet error ({})", e)
+        }
+        0
+    }
+
+    pub fn inject(aux_mutex: &Rc<Mutex<bool>>, _timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, overrd: i8, value: i8) {
+        let _lock = aux_mutex.lock();
+        drtioaux::send(linkno, &drtioaux::Packet::InjectionRequest {
+            destination: destination,
+            channel: channel as _,
+            overrd: overrd as _,
+            value: value as _
+        }).unwrap();
+    }
+
+    pub fn read_injection_status(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, overrd: i8) -> i8 {
+        let reply = task::block_on(drtio::aux_transact(aux_mutex, 
+            linkno, 
+            &drtioaux::Packet::InjectionStatusRequest {
+                destination: destination,
+                channel: channel as _,
+                overrd: overrd as _},
+            timer));
+        match reply {
+            Ok(drtioaux::Packet::InjectionStatusReply { value }) => return value as i8,
+            Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
+            Err(e) => error!("aux packet error ({})", e)
+        }
+        0
     }
 }
 
-fn inject(channel: i32, overrd: i8, value: i8) {
-    unsafe {
-        csr::rtio_moninj::inj_chan_sel_write(channel as _);
-        csr::rtio_moninj::inj_override_sel_write(overrd as _);
-        csr::rtio_moninj::inj_value_write(value as _);
+mod local_moninj {
+    use libboard_artiq::pl::csr;
+
+    pub fn read_probe(channel: i32, probe: i8) -> i32 {
+        unsafe {
+            csr::rtio_moninj::mon_chan_sel_write(channel as _);
+            csr::rtio_moninj::mon_probe_sel_write(probe as _);
+            csr::rtio_moninj::mon_value_update_write(1);
+            csr::rtio_moninj::mon_value_read() as i32
+        }
+    }
+
+    pub fn inject(channel: i32, overrd: i8, value: i8) {
+        unsafe {
+            csr::rtio_moninj::inj_chan_sel_write(channel as _);
+            csr::rtio_moninj::inj_override_sel_write(overrd as _);
+            csr::rtio_moninj::inj_value_write(value as _);
+        }
+    }
+
+    pub fn read_injection_status(channel: i32, overrd: i8) -> i8 {
+        unsafe {
+            csr::rtio_moninj::inj_chan_sel_write(channel as _);
+            csr::rtio_moninj::inj_override_sel_write(overrd as _);
+            csr::rtio_moninj::inj_value_read() as i8
+        }
     }
 }
 
-fn read_injection_status(channel: i32, overrd: i8) -> i8 {
-    unsafe {
-        csr::rtio_moninj::inj_chan_sel_write(channel as _);
-        csr::rtio_moninj::inj_override_sel_write(overrd as _);
-        csr::rtio_moninj::inj_value_read() as i8
-    }
+#[cfg(has_drtio)]
+macro_rules! dispatch {
+    ($timer:ident, $aux_mutex:ident, $routing_table:ident, $channel:expr, $func:ident $(, $param:expr)*) => {{
+        let destination = ($channel >> 16) as u8;
+        let channel = $channel;
+        let routing_table = $routing_table.borrow_mut();
+        let hop = routing_table.0[destination as usize][0];
+        if hop == 0 {
+            local_moninj::$func(channel.into(), $($param, )*)
+        } else {
+            let linkno = hop - 1 as u8;
+            remote_moninj::$func($aux_mutex, $timer, linkno, destination, channel, $($param, )*)
+        }
+    }}
 }
 
-async fn handle_connection(stream: &TcpStream, timer: GlobalTimer) -> Result<()> {
+#[cfg(not(has_drtio))]
+macro_rules! dispatch {
+    ($timer:ident, $aux_mutex:ident, $routing_table:ident, $channel:expr, $func:ident $(, $param:expr)*) => {{
+        let channel = $channel as u16;
+        local_moninj::$func(channel, $($param, )*)
+    }}
+}
+
+async fn handle_connection(stream: &TcpStream, timer: GlobalTimer, 
+        _aux_mutex: &Rc<Mutex<bool>>, _routing_table: &Rc<RefCell<drtio_routing::RoutingTable>>) -> Result<()> {
     if !expect(&stream, b"ARTIQ moninj\n").await? {
         return Err(Error::UnexpectedPattern);
     }
@@ -135,13 +212,13 @@ async fn handle_connection(stream: &TcpStream, timer: GlobalTimer) -> Result<()>
                         let channel = read_i32(&stream).await?;
                         let overrd = read_i8(&stream).await?;
                         let value = read_i8(&stream).await?;
-                        inject(channel, overrd, value);
+                        dispatch!(timer, _aux_mutex, _routing_table, channel, inject, overrd, value);
                         debug!("INJECT channel {}, overrd {}, value {}", channel, overrd, value);
                     },
                     HostMessage::GetInjectionStatus => {
                         let channel = read_i32(&stream).await?;
                         let overrd = read_i8(&stream).await?;
-                        let value = read_injection_status(channel, overrd);
+                        let value = dispatch!(timer, _aux_mutex, _routing_table, channel, read_injection_status, overrd);
                         write_i8(&stream, DeviceMessage::InjectionStatus.to_i8().unwrap()).await?;
                         write_i32(&stream, channel).await?;
                         write_i8(&stream, overrd).await?;
@@ -151,7 +228,7 @@ async fn handle_connection(stream: &TcpStream, timer: GlobalTimer) -> Result<()>
             },
             _ = timeout_f => {
                 for (&(channel, probe), previous) in probe_watch_list.iter_mut() {
-                    let current = read_probe(channel, probe);
+                    let current = dispatch!(timer, _aux_mutex, _routing_table, channel, read_probe, probe);
                     if previous.is_none() || previous.unwrap() != current {
                         write_i8(&stream, DeviceMessage::MonitorStatus.to_i8().unwrap()).await?;
                         write_i32(&stream, channel).await?;
@@ -161,7 +238,7 @@ async fn handle_connection(stream: &TcpStream, timer: GlobalTimer) -> Result<()>
                     }
                 }
                 for (&(channel, overrd), previous) in inject_watch_list.iter_mut() {
-                    let current = read_injection_status(channel, overrd);
+                    let current = dispatch!(timer, _aux_mutex, _routing_table, channel, read_injection_status, overrd);
                     if previous.is_none() || previous.unwrap() != current {
                         write_i8(&stream, DeviceMessage::InjectionStatus.to_i8().unwrap()).await?;
                         write_i32(&stream, channel).await?;
@@ -176,13 +253,15 @@ async fn handle_connection(stream: &TcpStream, timer: GlobalTimer) -> Result<()>
     }
 }
 
-pub fn start(timer: GlobalTimer) {
+pub fn start(timer: GlobalTimer, aux_mutex: Rc<Mutex<bool>>, routing_table: Rc<RefCell<drtio_routing::RoutingTable>>) {
     task::spawn(async move {
         loop {
+            let aux_mutex = aux_mutex.clone();
+            let routing_table = routing_table.clone();
             let stream = TcpStream::accept(1383, 2048, 2048).await.unwrap();
             task::spawn(async move {
                 info!("received connection");
-                let result = handle_connection(&stream, timer).await;
+                let result = handle_connection(&stream, timer, &aux_mutex, &routing_table).await;
                 match result {
                     Err(Error::NetworkError(smoltcp::Error::Finished)) => info!("peer closed connection"),
                     Err(error) => warn!("connection terminated: {}", error),

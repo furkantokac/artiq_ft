@@ -11,82 +11,43 @@
 
 extern crate alloc;
 
-use core::{cmp, str};
 use log::{info, warn, error};
 
-use libboard_zynq::{timer::GlobalTimer, mpcore, gic, slcr};
+use libboard_zynq::{timer::GlobalTimer, mpcore, gic};
 use libasync::{task, block_async};
 use libsupport_zynq::ram;
 use nb;
 use void::Void;
 use embedded_hal::blocking::delay::DelayMs;
 use libconfig::Config;
-use libregister::RegisterW;
 use libcortex_a9::l2c::enable_l2_cache;
+use libboard_artiq::{logger, identifier_read, init_gateware, pl};
+#[cfg(has_si5324)]
+use libboard_artiq::si5324;
 
-mod proto_core_io;
 mod proto_async;
 mod comms;
 mod rpc;
-#[path = "../../../build/pl.rs"]
-mod pl;
 #[cfg(ki_impl = "csr")]
 #[path = "rtio_csr.rs"]
 mod rtio;
 #[cfg(ki_impl = "acp")]
 #[path = "rtio_acp.rs"]
 mod rtio;
+mod rtio_mgt;
 mod kernel;
 mod moninj;
 mod eh_artiq;
 mod panic;
-mod logger;
 mod mgmt;
 mod analyzer;
 mod irq;
 mod i2c;
-#[cfg(has_si5324)]
-mod si5324;
 
-fn init_gateware() {
-    // Set up PS->PL clocks
-    slcr::RegisterBlock::unlocked(|slcr| {
-        // As we are touching the mux, the clock may glitch, so reset the PL.
-        slcr.fpga_rst_ctrl.write(
-            slcr::FpgaRstCtrl::zeroed()
-                .fpga0_out_rst(true)
-                .fpga1_out_rst(true)
-                .fpga2_out_rst(true)
-                .fpga3_out_rst(true)
-        );
-        slcr.fpga0_clk_ctrl.write(
-            slcr::Fpga0ClkCtrl::zeroed()
-                .src_sel(slcr::PllSource::IoPll)
-                .divisor0(8)
-                .divisor1(1)
-        );
-        slcr.fpga_rst_ctrl.write(
-            slcr::FpgaRstCtrl::zeroed()
-        );
-    });
-}
-
-fn identifier_read(buf: &mut [u8]) -> &str {
-    unsafe {
-        pl::csr::identifier::address_write(0);
-        let len = pl::csr::identifier::data_read();
-        let len = cmp::min(len, buf.len() as u8);
-        for i in 0..len {
-            pl::csr::identifier::address_write(1 + i);
-            buf[i as usize] = pl::csr::identifier::data_read();
-        }
-        str::from_utf8_unchecked(&buf[..len as usize])
-    }
-}
-
-fn init_rtio(timer: &mut GlobalTimer, cfg: &Config) {
+fn init_rtio(timer: &mut GlobalTimer, _cfg: &Config) {
+    #[cfg(has_rtio_crg_clock_sel)]
     let clock_sel =
-        if let Ok(rtioclk) = cfg.read_str("rtioclk") {
+        if let Ok(rtioclk) = _cfg.read_str("rtioclk") {
             match rtioclk.as_ref() {
                 "internal" => {
                     info!("using internal RTIO clock");
@@ -129,6 +90,19 @@ fn init_rtio(timer: &mut GlobalTimer, cfg: &Config) {
         pl::csr::rtio_core::reset_phy_write(1);
     }
 }
+
+#[cfg(has_drtio)]
+fn init_drtio(timer: &mut GlobalTimer)
+{
+    unsafe {
+        pl::csr::drtio_transceiver::stable_clkin_write(1);
+    }
+    timer.delay_ms(2); // wait for CPLL/QPLL lock
+    unsafe {
+        pl::csr::drtio_transceiver::txenable_write(0xffffffffu32 as _);
+    }
+}
+
 
 fn wait_for_async_rtio_error() -> nb::Result<(), Void> {
     unsafe {
@@ -201,7 +175,7 @@ pub fn main_core0() {
     i2c::init();
     #[cfg(has_si5324)]
     si5324::setup(unsafe { (&mut i2c::I2C_BUS).as_mut().unwrap() },
-        &SI5324_SETTINGS, si5324::Input::Ckin2, timer).expect("cannot initialize Si5324");
+        &SI5324_SETTINGS, si5324::Input::Ckin2, &mut timer).expect("cannot initialize Si5324");
 
     let cfg = match Config::new() {
         Ok(cfg) => cfg,
@@ -210,6 +184,9 @@ pub fn main_core0() {
             Config::new_dummy()
         }
     };
+
+    #[cfg(has_drtio)]
+    init_drtio(&mut timer);
 
     init_rtio(&mut timer, &cfg);
     task::spawn(report_async_rtio_errors());

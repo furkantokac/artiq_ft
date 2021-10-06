@@ -21,6 +21,7 @@ use libcortex_a9::{semaphore::Semaphore, mutex::Mutex, sync_channel::{Sender, Re
 use futures::{select_biased, future::FutureExt};
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
 use libconfig::{Config, net_settings};
+use libboard_artiq::drtio_routing;
 
 use crate::proto_async::*;
 use crate::kernel;
@@ -28,7 +29,8 @@ use crate::rpc;
 use crate::moninj;
 use crate::mgmt;
 use crate::analyzer;
-
+use crate::rtio_mgt;
+use crate::pl;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -387,8 +389,21 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
 
     Sockets::init(32);
 
+    // before, mutex was on io, but now that io isn't used...?
+    let aux_mutex: Rc<Mutex<bool>> = Rc::new(Mutex::new(false));
+    #[cfg(has_drtio)]
+    let drtio_routing_table = Rc::new(RefCell::new(
+        drtio_routing::config_routing_table(pl::csr::DRTIO.len(), &cfg)));
+    #[cfg(not(has_drtio))]
+    let drtio_routing_table = Rc::new(RefCell::new(drtio_routing::RoutingTable::default_empty()));
+    let up_destinations = Rc::new(RefCell::new([false; drtio_routing::DEST_COUNT]));
+    #[cfg(has_drtio_routing)]
+    drtio_routing::interconnect_disable_all();
+
+    rtio_mgt::startup(&aux_mutex, &drtio_routing_table, &up_destinations, timer);
+
     analyzer::start();
-    moninj::start(timer);
+    moninj::start(timer, aux_mutex, drtio_routing_table);
 
     let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start()));
     let idle_kernel = Rc::new(cfg.read("idle").ok());
