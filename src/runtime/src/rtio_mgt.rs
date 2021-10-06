@@ -24,7 +24,7 @@ pub mod drtio {
         let up_destinations = up_destinations.clone();
         task::spawn(async move {
             let routing_table = routing_table.borrow();
-            link_thread(&aux_mutex, &routing_table, &up_destinations, timer).await;
+            link_task(&aux_mutex, &routing_table, &up_destinations, timer).await;
         });
     }
 
@@ -245,7 +245,7 @@ pub mod drtio {
         }
     }
 
-    pub async fn link_thread(aux_mutex: &Rc<Mutex<bool>>,
+    pub async fn link_task(aux_mutex: &Rc<Mutex<bool>>,
             routing_table: &drtio_routing::RoutingTable,
             up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
             timer: GlobalTimer) {
