@@ -1,0 +1,31 @@
+[package]
+name = "libboard_artiq"
+version = "0.0.0"
+authors = ["M-Labs"]
+edition = "2018"
+
+[lib]
+name = "libboard_artiq"
+
+[features]
+target_zc706 = []
+target_kasli_soc = []
+
+[build-dependencies]
+build_zynq = { path = "../libbuild_zynq" }
+
+[dependencies]
+log = "0.4"
+log_buffer = { version = "1.2" }
+crc = { version = "1.7", default-features = false }
+core_io = { version = "0.1", features = ["collections"] }
+embedded-hal = "0.2"
+nb = "1.0"
+void = { version = "1", default-features = false }
+
+io = { path = "../libio", features = ["byteorder"] }
+libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git"}
+libregister = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libconfig = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git"}
+libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libasync = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
