@@ -1,6 +1,6 @@
 use core::{fmt, cell::RefCell};
 use alloc::{collections::BTreeMap, rc::Rc};
-use log::{debug, info, warn, error};
+use log::{debug, info, warn};
 use void::Void;
 
 use libboard_artiq::drtio_routing;
@@ -60,6 +60,7 @@ mod remote_moninj {
     use super::*;
     use libboard_artiq::drtioaux;
     use crate::rtio_mgt::drtio;
+    use log::error;
 
     pub fn read_probe(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, probe: i8) -> i32 {
         let reply = task::block_on(drtio::aux_transact(aux_mutex, linkno, &drtioaux::Packet::MonitorRequest { 
@@ -151,7 +152,7 @@ macro_rules! dispatch {
 macro_rules! dispatch {
     ($timer:ident, $aux_mutex:ident, $routing_table:ident, $channel:expr, $func:ident $(, $param:expr)*) => {{
         let channel = $channel as u16;
-        local_moninj::$func(channel, $($param, )*)
+        local_moninj::$func(channel.into(), $($param, )*)
     }}
 }
 

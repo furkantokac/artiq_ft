@@ -1,6 +1,6 @@
 use core::cell::RefCell;
 use alloc::rc::Rc;
-use libboard_zynq::{timer::GlobalTimer, time::Milliseconds};
+use libboard_zynq::timer::GlobalTimer;
 use libboard_artiq::{pl::csr, drtio_routing};
 use libcortex_a9::mutex::Mutex;
 
@@ -14,6 +14,7 @@ pub mod drtio {
     use log::{warn, error, info};
     use embedded_hal::blocking::delay::DelayMs;
     use libasync::{task, delay};
+    use libboard_zynq::time::Milliseconds;
 
     pub fn startup(aux_mutex: &Rc<Mutex<bool>>,
             routing_table: &Rc<RefCell<drtio_routing::RoutingTable>>,

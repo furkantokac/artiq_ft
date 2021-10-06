@@ -24,6 +24,7 @@ pub mod si5324;
 pub mod drtioaux;
 #[cfg(has_drtio)]
 pub mod drtioaux_async;
+#[cfg(has_drtio)]
 #[path = "../../../build/mem.rs"]
 pub mod mem;
 

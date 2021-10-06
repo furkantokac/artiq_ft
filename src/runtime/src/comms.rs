@@ -30,6 +30,7 @@ use crate::moninj;
 use crate::mgmt;
 use crate::analyzer;
 use crate::rtio_mgt;
+#[cfg(has_drtio)]
 use crate::pl;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
