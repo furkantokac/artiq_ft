@@ -54,8 +54,6 @@ pub enum Packet {
     SpiReadReply { succeeded: bool, data: u32 },
     SpiBasicReply { succeeded: bool },
 
-    JdacBasicRequest { destination: u8, dacno: u8, reqno: u8, param: u8 },
-    JdacBasicReply { succeeded: bool, retval: u8 },
 }
 
 impl Packet {
@@ -179,17 +177,6 @@ impl Packet {
             },
             0x95 => Packet::SpiBasicReply {
                 succeeded: reader.read_bool()?
-            },
-
-            0xa0 => Packet::JdacBasicRequest {
-                destination: reader.read_u8()?,
-                dacno: reader.read_u8()?,
-                reqno: reader.read_u8()?,
-                param: reader.read_u8()?,
-            },
-            0xa1 => Packet::JdacBasicReply {
-                succeeded: reader.read_bool()?,
-                retval: reader.read_u8()?
             },
 
             ty => return Err(Error::UnknownPacket(ty))
@@ -345,18 +332,6 @@ impl Packet {
                 writer.write_bool(succeeded)?;
             },
 
-            Packet::JdacBasicRequest { destination, dacno, reqno, param } => {
-                writer.write_u8(0xa0)?;
-                writer.write_u8(destination)?;
-                writer.write_u8(dacno)?;
-                writer.write_u8(reqno)?;
-                writer.write_u8(param)?;
-            }
-            Packet::JdacBasicReply { succeeded, retval } => {
-                writer.write_u8(0xa1)?;
-                writer.write_bool(succeeded)?;
-                writer.write_u8(retval)?;
-            },
         }
         Ok(())
     }

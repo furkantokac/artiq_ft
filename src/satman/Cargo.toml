@@ -1,0 +1,28 @@
+[package]
+authors = ["M-Labs"]
+name = "satman"
+version = "0.0.0"
+build = "build.rs"
+
+[features]
+target_zc706 = ["libboard_zynq/target_zc706", "libsupport_zynq/target_zc706", "libconfig/target_zc706", "libboard_artiq/target_zc706"]
+target_kasli_soc = ["libboard_zynq/target_kasli_soc", "libsupport_zynq/target_kasli_soc", "libconfig/target_kasli_soc", "libboard_artiq/target_kasli_soc"]
+default = ["target_zc706", ]
+
+[build-dependencies]
+build_zynq = { path = "../libbuild_zynq" }
+
+[dependencies]
+log = { version = "0.4", default-features = false }
+embedded-hal = "0.2"
+
+libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["ipv6"]}
+libsupport_zynq = { default-features = false, features = ["alloc_core"], git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libasync = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libregister = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libconfig = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["ipv6"] }
+
+libboard_artiq = { path = "../libboard_artiq" }
+unwind = { path = "../libunwind" }
+libc = { path = "../libc" }
