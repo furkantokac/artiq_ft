@@ -1,15 +1,19 @@
 TARGET := zc706
 GWARGS := -V nist_clock
 
-all: ../build/runtime.bin
+all: runtime
 
-.PHONY: all
+runtime: ../build/runtime.bin
+
+satman: ../build/satman.bin
+
+.PHONY: all runtime_target satman_target
 
 ../build/pl.rs ../build/rustc-cfg ../build/mem.rs: gateware/* 
 	mkdir -p ../build
 	python gateware/$(TARGET).py -r ../build/pl.rs -c ../build/rustc-cfg -m ../build/mem.rs $(GWARGS)
 
-../build/firmware/armv7-none-eabihf/release/runtime: ../build/pl.rs ../build/rustc-cfg ../build/mem.rs $(shell find . -print)
+../build/firmware/armv7-none-eabihf/release/runtime: ../build/pl.rs ../build/rustc-cfg ../build/mem.rs $(shell find . -type f -print)
 	cd runtime && \
 	XBUILD_SYSROOT_PATH=`pwd`/../../build/sysroot \
 	cargo xbuild --release \
@@ -19,7 +23,7 @@ all: ../build/runtime.bin
 ../build/runtime.bin: ../build/firmware/armv7-none-eabihf/release/runtime
 	llvm-objcopy -O binary ../build/firmware/armv7-none-eabihf/release/runtime ../build/runtime.bin
 
-../build/firmware/armv7-none-eabihf/release/satman: ../build/pl.rs ../build/rustc-cfg ../build/mem.rs $(shell find . -print)
+../build/firmware/armv7-none-eabihf/release/satman: ../build/pl.rs ../build/rustc-cfg ../build/mem.rs $(shell find . -type f -print)
 	cd satman && \
 	XBUILD_SYSROOT_PATH=`pwd`/../../build/sysroot \
 	cargo xbuild --release \
