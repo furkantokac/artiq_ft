@@ -197,8 +197,6 @@ class GenericMaster(SoCCore):
         platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
         platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
 
-        # kasli_soc has no SATA, but it has 4x SFP
-        # not sure yet why sfp0 is omitted in MasterMode
         data_pads = [platform.request("sfp", i) for i in range(4)]
 
         self.submodules.drtio_transceiver = gtx_7series.GTX(
