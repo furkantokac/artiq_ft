@@ -1,5 +1,5 @@
 TARGET := zc706
-GWARGS := -V simple
+GWARGS := -V nist_clock
 
 all: ../build/runtime.bin
 

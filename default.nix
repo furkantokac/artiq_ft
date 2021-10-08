@@ -8,7 +8,7 @@ let
   vivado = import <artiq-fast/vivado.nix> { inherit pkgs; };
   # FSBL configuration supplied by Vivado 2020.1 for these boards:
   fsblTargets = ["zc702" "zc706" "zed"];
-  sat_variants = ["satellite" "acpki_satellite" "nist_clock_satellite" "nist_qc2_satellite"];
+  sat_variants = ["acpki_satellite" "nist_clock_satellite" "nist_qc2_satellite"];
   build = { target, variant, json ? null }: let
     szl = (import zynq-rs)."${target}-szl";
     fsbl = import "${zynq-rs}/nix/fsbl.nix" {
@@ -133,18 +133,12 @@ let
   );
 in
   (
-    (build { target = "zc706"; variant = "simple"; }) //
-    (build { target = "zc706"; variant = "master"; }) //
-    (build { target = "zc706"; variant = "satellite"; }) //
     (build { target = "zc706"; variant = "nist_clock"; }) //
     (build { target = "zc706"; variant = "nist_clock_master"; }) //
     (build { target = "zc706"; variant = "nist_clock_satellite"; }) //
     (build { target = "zc706"; variant = "nist_qc2"; }) //
     (build { target = "zc706"; variant = "nist_qc2_master"; }) //
     (build { target = "zc706"; variant = "nist_qc2_satellite"; }) //
-    (build { target = "zc706"; variant = "acpki_simple"; }) //
-    (build { target = "zc706"; variant = "acpki_master"; }) //
-    (build { target = "zc706"; variant = "acpki_satellite"; }) //
     (build { target = "zc706"; variant = "acpki_nist_clock"; }) //
     (build { target = "zc706"; variant = "acpki_nist_clock_master"; }) //
     (build { target = "zc706"; variant = "acpki_nist_clock_satellite"; }) //

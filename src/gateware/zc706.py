@@ -427,22 +427,6 @@ class _SatelliteBase(SoCCore):
         self.csr_devices.append("routing_table")
 
 
-class _Simple_RTIO:
-    def __init__(self):
-        platform = self.platform
-
-        rtio_channels = []
-        for i in range(4):
-            phy = ttl_simple.Output(platform.request("user_led", i))
-            self.submodules += phy
-            rtio_channels.append(rtio.Channel.from_phy(phy))
-
-        self.config["RTIO_LOG_CHANNEL"] = len(rtio_channels)
-        rtio_channels.append(rtio.LogChannel())
-
-        self.add_rtio(rtio_channels)
-
-
 class _NIST_CLOCK_RTIO:
     """
     NIST clock hardware, with old backplane and 11 DDS channels
@@ -542,21 +526,6 @@ class _NIST_QC2_RTIO:
         self.add_rtio(rtio_channels)
 
 
-class Simple(ZC706, _Simple_RTIO):
-    def __init__(self, acpki):
-        ZC706.__init__(self, acpki)
-        _Simple_RTIO.__init__(self)
-
-class Master(_MasterBase, _Simple_RTIO):
-    def __init__(self, acpki):
-        _MasterBase.__init__(self, acpki)
-        _Simple_RTIO.__init__(self)
-
-class Satellite(_SatelliteBase, _Simple_RTIO):
-    def __init__(self, acpki):
-        _SatelliteBase.__init__(self, acpki)
-        _Simple_RTIO.__init__(self)
-
 class NIST_CLOCK(ZC706, _NIST_CLOCK_RTIO):
     def __init__(self, acpki):
         ZC706.__init__(self, acpki)
@@ -589,8 +558,7 @@ class NIST_QC2_Satellite(_SatelliteBase, _NIST_QC2_RTIO):
         _NIST_QC2_RTIO.__init__(self)
 
 
-VARIANTS = {cls.__name__.lower(): cls for cls in [Simple, Master, Satellite, 
-                                                  NIST_CLOCK, NIST_CLOCK_Master, NIST_CLOCK_Satellite,
+VARIANTS = {cls.__name__.lower(): cls for cls in [NIST_CLOCK, NIST_CLOCK_Master, NIST_CLOCK_Satellite,
                                                   NIST_QC2, NIST_QC2_Master, NIST_QC2_Satellite]}
 
 
@@ -625,9 +593,9 @@ def main():
         help="build Rust compiler configuration into the specified file")
     parser.add_argument("-g", default=None,
         help="build gateware into the specified directory")
-    parser.add_argument("-V", "--variant", default="simple",
+    parser.add_argument("-V", "--variant", default="nist_clock",
                         help="variant: "
-                             "[acpki_]simple/nist_clock/nist_qc2 "
+                             "[acpki_]nist_clock/nist_qc2[_master/_satellite] "
                              "(default: %(default)s)")
     args = parser.parse_args()
 

@@ -45,7 +45,7 @@ Note: if you are using Nix channels the first time, you need to be aware of this
 Pure build with Nix and execution on a remote JTAG server:
 
 ```shell
-nix-build -A zc706-simple-jtag  # or zc706-nist_qc2-jtag or zc706-nist_clock-jtag
+nix-build -A zc706-nist_clock-jtag  # or zc706-nist_qc2-jtag or zc706-nist_clock_satellite-jtag
 ./remote_run.sh
 ```
 
