@@ -8,7 +8,7 @@ let
   vivado = import <artiq-fast/vivado.nix> { inherit pkgs; };
   # FSBL configuration supplied by Vivado 2020.1 for these boards:
   fsblTargets = ["zc702" "zc706" "zed"];
-  sat_variants = ["satellite" "nist_clock_satellite" "nist_qc2_satellite"];
+  sat_variants = ["satellite" "nist_clock_satellite" "nist_qc2_satellite" "acpki_nist_clock_satellite" "acpki_nist_qc2_satellite"];
   build = { target, variant, json ? null }: let
     szl = (import zynq-rs)."${target}-szl";
     fsbl = import "${zynq-rs}/nix/fsbl.nix" {
@@ -81,14 +81,14 @@ let
       bifdir=`mktemp -d`
       cd $bifdir
       ln -s ${szl}/szl.elf szl.elf
-      ln -s ${firmware}/runtime.elf runtime.elf
+      ln -s ${firmware}/${fwtype}.elf ${fwtype}.elf
       ln -s ${gateware}/top.bit top.bit
       cat > boot.bif << EOF
       the_ROM_image:
       {
         [bootloader]szl.elf
         top.bit
-        runtime.elf
+        ${fwtype}.elf
       }
       EOF
       mkdir $out $out/nix-support
@@ -106,13 +106,13 @@ let
       cd $bifdir
       ln -s ${fsbl}/fsbl.elf fsbl.elf
       ln -s ${gateware}/top.bit top.bit
-      ln -s ${firmware}/runtime.elf runtime.elf
+      ln -s ${firmware}/${fwtype}.elf ${fwtype}.elf
       cat > boot.bif << EOF
       the_ROM_image:
       {
         [bootloader]fsbl.elf
         top.bit
-        runtime.elf
+        ${fwtype}.elf
       }
       EOF
       mkdir $out $out/nix-support
