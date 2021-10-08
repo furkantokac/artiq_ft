@@ -14,8 +14,9 @@ fi
 impure=0
 load_bitstream=1
 board_type="kasli_soc"
+fw_type="runtime"
 
-while getopts "ilb:t:" opt; do
+while getopts "ilb:t:f:" opt; do
     case "$opt" in
     \?) exit 1
         ;;
@@ -26,6 +27,8 @@ while getopts "ilb:t:" opt; do
     b)  board_host=$OPTARG
         ;;
     t)  board_type=$OPTARG
+        ;;
+    f)  fw_type=$OPTARG
         ;;
     esac
 done
@@ -49,10 +52,10 @@ if [ $impure -eq 1 ]; then
     if [ $load_bitstream -eq 1 ]; then
         load_bitstream_cmd="-g $build_dir/gateware/top.bit"
     fi
-    artiq_netboot $load_bitstream_cmd -f $build_dir/runtime.bin -b $board_host
+    artiq_netboot $load_bitstream_cmd -f $build_dir/$fwtype.bin -b $board_host
 else
     if [ $load_bitstream -eq 1 ]; then
         load_bitstream_cmd="-g $result_dir/top.bit"
     fi
-    artiq_netboot $load_bitstream_cmd -f $result_dir/runtime.bin -b $board_host
+    artiq_netboot $load_bitstream_cmd -f $result_dir/$fwtype.bin -b $board_host
 fi

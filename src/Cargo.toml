@@ -3,8 +3,10 @@ members = [
   "libc",
   "libdyld",
   "libdwarf",
+  "libio",
   "libunwind",
   "runtime",
+  "satman"
 ]
 
 [profile.release]

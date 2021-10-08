@@ -20,8 +20,9 @@ impure_dir="build"
 sshopts=""
 load_bitstream=1
 board_host="192.168.1.52"
+fw_type="runtime"
 
-while getopts "h:id:o:l" opt; do
+while getopts "h:id:o:lt:" opt; do
     case "$opt" in
     \?) exit 1
         ;;
@@ -38,6 +39,8 @@ while getopts "h:id:o:l" opt; do
         ;;
     b)  board_host=$OPTARG
         ;;
+    t)  fw_type=$OPTARG
+        ;;
     esac
 done
 
@@ -53,12 +56,12 @@ if [ $impure -eq 1 ]; then
     if [ $load_bitstream -eq 1 ]; then
         load_bitstream_cmd="-g build/gateware/top.bit"
     fi
-    firmware="build/runtime.bin"
+    firmware="build/$fw_type.bin"
 else
     if [ $load_bitstream -eq 1 ]; then
         load_bitstream_cmd="-g $pure_dir/top.bit"
     fi
-    firmware="$pure_dir/runtime.bin"    
+    firmware="$pure_dir/$fw_type.bin"    
 fi
 echo "Programming board..."
 ssh $sshopts $target_host "cd $target_folder; openocd -f zc706.cfg -c'load_image szl.elf; resume 0; exit'"

@@ -8,12 +8,14 @@ let
   vivado = import <artiq-fast/vivado.nix> { inherit pkgs; };
   # FSBL configuration supplied by Vivado 2020.1 for these boards:
   fsblTargets = ["zc702" "zc706" "zed"];
+  sat_variants = ["satellite" "acpki_satellite" "nist_clock_satellite" "nist_qc2_satellite"];
   build = { target, variant, json ? null }: let
     szl = (import zynq-rs)."${target}-szl";
     fsbl = import "${zynq-rs}/nix/fsbl.nix" {
       inherit pkgs;
       board = target;
     };
+    fwtype = if builtins.elem variant sat_variants then "satman" else "runtime";
 
     firmware = rustPlatform.buildRustPackage rec {
       # note: due to fetchCargoTarball, cargoSha256 depends on package name
@@ -33,15 +35,15 @@ let
         export XARGO_RUST_SRC="${rustPlatform.rust.rustc}/lib/rustlib/src/rust/library"
         export CLANG_EXTRA_INCLUDE_DIR="${pkgs.llvmPackages_9.clang-unwrapped.lib}/lib/clang/9.0.1/include"
         export CARGO_HOME=$(mktemp -d cargo-home.XXX)
-        make TARGET=${target} GWARGS="${if json == null then "-V ${variant}" else json}"
+        make TARGET=${target} GWARGS="${if json == null then "-V ${variant}" else json}" ../build/${fwtype}.bin
       '';
 
       installPhase = ''
         mkdir -p $out $out/nix-support
-        cp ../build/runtime.bin $out/runtime.bin
-        cp ../build/firmware/armv7-none-eabihf/release/runtime $out/runtime.elf
-        echo file binary-dist $out/runtime.bin >> $out/nix-support/hydra-build-products
-        echo file binary-dist $out/runtime.elf >> $out/nix-support/hydra-build-products
+        cp ../build/${fwtype}.bin $out/${fwtype}.bin
+        cp ../build/firmware/armv7-none-eabihf/release/${fwtype} $out/${fwtype}.elf
+        echo file binary-dist $out/${fwtype}.bin >> $out/nix-support/hydra-build-products
+        echo file binary-dist $out/${fwtype}.elf >> $out/nix-support/hydra-build-products
       '';
 
       doCheck = false;
@@ -66,7 +68,7 @@ let
       ''
         mkdir $out
         ln -s ${szl}/szl.elf $out
-        ln -s ${firmware}/runtime.bin $out
+        ln -s ${firmware}/${fwtype}.bin $out
         ln -s ${gateware}/top.bit $out
       '';
     sd = pkgs.runCommand "${target}-${variant}-sd"
@@ -132,11 +134,25 @@ let
 in
   (
     (build { target = "zc706"; variant = "simple"; }) //
+    (build { target = "zc706"; variant = "master"; }) //
+    (build { target = "zc706"; variant = "satellite"; }) //
     (build { target = "zc706"; variant = "nist_clock"; }) //
+    (build { target = "zc706"; variant = "nist_clock_master"; }) //
+    (build { target = "zc706"; variant = "nist_clock_satellite"; }) //
     (build { target = "zc706"; variant = "nist_qc2"; }) //
+    (build { target = "zc706"; variant = "nist_qc2_master"; }) //
+    (build { target = "zc706"; variant = "nist_qc2_satellite"; }) //
     (build { target = "zc706"; variant = "acpki_simple"; }) //
+    (build { target = "zc706"; variant = "acpki_master"; }) //
+    (build { target = "zc706"; variant = "acpki_satellite"; }) //
     (build { target = "zc706"; variant = "acpki_nist_clock"; }) //
+    (build { target = "zc706"; variant = "acpki_nist_clock_master"; }) //
+    (build { target = "zc706"; variant = "acpki_nist_clock_satellite"; }) //
     (build { target = "zc706"; variant = "acpki_nist_qc2"; }) //
+    (build { target = "zc706"; variant = "acpki_nist_qc2_master"; }) //
+    (build { target = "zc706"; variant = "acpki_nist_qc2_satellite"; }) //
     (build { target = "kasli_soc"; variant = "demo"; json = ./demo.json; }) //
+    (build { target = "kasli_soc"; variant = "master"; json = ./kasli-soc-master.json; }) //
+    (build { target = "kasli_soc"; variant = "satellite"; json = ./kasli-soc-satellite.json; }) //
     { inherit zynq-rs; }
   )
