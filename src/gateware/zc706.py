@@ -88,6 +88,36 @@ si5324_fmc33 = [
     ),
 ]
 
+pmod1_33 = [
+    ("pmod1_33", 0, Pins("AJ21"), IOStandard("LVCMOS33")),
+    ("pmod1_33", 1, Pins("AK21"), IOStandard("LVCMOS33")),
+    ("pmod1_33", 2, Pins("AB21"), IOStandard("LVCMOS33")),
+    ("pmod1_33", 3, Pins("AB16"), IOStandard("LVCMOS33")),
+    ("pmod1_33", 4, Pins("Y20"), IOStandard("LVCMOS33")),
+    ("pmod1_33", 5, Pins("AA20"), IOStandard("LVCMOS33")),
+    ("pmod1_33", 6, Pins("AC18"), IOStandard("LVCMOS33")),
+    ("pmod1_33", 7, Pins("AC19"), IOStandard("LVCMOS33")),
+]
+
+_ams101_dac = [
+    ("ams101_dac", 0,
+        Subsignal("ldac", Pins("XADC:GPIO0")),
+        Subsignal("clk", Pins("XADC:GPIO1")),
+        Subsignal("mosi", Pins("XADC:GPIO2")),
+        Subsignal("cs_n", Pins("XADC:GPIO3")),
+        IOStandard("LVTTL")
+     )
+]
+
+_sdcard_spi_33 = [
+    ("sdcard_spi_33", 0,
+        Subsignal("miso", Pins("D20"), Misc("PULLUP=TRUE")),
+        Subsignal("clk", Pins("B20")),
+        Subsignal("mosi", Pins("J18")),
+        Subsignal("cs_n", Pins("H18")),
+        IOStandard("LVCMOS33")
+    )
+]
 
 def prepare_zc706_platform(platform):
     platform.toolchain.bitstream_commands.extend([
@@ -427,6 +457,7 @@ class _SatelliteBase(SoCCore):
         self.csr_devices.append("routing_table")
 
 
+
 class _NIST_CLOCK_RTIO:
     """
     NIST clock hardware, with old backplane and 11 DDS channels
@@ -435,13 +466,11 @@ class _NIST_CLOCK_RTIO:
         platform = self.platform
         platform.add_extension(nist_clock.fmc_adapter_io)
         platform.add_extension(leds_fmc33)
+        platform.add_extension(pmod1_33)
+        platform.add_extension(_ams101_dac)
+        platform.add_extension(_sdcard_spi_33)
 
         rtio_channels = []
-
-        for i in range(4):
-            phy = ttl_simple.Output(platform.request("user_led_33", i))
-            self.submodules += phy
-            rtio_channels.append(rtio.Channel.from_phy(phy))
 
         for i in range(16):
             if i % 4 == 3:
@@ -458,15 +487,39 @@ class _NIST_CLOCK_RTIO:
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=512))
 
+        # no SMA GPIO, replaced with PMOD1_0
+        phy = ttl_serdes_7series.InOut_8X(platform.request("pmod1_33", 0))
+        self.submodules += phy
+        rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=512))
+
+        phy = ttl_simple.Output(platform.request("user_led_33", 0))
+        self.submodules += phy
+        rtio_channels.append(rtio.Channel.from_phy(phy))
+
+        ams101_dac = self.platform.request("ams101_dac", 0)
+        phy = ttl_simple.Output(ams101_dac.ldac)
+        self.submodules += phy
+        rtio_channels.append(rtio.Channel.from_phy(phy))
+
         phy = ttl_simple.ClockGen(platform.request("la32_p"))
         self.submodules += phy
         rtio_channels.append(rtio.Channel.from_phy(phy))
+
+        phy = spi2.SPIMaster(ams101_dac)
+        self.submodules += phy
+        rtio_channels.append(rtio.Channel.from_phy(
+            phy, ififo_depth=4))
 
         for i in range(3):
             phy = spi2.SPIMaster(self.platform.request("spi", i))
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(
                 phy, ififo_depth=128))
+
+        phy = spi2.SPIMaster(platform.request("sdcard_spi_33"))
+        self.submodules += phy
+        rtio_channels.append(rtio.Channel.from_phy(
+            phy, ififo_depth=4))
 
         phy = dds.AD9914(platform.request("dds"), 11, onehot=True)
         self.submodules += phy
@@ -487,13 +540,9 @@ class _NIST_QC2_RTIO:
         platform = self.platform
         platform.add_extension(nist_qc2.fmc_adapter_io)
         platform.add_extension(leds_fmc33)
+        platform.add_extension(_ams101_dac)
 
         rtio_channels = []
-
-        for i in range(4):
-            phy = ttl_simple.Output(platform.request("user_led_33", i))
-            self.submodules += phy
-            rtio_channels.append(rtio.Channel.from_phy(phy))
 
         # All TTL channels are In+Out capable
         for i in range(40):
@@ -501,12 +550,31 @@ class _NIST_QC2_RTIO:
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=512))
 
+        # no SMA GPIO, replaced with PMOD1_0
+        phy = ttl_serdes_7series.InOut_8X(platform.request("pmod1_33", 0))
+        self.submodules += phy
+        rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=512))
+
+        phy = ttl_simple.Output(platform.request("user_led_33", 0))
+        self.submodules += phy
+        rtio_channels.append(rtio.Channel.from_phy(phy))
+
+        ams101_dac = self.platform.request("ams101_dac", 0)
+        phy = ttl_simple.Output(ams101_dac.ldac)
+        self.submodules += phy
+        rtio_channels.append(rtio.Channel.from_phy(phy))
+
         # CLK0, CLK1 are for clock generators, on backplane SMP connectors
         for i in range(2):
             phy = ttl_simple.ClockGen(
                 platform.request("clkout", i))
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy))
+        
+        phy = spi2.SPIMaster(ams101_dac)
+        self.submodules += phy
+        rtio_channels.append(rtio.Channel.from_phy(
+            phy, ififo_depth=4))
 
         for i in range(4):
             phy = spi2.SPIMaster(self.platform.request("spi", i))
