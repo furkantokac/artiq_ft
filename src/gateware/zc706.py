@@ -109,15 +109,6 @@ _ams101_dac = [
      )
 ]
 
-_sdcard_spi_33 = [
-    ("sdcard_spi_33", 0,
-        Subsignal("miso", Pins("D20"), Misc("PULLUP=TRUE")),
-        Subsignal("clk", Pins("B20")),
-        Subsignal("mosi", Pins("J18")),
-        Subsignal("cs_n", Pins("H18")),
-        IOStandard("LVCMOS33")
-    )
-]
 
 def prepare_zc706_platform(platform):
     platform.toolchain.bitstream_commands.extend([
@@ -468,7 +459,6 @@ class _NIST_CLOCK_RTIO:
         platform.add_extension(leds_fmc33)
         platform.add_extension(pmod1_33)
         platform.add_extension(_ams101_dac)
-        platform.add_extension(_sdcard_spi_33)
 
         rtio_channels = []
 
@@ -516,10 +506,10 @@ class _NIST_CLOCK_RTIO:
             rtio_channels.append(rtio.Channel.from_phy(
                 phy, ififo_depth=128))
 
-        phy = spi2.SPIMaster(platform.request("sdcard_spi_33"))
+        # no SDIO on PL side, PMOD1_1 placeholder instead
+        phy = ttl_serdes_7series.InOut_8X(platform.request("pmod1_33", 1))
         self.submodules += phy
-        rtio_channels.append(rtio.Channel.from_phy(
-            phy, ififo_depth=4))
+        rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=512))
 
         phy = dds.AD9914(platform.request("dds"), 11, onehot=True)
         self.submodules += phy
