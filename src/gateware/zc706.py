@@ -106,8 +106,8 @@ _ams101_dac = [
      )
 ]
 
-_dummy_spi = [ 
-    ("dummy_spi", 0,
+_pmod_spi = [ 
+    ("pmod_spi", 0,
         # PMOD_1 4-7 pins, same bank as sfp_tx_disable or user_sma_clock
         Subsignal("miso", Pins("Y20"), IOStandard("LVCMOS25")),
         Subsignal("clk", Pins("AA20"), IOStandard("LVCMOS25")),
@@ -467,7 +467,7 @@ class _NIST_CLOCK_RTIO:
         platform.add_extension(leds_fmc33)
         platform.add_extension(pmod1_33)
         platform.add_extension(_ams101_dac)
-        platform.add_extension(_dummy_spi)
+        platform.add_extension(_pmod_spi)
 
         rtio_channels = []
 
@@ -516,7 +516,7 @@ class _NIST_CLOCK_RTIO:
                 phy, ififo_depth=128))
 
         # no SDIO on PL side, dummy SPI placeholder instead
-        phy = spi2.SPIMaster(platform.request("dummy_spi"))
+        phy = spi2.SPIMaster(platform.request("pmod_spi"))
         self.submodules += phy
         rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=4))
 
