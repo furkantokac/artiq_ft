@@ -105,7 +105,7 @@ _ams101_dac = [
         Subsignal("clk", Pins("XADC:GPIO1")),
         Subsignal("mosi", Pins("XADC:GPIO2")),
         Subsignal("cs_n", Pins("XADC:GPIO3")),
-        IOStandard("LVTTL")
+        IOStandard("LVCMOS15")
      )
 ]
 
@@ -541,6 +541,7 @@ class _NIST_QC2_RTIO:
         platform.add_extension(nist_qc2.fmc_adapter_io)
         platform.add_extension(leds_fmc33)
         platform.add_extension(_ams101_dac)
+        platform.add_extension(pmod1_33)
 
         rtio_channels = []
 
