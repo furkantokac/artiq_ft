@@ -29,30 +29,11 @@ device_db = {
         "class": "PCA9548"
     },
 
-    # led? are common to all variants
     "led0": {
         "type": "local",
         "module": "artiq.coredevice.ttl",
         "class": "TTLOut",
-        "arguments": {"channel": 0},
-    },
-    "led1": {
-        "type": "local",
-        "module": "artiq.coredevice.ttl",
-        "class": "TTLOut",
-        "arguments": {"channel": 1},
-    },
-    "led2": {
-        "type": "local",
-        "module": "artiq.coredevice.ttl",
-        "class": "TTLOut",
-        "arguments": {"channel": 2}
-    },
-    "led3": {
-        "type": "local",
-        "module": "artiq.coredevice.ttl",
-        "class": "TTLOut",
-        "arguments": {"channel": 3}
+        "arguments": {"channel": 41},
     },
 }
 
@@ -62,7 +43,7 @@ for i in range(40):
         "type": "local",
         "module": "artiq.coredevice.ttl",
         "class": "TTLInOut",
-        "arguments": {"channel": 4+i}
+        "arguments": {"channel": i}
     }
 
 device_db["ad9914dds0"] = {
