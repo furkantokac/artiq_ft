@@ -1,7 +1,7 @@
 use crc;
 
 use core_io::{ErrorKind as IoErrorKind, Error as IoError};
-
+use core::slice;
 use io::{proto::ProtoRead, proto::ProtoWrite, Cursor};
 use libboard_zynq::{timer::GlobalTimer, time::Milliseconds};
 use crate::mem::mem::DRTIOAUX_MEM;
@@ -58,22 +58,14 @@ pub fn has_rx_error(linkno: u8) -> bool {
     }
 }
 
-pub fn copy_with_swap(src: *mut u8, dst: *mut u8, len: isize) {
-    // for some reason, everything except checksum arrives
-    // with byte order swapped. and it must be sent as such too.
+pub fn copy_work_buffer(src: *mut u32, dst: *mut u32, len: isize) {
+    // AXI writes must be 4-byte aligned (drtio proto doesn't care for that),
+    // and AXI burst writes are not implemented yet in gateware
+    // thus the need for a work buffer for transmitting and copying it over
     unsafe {
-        for i in (0..(len-4)).step_by(4) {
-            *dst.offset(i) = *src.offset(i+3);
-            *dst.offset(i+1) = *src.offset(i+2);
-            *dst.offset(i+2) = *src.offset(i+1);
-            *dst.offset(i+3) = *src.offset(i);
+        for i in 0..(len/4) {
+            *dst.offset(i) = *src.offset(i);
         }
-        // checksum untouched
-        // unrolled for performance
-        *dst.offset(len-4) = *src.offset(len-4);
-        *dst.offset(len-3) = *src.offset(len-3);
-        *dst.offset(len-2) = *src.offset(len-2);
-        *dst.offset(len-1) = *src.offset(len-1);
     }
 }
 
@@ -85,10 +77,7 @@ fn receive<F, T>(linkno: u8, f: F) -> Result<Option<T>, Error>
         if (DRTIOAUX[linkidx].aux_rx_present_read)() == 1 {
             let ptr = (DRTIOAUX_MEM[linkidx].base + DRTIOAUX_MEM[linkidx].size / 2) as *mut u8;
             let len = (DRTIOAUX[linkidx].aux_rx_length_read)() as usize;
-            // work buffer, as byte order will need to be swapped, cannot be in place
-            let mut buf: [u8; 1024] = [0; 1024];
-            copy_with_swap(ptr, buf.as_mut_ptr(), len as isize);
-            let result = f(&buf[0..len]);
+            let result = f(slice::from_raw_parts(ptr as *mut u8, len as usize));
             (DRTIOAUX[linkidx].aux_rx_present_write)(1);
             Ok(Some(result?))
         } else {
@@ -141,12 +130,12 @@ fn transmit<F>(linkno: u8, f: F) -> Result<(), Error>
     let linkno = linkno as usize;
     unsafe {
         while (DRTIOAUX[linkno].aux_tx_read)() != 0 {}
-        let ptr = DRTIOAUX_MEM[linkno].base as *mut u8;
+        let ptr = DRTIOAUX_MEM[linkno].base as *mut u32;
         let len = DRTIOAUX_MEM[linkno].size / 2;
         // work buffer, works with unaligned mem access
         let mut buf: [u8; 1024] = [0; 1024]; 
         let len = f(&mut buf[0..len])?;
-        copy_with_swap(buf.as_mut_ptr(), ptr, len as isize);
+        copy_work_buffer(buf.as_mut_ptr() as *mut u32, ptr, len as isize);
         (DRTIOAUX[linkno].aux_tx_length_write)(len as u16);
         (DRTIOAUX[linkno].aux_tx_write)(1);
         Ok(())
