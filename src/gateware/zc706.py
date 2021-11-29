@@ -399,7 +399,7 @@ class _SatelliteBase(SoCCore):
         self.submodules.siphaser = SiPhaser7Series(
             si5324_clkin=platform.request("si5324_clkin"),
             rx_synchronizer=self.rx_synchronizer,
-            ultrascale=True,
+            ultrascale=False,
             rtio_clk_freq=self.drtio_transceiver.rtio_clk_freq)
         platform.add_false_path_constraints(
             self.ps7.cd_sys.clk, self.siphaser.mmcm_freerun_output)
