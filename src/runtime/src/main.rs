@@ -18,12 +18,9 @@ use libasync::{task, block_async};
 use libsupport_zynq::ram;
 use nb;
 use void::Void;
-use embedded_hal::blocking::delay::DelayMs;
 use libconfig::Config;
 use libcortex_a9::l2c::enable_l2_cache;
 use libboard_artiq::{logger, identifier_read, init_gateware, pl};
-#[cfg(has_si5324)]
-use libboard_artiq::si5324;
 
 mod proto_async;
 mod comms;
@@ -35,6 +32,7 @@ mod rtio;
 #[path = "rtio_acp.rs"]
 mod rtio;
 mod rtio_mgt;
+mod rtio_clocking;
 mod kernel;
 mod moninj;
 mod eh_artiq;
@@ -43,65 +41,6 @@ mod mgmt;
 mod analyzer;
 mod irq;
 mod i2c;
-
-fn init_rtio(timer: &mut GlobalTimer, _cfg: &Config) {
-    #[cfg(has_rtio_crg_clock_sel)]
-    let clock_sel =
-        if let Ok(rtioclk) = _cfg.read_str("rtioclk") {
-            match rtioclk.as_ref() {
-                "internal" => {
-                    info!("using internal RTIO clock");
-                    0
-                },
-                "external" => {
-                    info!("using external RTIO clock");
-                    1
-                },
-                other => {
-                    warn!("RTIO clock specification '{}' not recognized", other);
-                    info!("using internal RTIO clock");
-                    0
-                },
-            }
-        } else {
-            info!("using internal RTIO clock (default)");
-            0
-        };
-
-    loop {
-        unsafe {
-            pl::csr::rtio_crg::pll_reset_write(1);
-            #[cfg(has_rtio_crg_clock_sel)]
-            pl::csr::rtio_crg::clock_sel_write(clock_sel);
-            pl::csr::rtio_crg::pll_reset_write(0);
-        }
-        timer.delay_ms(1);
-        let locked = unsafe { pl::csr::rtio_crg::pll_locked_read() != 0 };
-        if locked {
-            info!("RTIO PLL locked");
-            break;
-        } else {
-            warn!("RTIO PLL failed to lock, retrying...");
-            timer.delay_ms(500);
-        }
-    }
-
-    unsafe {
-        pl::csr::rtio_core::reset_phy_write(1);
-    }
-}
-
-#[cfg(has_drtio)]
-fn init_drtio(timer: &mut GlobalTimer)
-{
-    unsafe {
-        pl::csr::drtio_transceiver::stable_clkin_write(1);
-    }
-    timer.delay_ms(2); // wait for CPLL/QPLL lock
-    unsafe {
-        pl::csr::drtio_transceiver::txenable_write(0xffffffffu32 as _);
-    }
-}
 
 
 fn wait_for_async_rtio_error() -> nb::Result<(), Void> {
@@ -136,19 +75,7 @@ async fn report_async_rtio_errors() {
     }
 }
 
-#[cfg(has_si5324)]
-// 125MHz output, from crystal, 7 Hz
-const SI5324_SETTINGS: si5324::FrequencySettings
-    = si5324::FrequencySettings {
-    n1_hs  : 10,
-    nc1_ls : 4,
-    n2_hs  : 10,
-    n2_ls  : 19972,
-    n31    : 4565,
-    n32    : 4565,
-    bwsel  : 4,
-    crystal_ref: true
-};
+
 
 static mut LOG_BUFFER: [u8; 1<<17] = [0; 1<<17];
 
@@ -173,9 +100,6 @@ pub fn main_core0() {
     info!("detected gateware: {}", identifier_read(&mut [0; 64]));
 
     i2c::init();
-    #[cfg(has_si5324)]
-    si5324::setup(unsafe { (&mut i2c::I2C_BUS).as_mut().unwrap() },
-        &SI5324_SETTINGS, si5324::Input::Ckin2, &mut timer).expect("cannot initialize Si5324");
 
     let cfg = match Config::new() {
         Ok(cfg) => cfg,
@@ -185,10 +109,8 @@ pub fn main_core0() {
         }
     };
 
-    #[cfg(has_drtio)]
-    init_drtio(&mut timer);
+    rtio_clocking::init(&mut timer, &cfg);
 
-    init_rtio(&mut timer, &cfg);
     task::spawn(report_async_rtio_errors());
 
     comms::main(timer, cfg);

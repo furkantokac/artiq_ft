@@ -24,7 +24,7 @@ The following configuration keys are available:
 - ``ip``: IPv4 address.
 - ``ip6``: IPv6 address.
 - ``startup``: startup kernel in ELF format (as produced by ``artiq_compile``).
-- ``rtioclk``: source of RTIO clock; valid values are ``external`` and ``internal``.
+- ``rtio_clock``: source of RTIO clock; valid values are ``ext0_bypass`` and ``int_125``.
 - ``boot``: SD card "boot.bin" file, for replacing the boot firmware/gateware. Write only.
 
 Configurations can be read/written/removed via ``artiq_coremgmt``. Config erase is
