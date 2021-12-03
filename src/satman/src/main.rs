@@ -398,7 +398,7 @@ fn hardware_tick(ts: &mut u64, timer: &mut GlobalTimer) {
     }
 }
 
-#[cfg(has_si5324)]
+#[cfg(all(has_si5324, rtio_frequency = "125.0"))]
 const SI5324_SETTINGS: si5324::FrequencySettings
     = si5324::FrequencySettings {
     n1_hs  : 5,
@@ -407,6 +407,19 @@ const SI5324_SETTINGS: si5324::FrequencySettings
     n2_ls  : 360,
     n31    : 63,
     n32    : 63,
+    bwsel  : 4,
+    crystal_ref: true
+};
+
+#[cfg(all(has_si5324, rtio_frequency = "100.0"))]
+const SI5324_SETTINGS: si5324::FrequencySettings
+    = si5324::FrequencySettings {
+    n1_hs  : 5,
+    nc1_ls : 10,
+    n2_hs  : 10,
+    n2_ls  : 250,
+    n31    : 50,
+    n32    : 50,
     bwsel  : 4,
     crystal_ref: true
 };

@@ -181,7 +181,7 @@ class ZC706(SoCCore):
 
 
 class _MasterBase(SoCCore):
-    def __init__(self, acpki=False):
+    def __init__(self, acpki=False, drtio100mhz=False):
         self.acpki = acpki
         self.rustc_cfg = dict()
 
@@ -195,6 +195,7 @@ class _MasterBase(SoCCore):
         platform.add_extension(si5324_fmc33)
 
         self.sys_clk_freq = 125e6
+        rtio_clk_freq = 100e6 if drtio100mhz else self.sys_clk_freq
 
         platform = self.platform
 
@@ -208,7 +209,8 @@ class _MasterBase(SoCCore):
         self.submodules.drtio_transceiver = gtx_7series.GTX(
             clock_pads=platform.request("si5324_clkout"),
             pads=data_pads,
-            sys_clk_freq=self.sys_clk_freq)
+            sys_clk_freq=self.sys_clk_freq,
+            rtio_clk_freq=rtio_clk_freq)
         self.csr_devices.append("drtio_transceiver")
 
         self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)
@@ -247,7 +249,7 @@ class _MasterBase(SoCCore):
         self.add_csr_group("drtioaux", drtioaux_csr_group)
         self.add_memory_group("drtioaux_mem", drtioaux_memory_group)
 
-        self.rustc_cfg["RTIO_FREQUENCY"] = str(self.drtio_transceiver.rtio_clk_freq/1e6)
+        self.rustc_cfg["rtio_frequency"] = str(self.drtio_transceiver.rtio_clk_freq/1e6)
 
         self.submodules.si5324_rst_n = gpio.GPIOOut(platform.request("si5324_33").rst_n)
         self.csr_devices.append("si5324_rst_n")
@@ -313,7 +315,7 @@ class _MasterBase(SoCCore):
 
 
 class _SatelliteBase(SoCCore):
-    def __init__(self, acpki=False):
+    def __init__(self, acpki=False, drtio100mhz=False):
         self.acpki = acpki
         self.rustc_cfg = dict()
 
@@ -327,6 +329,7 @@ class _SatelliteBase(SoCCore):
         platform.add_extension(si5324_fmc33)
 
         self.sys_clk_freq = 125e6
+        rtio_clk_freq = 100e6 if drtio100mhz else self.sys_clk_freq
         platform = self.platform
 
         # SFP
@@ -342,7 +345,8 @@ class _SatelliteBase(SoCCore):
         self.submodules.drtio_transceiver = gtx_7series.GTX(
             clock_pads=platform.request("si5324_clkout"),
             pads=data_pads,
-            sys_clk_freq=self.sys_clk_freq)
+            sys_clk_freq=self.sys_clk_freq,
+            rtio_clk_freq=rtio_clk_freq)
         self.csr_devices.append("drtio_transceiver")
 
         drtioaux_csr_group = []
@@ -595,36 +599,34 @@ class _NIST_QC2_RTIO:
 
 
 class NIST_CLOCK(ZC706, _NIST_CLOCK_RTIO):
-    def __init__(self, acpki):
+    def __init__(self, acpki, drtio100mhz):
         ZC706.__init__(self, acpki)
         _NIST_CLOCK_RTIO.__init__(self)
 
 class NIST_CLOCK_Master(_MasterBase, _NIST_CLOCK_RTIO):
-    def __init__(self, acpki):
-        _MasterBase.__init__(self, acpki)
-
+    def __init__(self, acpki, drtio100mhz):
+        _MasterBase.__init__(self, acpki, drtio100mhz)
         _NIST_CLOCK_RTIO.__init__(self)
 
 class NIST_CLOCK_Satellite(_SatelliteBase, _NIST_CLOCK_RTIO):
-    def __init__(self, acpki):
-        _SatelliteBase.__init__(self, acpki)
+    def __init__(self, acpki, drtio100mhz):
+        _SatelliteBase.__init__(self, acpki, drtio100mhz)
         _NIST_CLOCK_RTIO.__init__(self)
 
 class NIST_QC2(ZC706, _NIST_QC2_RTIO):
-    def __init__(self, acpki):
+    def __init__(self, acpki, drtio100mhz):
         ZC706.__init__(self, acpki)
         _NIST_QC2_RTIO.__init__(self)
 
 class NIST_QC2_Master(_MasterBase, _NIST_QC2_RTIO):
-    def __init__(self, acpki):
-        _MasterBase.__init__(self, acpki)
+    def __init__(self, acpki, drtio100mhz):
+        _MasterBase.__init__(self, acpki, drtio100mhz)
         _NIST_QC2_RTIO.__init__(self)
 
 class NIST_QC2_Satellite(_SatelliteBase, _NIST_QC2_RTIO):
-    def __init__(self, acpki):
-        _SatelliteBase.__init__(self, acpki)
+    def __init__(self, acpki, drtio100mhz):
+        _SatelliteBase.__init__(self, acpki, drtio100mhz)
         _NIST_QC2_RTIO.__init__(self)
-
 
 VARIANTS = {cls.__name__.lower(): cls for cls in [NIST_CLOCK, NIST_CLOCK_Master, NIST_CLOCK_Satellite,
                                                   NIST_QC2, NIST_QC2_Master, NIST_QC2_Satellite]}
@@ -663,7 +665,7 @@ def main():
         help="build gateware into the specified directory")
     parser.add_argument("-V", "--variant", default="nist_clock",
                         help="variant: "
-                             "[acpki_]nist_clock/nist_qc2[_master/_satellite] "
+                             "[acpki_]nist_clock/nist_qc2[_master/_satellite][_100mhz]"
                              "(default: %(default)s)")
     args = parser.parse_args()
 
@@ -671,12 +673,15 @@ def main():
     acpki = variant.startswith("acpki_")
     if acpki:
         variant = variant[6:]
+    drtio100mhz = variant.endswith("_100mhz")
+    if drtio100mhz:
+        variant = variant[:-7]
     try:
         cls = VARIANTS[variant]
     except KeyError:
         raise SystemExit("Invalid variant (-V/--variant)")
 
-    soc = cls(acpki=acpki)
+    soc = cls(acpki=acpki, drtio100mhz=drtio100mhz)
     soc.finalize()
 
     if args.r is not None:

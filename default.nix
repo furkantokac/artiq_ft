@@ -8,7 +8,10 @@ let
   vivado = import <artiq-fast/vivado.nix> { inherit pkgs; };
   # FSBL configuration supplied by Vivado 2020.1 for these boards:
   fsblTargets = ["zc702" "zc706" "zed"];
-  sat_variants = ["satellite" "nist_clock_satellite" "nist_qc2_satellite" "acpki_nist_clock_satellite" "acpki_nist_qc2_satellite"];
+  sat_variants = [
+    "nist_clock_satellite" "nist_qc2_satellite" "acpki_nist_clock_satellite" "acpki_nist_qc2_satellite" 
+    "nist_clock_satellite_100mhz" "nist_qc2_satellite_100mhz" "acpki_nist_clock_satellite_100mhz" "acpki_nist_qc2_satellite_100mhz"
+  ];
   build = { target, variant, json ? null }: let
     szl = (import zynq-rs)."${target}-szl";
     fsbl = import "${zynq-rs}/nix/fsbl.nix" {
@@ -136,15 +139,19 @@ in
     (build { target = "zc706"; variant = "nist_clock"; }) //
     (build { target = "zc706"; variant = "nist_clock_master"; }) //
     (build { target = "zc706"; variant = "nist_clock_satellite"; }) //
+    (build { target = "zc706"; variant = "nist_clock_satellite_100mhz"; }) //
     (build { target = "zc706"; variant = "nist_qc2"; }) //
     (build { target = "zc706"; variant = "nist_qc2_master"; }) //
     (build { target = "zc706"; variant = "nist_qc2_satellite"; }) //
+    (build { target = "zc706"; variant = "nist_qc2_satellite_100mhz"; }) //
     (build { target = "zc706"; variant = "acpki_nist_clock"; }) //
     (build { target = "zc706"; variant = "acpki_nist_clock_master"; }) //
     (build { target = "zc706"; variant = "acpki_nist_clock_satellite"; }) //
+    (build { target = "zc706"; variant = "acpki_nist_clock_satellite_100mhz"; }) //
     (build { target = "zc706"; variant = "acpki_nist_qc2"; }) //
     (build { target = "zc706"; variant = "acpki_nist_qc2_master"; }) //
     (build { target = "zc706"; variant = "acpki_nist_qc2_satellite"; }) //
+    (build { target = "zc706"; variant = "acpki_nist_qc2_satellite_100mhz"; }) //
     (build { target = "kasli_soc"; variant = "demo"; json = ./demo.json; }) //
     (build { target = "kasli_soc"; variant = "master"; json = ./kasli-soc-master.json; }) //
     (build { target = "kasli_soc"; variant = "satellite"; json = ./kasli-soc-satellite.json; }) //

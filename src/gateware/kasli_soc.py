@@ -180,7 +180,7 @@ class GenericStandalone(SoCCore):
 class GenericMaster(SoCCore):
     def __init__(self, description, acpki=False):
         sys_clk_freq = 125e6
-        rtio_clk_freq = 125e6
+        rtio_clk_freq = description["rtio_frequency"]
 
         self.acpki = acpki
         self.rustc_cfg = dict()
@@ -300,7 +300,7 @@ class GenericMaster(SoCCore):
 class GenericSatellite(SoCCore):
     def __init__(self, description, acpki=False):
         sys_clk_freq = 125e6  
-        rtio_clk_freq = 125e6
+        rtio_clk_freq = description["rtio_frequency"]
 
         self.acpki = acpki
         self.rustc_cfg = dict()

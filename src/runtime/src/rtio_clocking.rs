@@ -23,6 +23,7 @@ pub enum RtioClock {
     Ext0_Synth0_125to125,
 }
 
+#[allow(unreachable_code)]
 fn get_rtio_clock_cfg(cfg: &Config) -> RtioClock {
     let mut res = RtioClock::Default;
     if let Ok(clk) = cfg.read_str("rtio_clock") {
@@ -46,8 +47,21 @@ fn get_rtio_clock_cfg(cfg: &Config) -> RtioClock {
         warn!("error reading configuration. Falling back to default.");
     }
     if res == RtioClock::Default {
-        warn!("Using default configuration - internal 125MHz RTIO clock.");
-        return RtioClock::Int_125;
+        #[cfg(rtio_frequency="100.0")]
+        {
+            warn!("Using default configuration - internal 100MHz RTIO clock.");
+            return RtioClock::Int_100;
+        }
+        #[cfg(rtio_frequency="125.0")]
+        {
+            warn!("Using default configuration - internal 125MHz RTIO clock.");
+            return RtioClock::Int_125;
+        }
+        // anything else
+        {
+            warn!("Using default configuration - internal 125MHz RTIO clock.");
+            return RtioClock::Int_125;
+        }
     }
     res
 }
