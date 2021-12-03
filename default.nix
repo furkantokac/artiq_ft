@@ -9,6 +9,9 @@ let
   # FSBL configuration supplied by Vivado 2020.1 for these boards:
   fsblTargets = ["zc702" "zc706" "zed"];
   sat_variants = [
+    # kasli-soc satellite variants
+    "satellite"
+    # zc706 satellite variants
     "nist_clock_satellite" "nist_qc2_satellite" "acpki_nist_clock_satellite" "acpki_nist_qc2_satellite" 
     "nist_clock_satellite_100mhz" "nist_qc2_satellite_100mhz" "acpki_nist_clock_satellite_100mhz" "acpki_nist_qc2_satellite_100mhz"
   ];
