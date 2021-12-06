@@ -14,7 +14,7 @@ use libcortex_a9::{
 use libboard_zynq::{mpcore, gic};
 use libsupport_zynq::ram;
 use dyld::{self, Library};
-use crate::{eh_artiq, rtio};
+use crate::{eh_artiq, get_async_errors, rtio};
 use super::{
     api::resolve,
     rpc::rpc_send_async,
@@ -192,7 +192,8 @@ pub extern "C" fn main_core1() {
                     }
                 }
                 info!("kernel finished");
-                core1_tx.send(Message::KernelFinished);
+                let async_errors = unsafe { get_async_errors() };
+                core1_tx.send(Message::KernelFinished(async_errors));
             }
             _ => error!("Core1 received unexpected message: {:?}", message),
         }
@@ -216,7 +217,8 @@ pub fn terminate(exception: &'static eh_artiq::Exception<'static>, backtrace: &'
 
     {
         let core1_tx = unsafe { KERNEL_CHANNEL_1TO0.as_mut().unwrap() };
-        core1_tx.send(Message::KernelException(exception, &backtrace[..cursor]));
+        let errors = unsafe { get_async_errors() };
+        core1_tx.send(Message::KernelException(exception, &backtrace[..cursor], errors));
     }
     loop {}
 }

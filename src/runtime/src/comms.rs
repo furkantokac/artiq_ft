@@ -224,13 +224,14 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                     }
                 }
             },
-            kernel::Message::KernelFinished => {
+            kernel::Message::KernelFinished(async_errors) => {
                 if let Some(stream) = stream {
                     write_header(stream, Reply::KernelFinished).await?;
+                    write_i8(stream, async_errors as i8).await?;
                 }
                 break;
             },
-            kernel::Message::KernelException(exception, backtrace) => {
+            kernel::Message::KernelException(exception, backtrace, async_errors) => {
                 match stream {
                     Some(stream) => {
                         // only send the exception data to host if there is host,
@@ -249,6 +250,7 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                         for &addr in backtrace {
                             write_i32(stream, addr as i32).await?;
                         }
+                        write_i8(stream, async_errors as i8).await?;
                     },
                     None => {
                         error!("Uncaught kernel exception: {:?}", exception);

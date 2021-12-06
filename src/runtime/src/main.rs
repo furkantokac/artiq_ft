@@ -42,6 +42,13 @@ mod analyzer;
 mod irq;
 mod i2c;
 
+static mut SEEN_ASYNC_ERRORS: u8 = 0;
+
+pub unsafe fn get_async_errors() -> u8 {
+    let errors = SEEN_ASYNC_ERRORS;
+    SEEN_ASYNC_ERRORS = 0;
+    errors
+}
 
 fn wait_for_async_rtio_error() -> nb::Result<(), Void> {
     unsafe {
@@ -70,6 +77,7 @@ async fn report_async_rtio_errors() {
                 error!("RTIO sequence error involving channel {}",
                        pl::csr::rtio_core::sequence_error_channel_read());
             }
+            SEEN_ASYNC_ERRORS = errors;
             pl::csr::rtio_core::async_error_write(errors);
         }
     }
