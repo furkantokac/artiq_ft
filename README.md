@@ -55,19 +55,21 @@ Impure incremental build and execution on a remote JTAG server:
 nix-shell
 cd src
 gateware/zc706.py -g ../build/gateware -v <variant> # build gateware
-make GWARGS="-v <variant>" <runtime/satman>    # build firmware
+make GWARGS="-V <variant>" <runtime/satman>    # build firmware
 cd ..
 ./remote_run.sh -i
 ```
 
 Notes:
 
-- This is developed with Nixpkgs 21.05, and the ``nixbld.m-labs.hk`` binary substituter can also be used here (see the ARTIQ manual for the public key and instructions).
+- This is developed with Nixpkgs 21.05[^1], and the ``nixbld.m-labs.hk`` binary substituter can also be used here (see the ARTIQ manual for the public key and instructions).
 - The impure build process is also compatible with non-Nix systems.
 - When calling make, you need to specify both the variant and firmware type.
 - Firmware type must be either ``runtime`` for DRTIO-less or DRTIO master variants, or ``satman`` for DRTIO satellite.
 - If the board is connected to the local machine, use the ``local_run.sh`` script.
 - To update ``zynq-rs``, update the cargo files as per usual for Rust projects, but also keep ``zynq-rs.nix`` in sync.
+
+[^1]: Thus, on newer version of NixOS, you should run `nix-shell -I nixpkgs=https://github.com/NixOS/nixpkgs/archive/21.05.tar.gz` instead
 
 License
 -------
