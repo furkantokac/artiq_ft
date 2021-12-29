@@ -77,7 +77,7 @@ impl RelType {
 
             R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT
                 if arch == Arch::OpenRisc => Some(RelType::Lookup),
-            R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT
+            R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT | R_ARM_ABS32
                 if arch == Arch::Arm => Some(RelType::Lookup),
 
             _ =>
