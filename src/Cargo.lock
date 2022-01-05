@@ -30,6 +30,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
+name = "build_const"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4ae4235e6dac0694637c763029ecea1a2ec9e4e06ec2729bd21ba4d9c863eb7"
+
+[[package]]
+name = "build_zynq"
+version = "0.0.0"
+
+[[package]]
 name = "byteorder"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -69,6 +79,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d663548de7f5cca343f1e0a48d14dcfb0e9eb4e079ec58883b7251539fa10aeb"
+dependencies = [
+ "build_const",
+]
+
+[[package]]
 name = "cslice"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -80,6 +99,7 @@ version = "0.0.0"
 dependencies = [
  "cfg-if 0.1.10",
  "compiler_builtins",
+ "cslice",
  "libc",
  "unwind",
 ]
@@ -193,6 +213,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "io"
+version = "0.0.0"
+dependencies = [
+ "byteorder",
+ "core_io",
+ "libsupport_zynq",
+]
+
+[[package]]
 name = "libasync"
 version = "0.0.0"
 source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#57d8d8fbc7087863305721bcb8fdbdd13d65bd65"
@@ -202,6 +231,26 @@ dependencies = [
  "nb 1.0.0",
  "pin-utils",
  "smoltcp",
+]
+
+[[package]]
+name = "libboard_artiq"
+version = "0.0.0"
+dependencies = [
+ "build_zynq",
+ "core_io",
+ "crc",
+ "embedded-hal",
+ "io",
+ "libasync",
+ "libboard_zynq",
+ "libconfig",
+ "libcortex_a9",
+ "libregister",
+ "log",
+ "log_buffer",
+ "nb 1.0.0",
+ "void",
 ]
 
 [[package]]
@@ -395,6 +444,7 @@ name = "runtime"
 version = "0.1.0"
 dependencies = [
  "async-recursion",
+ "build_zynq",
  "byteorder",
  "core_io",
  "cslice",
@@ -402,7 +452,9 @@ dependencies = [
  "dyld",
  "embedded-hal",
  "futures",
+ "io",
  "libasync",
+ "libboard_artiq",
  "libboard_zynq",
  "libc",
  "libconfig",
@@ -427,6 +479,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c5f5376ea5e30ce23c03eb77cbe4962b988deead10910c372b226388b594c084"
 dependencies = [
  "semver",
+]
+
+[[package]]
+name = "satman"
+version = "0.0.0"
+dependencies = [
+ "build_zynq",
+ "embedded-hal",
+ "libasync",
+ "libboard_artiq",
+ "libboard_zynq",
+ "libc",
+ "libconfig",
+ "libcortex_a9",
+ "libregister",
+ "libsupport_zynq",
+ "log",
+ "unwind",
 ]
 
 [[package]]

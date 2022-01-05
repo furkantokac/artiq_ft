@@ -67,6 +67,8 @@ struct ExceptionInfo {
 unsafe fn find_eh_action(
     context: *mut uw::_Unwind_Context,
     foreign_exception: bool,
+    name: *const u8,
+    len: usize,
 ) -> Result<EHAction, ()> {
     let lsda = uw::_Unwind_GetLanguageSpecificData(context) as *const u8;
     let mut ip_before_instr: c_int = 0;
@@ -79,7 +81,7 @@ unsafe fn find_eh_action(
         get_text_start: &|| uw::_Unwind_GetTextRelBase(context),
         get_data_start: &|| uw::_Unwind_GetDataRelBase(context),
     };
-    eh::find_eh_action(lsda, &eh_context, foreign_exception)
+    eh::find_eh_action(lsda, &eh_context, foreign_exception, name, len)
 }
 
 pub unsafe fn artiq_personality(state: uw::_Unwind_State,
@@ -120,11 +122,18 @@ pub unsafe fn artiq_personality(state: uw::_Unwind_State,
 
     let exception_class = (*exception_object).exception_class;
     let foreign_exception = exception_class != EXCEPTION_CLASS;
-    let eh_action = match find_eh_action(context, foreign_exception) {
+    let exception_info = &mut *(exception_object as *mut ExceptionInfo);
+
+    let (name_ptr, len) = if foreign_exception || exception_info.exception.is_none() {
+        (core::ptr::null(), 0)
+    } else {
+        let name = (exception_info.exception.unwrap()).name;
+        (name.as_ptr(), name.len())
+    };
+    let eh_action = match find_eh_action(context, foreign_exception, name_ptr, len) {
         Ok(action) => action,
         Err(_) => return uw::_URC_FAILURE,
     };
-    let exception_info = &mut *(exception_object as *mut ExceptionInfo);
     let exception = &exception_info.exception.unwrap();
     if search_phase {
         match eh_action {
@@ -209,7 +218,7 @@ pub unsafe extern fn raise(exception: *const Exception) -> ! {
     INFLIGHT.handled   = false;
 
     let result = uw::_Unwind_RaiseException(&mut INFLIGHT.uw_exception);
-    assert!(result == uw::_URC_END_OF_STACK);
+    assert!(result == uw::_URC_FAILURE || result == uw::_URC_END_OF_STACK);
 
     INFLIGHT.backtrace_size = 0;
     // read backtrace

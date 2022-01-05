@@ -26,6 +26,10 @@ impl DwarfReader {
         DwarfReader { ptr }
     }
 
+    pub unsafe fn offset(&mut self, offset: isize) {
+        self.ptr = self.ptr.offset(offset);
+    }
+
     // DWARF streams are packed, so e.g., a u32 would not necessarily be aligned
     // on a 4-byte boundary. This may cause problems on platforms with strict
     // alignment requirements. By wrapping data in a "packed" struct, we are
