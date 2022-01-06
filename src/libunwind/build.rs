@@ -23,6 +23,7 @@ mod llvm_libunwind {
         cfg.flag("-fno-stack-protector");
         cfg.flag("--target=armv7-none-eabihf");
         cfg.flag("-O2");
+        cfg.flag("-flto");
 
         cfg.flag("-std=c99");
         cfg.flag("-fstrict-aliasing");
