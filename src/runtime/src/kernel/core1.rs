@@ -182,6 +182,7 @@ pub extern "C" fn main_core1() {
                 info!("kernel starting");
                 if let Some(kernel) = loaded_kernel.take() {
                     unsafe {
+                        eh_artiq::reset_exception_buffer();
                         KERNEL_CHANNEL_0TO1 = Some(core1_rx);
                         KERNEL_CHANNEL_1TO0 = Some(core1_tx);
                         KERNEL_IMAGE = &kernel as *const KernelImage;
@@ -201,24 +202,13 @@ pub extern "C" fn main_core1() {
 }
 
 /// Called by eh_artiq
-pub fn terminate(exception: &'static eh_artiq::Exception<'static>, backtrace: &'static mut [usize]) -> ! {
-    let load_addr = unsafe {
-        KERNEL_IMAGE.as_ref().unwrap().get_load_addr()
-    };
-    let mut cursor = 0;
-    // The address in the backtrace is relocated, so we have to convert it back to the address in
-    // the original python script, and remove those Rust function backtrace.
-    for i in 0..backtrace.len() {
-        if backtrace[i] >= load_addr {
-            backtrace[cursor] = backtrace[i] - load_addr;
-            cursor += 1;
-        }
-    }
-
+pub fn terminate(exceptions: &'static [Option<eh_artiq::Exception<'static>>],
+                 stack_pointers: &'static [eh_artiq::StackPointerBacktrace],
+                 backtrace: &'static mut [(usize, usize)]) -> ! {
     {
         let core1_tx = unsafe { KERNEL_CHANNEL_1TO0.as_mut().unwrap() };
         let errors = unsafe { get_async_errors() };
-        core1_tx.send(Message::KernelException(exception, &backtrace[..cursor], errors));
+        core1_tx.send(Message::KernelException(exceptions, stack_pointers, backtrace, errors));
     }
     loop {}
 }

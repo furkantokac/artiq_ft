@@ -15,13 +15,13 @@ mod cache;
 
 #[derive(Debug, Clone)]
 pub struct RPCException {
-    pub name: String,
-    pub message: String,
+    pub id: u32,
+    pub message: u32,
     pub param: [i64; 3],
-    pub file: String,
+    pub file: u32,
     pub line: i32,
     pub column: i32,
-    pub function: String
+    pub function: u32
 }
 
 #[derive(Debug, Clone)]
@@ -31,7 +31,10 @@ pub enum Message {
     LoadFailed,
     StartRequest,
     KernelFinished(u8),
-    KernelException(&'static eh_artiq::Exception<'static>, &'static [usize], u8),
+    KernelException(&'static [Option<eh_artiq::Exception<'static>>],
+                    &'static [eh_artiq::StackPointerBacktrace],
+                    &'static [(usize, usize)],
+                    u8),
     RpcSend { is_async: bool, data: Vec<u8> },
     RpcRecvRequest(*mut ()),
     RpcRecvReply(Result<usize, RPCException>),
@@ -53,7 +56,7 @@ static CHANNEL_SEM: Semaphore = Semaphore::new(0, 1);
 static mut KERNEL_CHANNEL_0TO1: Option<sync_channel::Receiver<'static, Message>> = None;
 static mut KERNEL_CHANNEL_1TO0: Option<sync_channel::Sender<'static, Message>> = None;
 
-static mut KERNEL_IMAGE: *const core1::KernelImage = ptr::null();
+pub static mut KERNEL_IMAGE: *const core1::KernelImage = ptr::null();
 
 static INIT_LOCK: Mutex<()> = Mutex::new(());
 

@@ -204,7 +204,8 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(_Unwind_Resume = unwind::_Unwind_Resume),
         api!(__artiq_personality = eh_artiq::artiq_personality),
         api!(__artiq_raise = eh_artiq::raise),
-        api!(__artiq_reraise = eh_artiq::reraise),
+        api!(__artiq_resume = eh_artiq::resume),
+        api!(__artiq_end_catch = eh_artiq::end_catch),
 
         // Implementations for LLVM math intrinsics
         api!(__powidf2),

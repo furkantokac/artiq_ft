@@ -1,7 +1,7 @@
 //! Kernel-side RPC API
 
 use alloc::vec::Vec;
-use cslice::{CSlice, AsCSlice};
+use cslice::CSlice;
 
 use crate::eh_artiq;
 use crate::rpc::send_args;
@@ -36,12 +36,12 @@ pub extern fn rpc_recv(slot: *mut ()) -> usize {
         Message::RpcRecvReply(Ok(alloc_size)) => alloc_size,
         Message::RpcRecvReply(Err(exception)) => unsafe {
             eh_artiq::raise(&eh_artiq::Exception {
-                name:     exception.name.as_bytes().as_c_slice(),
-                file:     exception.file.as_bytes().as_c_slice(),
+                id:       exception.id,
+                file:     CSlice::new(exception.file as *const u8, usize::MAX),
                 line:     exception.line as u32,
                 column:   exception.column as u32,
-                function: exception.function.as_bytes().as_c_slice(),
-                message:  exception.message.as_bytes().as_c_slice(),
+                function: CSlice::new(exception.function as *const u8, usize::MAX),
+                message:  CSlice::new(exception.message as *const u8, usize::MAX),
                 param:    exception.param
             })
         },

@@ -16,7 +16,8 @@ use core::mem;
 use cslice::CSlice;
 use unwind as uw;
 use libc::{c_int, c_void, uintptr_t};
-use log::trace;
+use log::{trace, error};
+use crate::kernel::KERNEL_IMAGE;
 
 use dwarf::eh::{self, EHAction, EHContext};
 
@@ -26,10 +27,12 @@ const EXCEPTION_CLASS: uw::_Unwind_Exception_Class = 0x4d_4c_42_53_41_52_54_51; 
 #[cfg(target_arch = "arm")]
 const UNWIND_DATA_REG: (i32, i32) = (0, 1); // R0, R1
 
+// Note: CSlice within an exception may not be actual cslice, they may be strings that exist only
+// in the host. If the length == usize:MAX, the pointer is actually a string key in the host.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Exception<'a> {
-    pub name:     CSlice<'a, u8>,
+    pub id:       u32,
     pub file:     CSlice<'a, u8>,
     pub line:     u32,
     pub column:   u32,
@@ -42,25 +45,79 @@ fn str_err(_: core::str::Utf8Error) -> core::fmt::Error {
     core::fmt::Error
 }
 
-impl<'a> core::fmt::Debug for Exception<'a> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Exception {} from {} in {}:{}:{}, message: {}",
-            core::str::from_utf8(self.name.as_ref()).map_err(str_err)?,
-            core::str::from_utf8(self.function.as_ref()).map_err(str_err)?,
-            core::str::from_utf8(self.file.as_ref()).map_err(str_err)?,
-            self.line, self.column,
-            core::str::from_utf8(self.message.as_ref()).map_err(str_err)?)
+fn exception_str<'a>(s: &'a CSlice<'a, u8>) -> Result<&'a str, core::str::Utf8Error> {
+    if s.len() == usize::MAX {
+        Ok("<host string>")
+    } else {
+        core::str::from_utf8(s.as_ref())
     }
 }
 
+impl<'a> core::fmt::Debug for Exception<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Exception {} from {} in {}:{}:{}, message: {}",
+            self.id,
+            exception_str(&self.function).map_err(str_err)?,
+            exception_str(&self.file).map_err(str_err)?,
+            self.line, self.column,
+            exception_str(&self.message).map_err(str_err)?)
+    }
+}
+
+const MAX_INFLIGHT_EXCEPTIONS: usize = 10;
 const MAX_BACKTRACE_SIZE: usize = 128;
 
-#[repr(C)]
-struct ExceptionInfo {
-    uw_exception:   uw::_Unwind_Exception,
-    exception:      Option<Exception<'static>>,
-    backtrace:      [usize; MAX_BACKTRACE_SIZE],
-    backtrace_size: usize
+#[derive(Debug, Default)]
+pub struct StackPointerBacktrace {
+    pub stack_pointer: usize,
+    pub initial_backtrace_size: usize,
+    pub current_backtrace_size: usize,
+}
+
+struct ExceptionBuffer {
+    // we need n _Unwind_Exception, because each will have their own private data
+    uw_exceptions: [uw::_Unwind_Exception; MAX_INFLIGHT_EXCEPTIONS],
+    exceptions: [Option<Exception<'static>>; MAX_INFLIGHT_EXCEPTIONS + 1],
+    exception_stack: [isize; MAX_INFLIGHT_EXCEPTIONS + 1],
+    // nested exceptions will share the backtrace buffer, treated as a tree
+    // backtrace contains a tuple of IP and SP
+    backtrace: [(usize, usize); MAX_BACKTRACE_SIZE],
+    backtrace_size: usize,
+    // stack pointers are stored to reconstruct backtrace for each exception
+    stack_pointers: [StackPointerBacktrace; MAX_INFLIGHT_EXCEPTIONS + 1],
+    // current allocated nested exceptions
+    exception_count: usize,
+}
+
+static mut EXCEPTION_BUFFER: ExceptionBuffer = ExceptionBuffer {
+    uw_exceptions: [uw::_Unwind_Exception {
+        exception_class:   EXCEPTION_CLASS,
+        exception_cleanup: cleanup,
+        private:           [0; uw::unwinder_private_data_size],
+    }; MAX_INFLIGHT_EXCEPTIONS],
+    exceptions: [None; MAX_INFLIGHT_EXCEPTIONS + 1],
+    exception_stack: [-1; MAX_INFLIGHT_EXCEPTIONS + 1],
+    backtrace: [(0, 0); MAX_BACKTRACE_SIZE],
+    backtrace_size: 0,
+    stack_pointers: [StackPointerBacktrace {
+        stack_pointer: 0,
+        initial_backtrace_size: 0,
+        current_backtrace_size: 0
+    }; MAX_INFLIGHT_EXCEPTIONS + 1],
+    exception_count: 0
+};
+
+pub unsafe extern fn reset_exception_buffer() {
+    trace!("reset exception buffer");
+    EXCEPTION_BUFFER.uw_exceptions = [uw::_Unwind_Exception {
+        exception_class:   EXCEPTION_CLASS,
+        exception_cleanup: cleanup,
+        private:           [0; uw::unwinder_private_data_size],
+    }; MAX_INFLIGHT_EXCEPTIONS];
+    EXCEPTION_BUFFER.exceptions = [None; MAX_INFLIGHT_EXCEPTIONS + 1];
+    EXCEPTION_BUFFER.exception_stack = [-1; MAX_INFLIGHT_EXCEPTIONS + 1];
+    EXCEPTION_BUFFER.backtrace_size = 0;
+    EXCEPTION_BUFFER.exception_count = 0;
 }
 
 type _Unwind_Stop_Fn = extern "C" fn(version: c_int,
@@ -81,8 +138,7 @@ extern {
 unsafe fn find_eh_action(
     context: *mut uw::_Unwind_Context,
     foreign_exception: bool,
-    name: *const u8,
-    len: usize,
+    id: u32,
 ) -> Result<EHAction, ()> {
     let lsda = uw::_Unwind_GetLanguageSpecificData(context) as *const u8;
     let mut ip_before_instr: c_int = 0;
@@ -95,7 +151,7 @@ unsafe fn find_eh_action(
         get_text_start: &|| uw::_Unwind_GetTextRelBase(context),
         get_data_start: &|| uw::_Unwind_GetDataRelBase(context),
     };
-    eh::find_eh_action(lsda, &eh_context, foreign_exception, name, len)
+    eh::find_eh_action(lsda, &eh_context, foreign_exception, id)
 }
 
 pub unsafe fn artiq_personality(_state: uw::_Unwind_State,
@@ -119,19 +175,15 @@ pub unsafe fn artiq_personality(_state: uw::_Unwind_State,
     let exception_class = (*exception_object).exception_class;
     let foreign_exception = exception_class != EXCEPTION_CLASS;
     assert!(!foreign_exception, "we do not expect foreign exceptions");
-    let exception_info = &mut *(exception_object as *mut ExceptionInfo);
+    let index = EXCEPTION_BUFFER.exception_stack[EXCEPTION_BUFFER.exception_count - 1];
+    assert!(index != -1);
+    let exception = EXCEPTION_BUFFER.exceptions[index as usize].as_ref().unwrap();
 
-    let (name_ptr, len) = if foreign_exception || exception_info.exception.is_none() {
-        (core::ptr::null(), 0)
-    } else {
-        let name = (exception_info.exception.unwrap()).name;
-        (name.as_ptr(), name.len())
-    };
-    let eh_action = match find_eh_action(context, foreign_exception, name_ptr, len) {
+    let id = exception.id;
+    let eh_action = match find_eh_action(context, foreign_exception, id) {
         Ok(action) => action,
         Err(_) => return uw::_URC_FAILURE,
     };
-    let exception = &exception_info.exception.unwrap();
     match eh_action {
         EHAction::None => return continue_unwind(exception_object, context),
         EHAction::Cleanup(lpad) |
@@ -165,99 +217,219 @@ pub unsafe fn artiq_personality(_state: uw::_Unwind_State,
     }
 }
 
-extern fn cleanup(_unwind_code: uw::_Unwind_Reason_Code,
-                  uw_exception: *mut uw::_Unwind_Exception) {
-    unsafe {
-        let exception_info = &mut *(uw_exception as *mut ExceptionInfo);
+pub unsafe extern fn raise(exception: *const Exception) -> ! {
+    use cslice::AsCSlice;
 
-        exception_info.exception = None;
+    let count = EXCEPTION_BUFFER.exception_count;
+    let stack = &mut EXCEPTION_BUFFER.exception_stack;
+    let diff = exception as isize - EXCEPTION_BUFFER.exceptions.as_ptr() as isize;
+    if 0 <= diff && diff <= (mem::size_of::<Option<Exception>>() * MAX_INFLIGHT_EXCEPTIONS) as isize {
+        let index = diff / (mem::size_of::<Option<Exception>>() as isize);
+        trace!("reraise at {}", index);
+
+        let mut found = false;
+        for i in 0..=MAX_INFLIGHT_EXCEPTIONS + 1 {
+            if found {
+                if stack[i] == -1 {
+                    stack[i - 1] = index;
+                    assert!(i == count);
+                    break;
+                } else {
+                    stack[i - 1] = stack[i];
+                }
+            } else {
+                if stack[i] == index {
+                    found = true;
+                }
+            }
+        }
+        assert!(found);
+        let _result = _Unwind_ForcedUnwind(&mut EXCEPTION_BUFFER.uw_exceptions[stack[count - 1] as usize],
+                                           stop_fn, core::ptr::null_mut());
+    } else {
+        if count < MAX_INFLIGHT_EXCEPTIONS {
+            trace!("raising exception at level {}", count);
+            let exception = &*exception;
+            for (i, slot) in EXCEPTION_BUFFER.exceptions.iter_mut().enumerate() {
+                // we should always be able to find a slot
+                if slot.is_none() {
+                    *slot = Some(
+                        *mem::transmute::<*const Exception, *const Exception<'static>>
+                        (exception));
+                    EXCEPTION_BUFFER.exception_stack[count] = i as isize;
+                    EXCEPTION_BUFFER.uw_exceptions[i].private =
+                        [0; uw::unwinder_private_data_size];
+                    EXCEPTION_BUFFER.stack_pointers[i] = StackPointerBacktrace {
+                        stack_pointer: 0,
+                        initial_backtrace_size: EXCEPTION_BUFFER.backtrace_size,
+                        current_backtrace_size: 0,
+                    };
+                    EXCEPTION_BUFFER.exception_count += 1;
+                    let _result = _Unwind_ForcedUnwind(&mut EXCEPTION_BUFFER.uw_exceptions[i],
+                                                       stop_fn, core::ptr::null_mut());
+                }
+            }
+        } else {
+            error!("too many nested exceptions");
+            // TODO: better reporting?
+            let exception = Exception {
+                id:       get_exception_id("runtimeerror"),
+                file:     file!().as_c_slice(),
+                line:     line!(),
+                column:   column!(),
+                // https://github.com/rust-lang/rfcs/pull/1719
+                function: "__artiq_raise".as_c_slice(),
+                message:  "too many nested exceptions".as_c_slice(),
+                param:    [0, 0, 0]
+            };
+            EXCEPTION_BUFFER.exceptions[MAX_INFLIGHT_EXCEPTIONS] = Some(mem::transmute(exception));
+            EXCEPTION_BUFFER.stack_pointers[MAX_INFLIGHT_EXCEPTIONS] = Default::default();
+            EXCEPTION_BUFFER.exception_count += 1;
+            uncaught_exception()
+        }
     }
+    unreachable!();
 }
 
-static mut INFLIGHT: ExceptionInfo = ExceptionInfo {
-    uw_exception: uw::_Unwind_Exception {
-        exception_class:   EXCEPTION_CLASS,
-        exception_cleanup: cleanup,
-        private:           [0; uw::unwinder_private_data_size],
-    },
-    exception:      None,
-    backtrace:      [0; MAX_BACKTRACE_SIZE],
-    backtrace_size: 0
-};
-
-pub unsafe extern fn raise(exception: *const Exception) -> ! {
-    // FIXME: unsound transmute
-    // This would cause stack memory corruption.
-    trace!("raising exception");
-    INFLIGHT.backtrace_size = 0;
-    INFLIGHT.exception = Some(mem::transmute::<Exception, Exception<'static>>(*exception));
-
-    let _result = _Unwind_ForcedUnwind(&mut INFLIGHT.uw_exception,
-                                   uncaught_exception, core::ptr::null_mut());
+pub unsafe extern fn resume() -> ! {
+    trace!("resume");
+    assert!(EXCEPTION_BUFFER.exception_count != 0);
+    let i = EXCEPTION_BUFFER.exception_stack[EXCEPTION_BUFFER.exception_count - 1];
+    assert!(i != -1);
+    let _result = _Unwind_ForcedUnwind(&mut EXCEPTION_BUFFER.uw_exceptions[i as usize],
+                                       stop_fn, core::ptr::null_mut());
     unreachable!()
 }
 
-extern fn uncaught_exception(_version: c_int,
-                             actions: i32,
-                             _uw_exception_class: uw::_Unwind_Exception_Class,
-                             uw_exception: *mut uw::_Unwind_Exception,
-                             context: *mut uw::_Unwind_Context,
-                             _stop_parameter: *mut c_void)
-                            -> uw::_Unwind_Reason_Code {
-    unsafe {
-        trace!("uncaught exception");
-        let exception_info = &mut *(uw_exception as *mut ExceptionInfo);
+pub unsafe extern fn end_catch() {
+    let mut count = EXCEPTION_BUFFER.exception_count;
+    assert!(count != 0);
+    // we remove all exceptions with SP <= current exception SP
+    // i.e. the outer exception escapes the finally block
+    let index = EXCEPTION_BUFFER.exception_stack[count - 1] as usize;
+    EXCEPTION_BUFFER.exception_stack[count - 1] = -1;
+    EXCEPTION_BUFFER.exceptions[index] = None;
+    let outer_sp = EXCEPTION_BUFFER.stack_pointers
+        [index].stack_pointer;
+    count -= 1;
+    for i in (0..count).rev() {
+        let index = EXCEPTION_BUFFER.exception_stack[i];
+        assert!(index != -1);
+        let index = index as usize;
+        let sp = EXCEPTION_BUFFER.stack_pointers[index].stack_pointer;
+        if sp >= outer_sp {
+            break;
+        }
+        EXCEPTION_BUFFER.exceptions[index] = None;
+        EXCEPTION_BUFFER.exception_stack[i] = -1;
+        count -= 1;
+    }
+    EXCEPTION_BUFFER.exception_count = count;
+    EXCEPTION_BUFFER.backtrace_size = if count > 0 {
+        let index = EXCEPTION_BUFFER.exception_stack[count - 1];
+        assert!(index != -1);
+        EXCEPTION_BUFFER.stack_pointers[index as usize].current_backtrace_size
+    } else {
+        0
+    };
+}
 
-        if exception_info.backtrace_size < exception_info.backtrace.len() {
+extern fn cleanup(_unwind_code: uw::_Unwind_Reason_Code,
+                  _uw_exception: *mut uw::_Unwind_Exception) {
+    unimplemented!()
+}
+
+fn uncaught_exception() -> ! {
+    unsafe {
+        // dump way to reorder the stack
+        for i in 0..EXCEPTION_BUFFER.exception_count {
+            if EXCEPTION_BUFFER.exception_stack[i] != i as isize {
+                // find the correct index
+                let index = EXCEPTION_BUFFER.exception_stack
+                    .iter()
+                    .position(|v| *v == i as isize).unwrap();
+                let a = EXCEPTION_BUFFER.exception_stack[index];
+                let b = EXCEPTION_BUFFER.exception_stack[i];
+                assert!(a != -1 && b != -1);
+                core::mem::swap(&mut EXCEPTION_BUFFER.exception_stack[index],
+                                &mut EXCEPTION_BUFFER.exception_stack[i]);
+                core::mem::swap(&mut EXCEPTION_BUFFER.exceptions[a as usize],
+                                &mut EXCEPTION_BUFFER.exceptions[b as usize]);
+                core::mem::swap(&mut EXCEPTION_BUFFER.stack_pointers[a as usize],
+                                &mut EXCEPTION_BUFFER.stack_pointers[b as usize]);
+            }
+        }
+    }
+    unsafe {
+        crate::kernel::core1::terminate(
+            EXCEPTION_BUFFER.exceptions[..EXCEPTION_BUFFER.exception_count].as_ref(),
+            EXCEPTION_BUFFER.stack_pointers[..EXCEPTION_BUFFER.exception_count].as_ref(),
+            EXCEPTION_BUFFER.backtrace[..EXCEPTION_BUFFER.backtrace_size].as_mut())
+    }
+}
+
+// stop function which would be executed when we unwind each frame
+extern fn stop_fn(_version: c_int,
+                  actions: i32,
+                  _uw_exception_class: uw::_Unwind_Exception_Class,
+                  _uw_exception: *mut uw::_Unwind_Exception,
+                  context: *mut uw::_Unwind_Context,
+                  _stop_parameter: *mut c_void) -> uw::_Unwind_Reason_Code {
+    unsafe {
+        let load_addr = KERNEL_IMAGE.as_ref().unwrap().get_load_addr();
+        let backtrace_size = EXCEPTION_BUFFER.backtrace_size;
+        // we try to remove unrelated backtrace here to save some buffer size
+        if backtrace_size < MAX_BACKTRACE_SIZE {
             let ip = uw::_Unwind_GetIP(context);
-            trace!("SP: {:X}, backtrace_size: {}", uw::_Unwind_GetGR(context, uw::UNWIND_SP_REG), exception_info.backtrace_size);
-            exception_info.backtrace[exception_info.backtrace_size] = ip;
-            exception_info.backtrace_size += 1;
+            if ip >= load_addr {
+                let ip = ip - load_addr;
+                let sp = uw::_Unwind_GetGR(context, uw::UNWIND_SP_REG);
+                trace!("SP: {:X}, backtrace_size: {}", sp, backtrace_size);
+                EXCEPTION_BUFFER.backtrace[backtrace_size] = (ip, sp);
+                EXCEPTION_BUFFER.backtrace_size += 1;
+                let last_index = EXCEPTION_BUFFER.exception_stack[EXCEPTION_BUFFER.exception_count - 1];
+                assert!(last_index != -1);
+                let sp_info = &mut EXCEPTION_BUFFER.stack_pointers[last_index as usize];
+                sp_info.stack_pointer = sp;
+                sp_info.current_backtrace_size = backtrace_size + 1;
+            }
+        } else {
+            trace!("backtrace size exceeded");
         }
 
         if actions as u32 & uw::_US_END_OF_STACK as u32 != 0 {
-            crate::kernel::core1::terminate(exception_info.exception.as_ref().unwrap(),
-                        exception_info.backtrace[..exception_info.backtrace_size].as_mut())
+            uncaught_exception()
         } else {
             uw::_URC_NO_REASON
         }
     }
 }
 
-pub unsafe extern fn reraise() -> ! {
-    use cslice::AsCSlice;
+static EXCEPTION_ID_LOOKUP: [(&str, u32); 6] = [
+    ("runtimeerror", 0),
+    ("RTIOUnderflow", 1),
+    ("RTIOOverflow", 2),
+    ("RTIODestinationUnreachable", 3),
+    ("DMAError", 4),
+    ("I2CError", 5),
+];
 
-    // Reraise is basically cxa_rethrow, which calls _Unwind_Resume_or_Rethrow,
-    // which for EHABI would always call _Unwind_RaiseException.
-    match INFLIGHT.exception {
-        Some(ex) => {
-            // we cannot call raise directly as that would corrupt the backtrace
-            INFLIGHT.exception = Some(mem::transmute::<Exception, Exception<'static>>(ex));
-            let _result = _Unwind_ForcedUnwind(&mut INFLIGHT.uw_exception,
-                                           uncaught_exception, core::ptr::null_mut());
-            unreachable!()
-        },
-        None => {
-            raise(&Exception {
-                name:     "0:artiq.coredevice.exceptions.RuntimeError".as_c_slice(),
-                file:     file!().as_c_slice(),
-                line:     line!(),
-                column:   column!(),
-                // https://github.com/rust-lang/rfcs/pull/1719
-                function: "__artiq_reraise".as_c_slice(),
-                message:  "No active exception to reraise".as_c_slice(),
-                param:    [0, 0, 0]
-            })
+pub fn get_exception_id(name: &str) -> u32 {
+    for (n, id) in EXCEPTION_ID_LOOKUP.iter() {
+        if *n == name {
+            return *id
         }
     }
+    unimplemented!("unallocated internal exception id")
 }
 
 #[macro_export]
 macro_rules! artiq_raise {
     ($name:expr, $message:expr, $param0:expr, $param1:expr, $param2:expr) => ({
         use cslice::AsCSlice;
+        let name_id = $crate::eh_artiq::get_exception_id($name);
         let exn = $crate::eh_artiq::Exception {
-            name:     concat!("0:artiq.coredevice.exceptions.", $name).as_c_slice(),
+            id:       name_id,
             file:     file!().as_c_slice(),
             line:     line!(),
             column:   column!(),

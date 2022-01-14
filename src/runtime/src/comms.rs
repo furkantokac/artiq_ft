@@ -1,8 +1,8 @@
 use core::fmt;
 use core::cell::RefCell;
-use core::str::Utf8Error;
 use alloc::{vec, vec::Vec, string::String, collections::BTreeMap, rc::Rc};
 use log::{info, warn, error};
+use cslice::CSlice;
 
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -39,7 +39,6 @@ pub enum Error {
     UnexpectedPattern,
     UnrecognizedPacket,
     BufferExhausted,
-    Utf8Error(Utf8Error),
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -51,7 +50,6 @@ impl fmt::Display for Error {
             Error::UnexpectedPattern   => write!(f, "unexpected pattern"),
             Error::UnrecognizedPacket  => write!(f, "unrecognized packet"),
             Error::BufferExhausted     => write!(f, "buffer exhausted"),
-            Error::Utf8Error(error)    => write!(f, "UTF-8 error: {}", error),
         }
     }
 }
@@ -122,11 +120,6 @@ async fn read_bytes(stream: &TcpStream, max_length: usize) -> Result<Vec<u8>> {
     Ok(buffer)
 }
 
-async fn read_string(stream: &TcpStream, max_length: usize) -> Result<String> {
-    let bytes = read_bytes(stream, max_length).await?;
-    Ok(String::from_utf8(bytes).map_err(|err| Error::Utf8Error(err.utf8_error()))?)
-}
-
 const RETRY_LIMIT: usize = 100;
 
 async fn fast_send(sender: &mut Sender<'_, kernel::Message>, content: kernel::Message) {
@@ -154,6 +147,16 @@ async fn fast_recv(receiver: &mut Receiver<'_, kernel::Message>) -> kernel::Mess
         }
     }
     receiver.async_recv().await
+}
+
+async fn write_exception_string(stream: &TcpStream, s: CSlice<'static, u8>) -> Result<()> {
+    if s.len() == usize::MAX {
+        write_i32(stream, -1).await?;
+        write_i32(stream, s.as_ptr() as i32).await?
+    } else {
+        write_chunk(stream, s.as_ref()).await?;
+    };
+    Ok(())
 }
 
 async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kernel::Control>>) -> Result<()> {
@@ -204,17 +207,17 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                                 kernel::Message::RpcRecvRequest(_) => (),
                                 other => panic!("expected (ignored) root value slot from kernel CPU, not {:?}", other),
                             }
-                            let name =     read_string(stream, 16384).await?;
-                            let message =  read_string(stream, 16384).await?;
+                            let id =       read_i32(stream).await? as u32;
+                            let message =  read_i32(stream).await? as u32;
                             let param =    [read_i64(stream).await?,
                                             read_i64(stream).await?,
                                             read_i64(stream).await?];
-                            let file =     read_string(stream, 16384).await?;
+                            let file =     read_i32(stream).await? as u32;
                             let line =     read_i32(stream).await?;
                             let column =   read_i32(stream).await?;
-                            let function = read_string(stream, 16384).await?;
+                            let function = read_i32(stream).await? as u32;
                             control.tx.async_send(kernel::Message::RpcRecvReply(Err(kernel::RPCException {
-                                name, message, param, file, line, column, function
+                                id, message, param, file, line, column, function
                             }))).await;
                         },
                         _ => {
@@ -231,29 +234,39 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                 }
                 break;
             },
-            kernel::Message::KernelException(exception, backtrace, async_errors) => {
+            kernel::Message::KernelException(exceptions, stack_pointers, backtrace, async_errors) => {
                 match stream {
                     Some(stream) => {
                         // only send the exception data to host if there is host,
                         // i.e. not idle/startup kernel.
                         write_header(stream, Reply::KernelException).await?;
-                        write_chunk(stream, exception.name.as_ref()).await?;
-                        write_chunk(stream, exception.message.as_ref()).await?;
-                        write_i64(stream, exception.param[0] as i64).await?;
-                        write_i64(stream, exception.param[1] as i64).await?;
-                        write_i64(stream, exception.param[2] as i64).await?;
-                        write_chunk(stream, exception.file.as_ref()).await?;
-                        write_i32(stream, exception.line as i32).await?;
-                        write_i32(stream, exception.column as i32).await?;
-                        write_chunk(stream, exception.function.as_ref()).await?;
+                        write_i32(stream, exceptions.len() as i32).await?;
+                        for exception in exceptions.iter() {
+                            let exception = exception.as_ref().unwrap();
+                            write_i32(stream, exception.id as i32).await?;
+                            write_exception_string(stream, exception.message).await?;
+                            write_i64(stream, exception.param[0] as i64).await?;
+                            write_i64(stream, exception.param[1] as i64).await?;
+                            write_i64(stream, exception.param[2] as i64).await?;
+                            write_exception_string(stream, exception.file).await?;
+                            write_i32(stream, exception.line as i32).await?;
+                            write_i32(stream, exception.column as i32).await?;
+                            write_exception_string(stream, exception.function).await?;
+                        }
+                        for sp in stack_pointers.iter() {
+                            write_i32(stream, sp.stack_pointer as i32).await?;
+                            write_i32(stream, sp.initial_backtrace_size as i32).await?;
+                            write_i32(stream, sp.current_backtrace_size as i32).await?;
+                        }
                         write_i32(stream, backtrace.len() as i32).await?;
-                        for &addr in backtrace {
+                        for &(addr, sp) in backtrace {
                             write_i32(stream, addr as i32).await?;
+                            write_i32(stream, sp as i32).await?;
                         }
                         write_i8(stream, async_errors as i8).await?;
                     },
                     None => {
-                        error!("Uncaught kernel exception: {:?}", exception);
+                        error!("Uncaught kernel exceptions: {:?}", exceptions);
                     }
                 }
                 break;
