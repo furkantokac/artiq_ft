@@ -107,9 +107,12 @@ struct _Unwind_Control_Block {
 } __attribute__((__aligned__(8)));
 
 typedef _Unwind_Reason_Code (*_Unwind_Stop_Fn)
-      (_Unwind_State state,
-       _Unwind_Exception* exceptionObject,
-       struct _Unwind_Context* context);
+    (int version,
+     _Unwind_Action actions,
+     uint64_t exceptionClass,
+     _Unwind_Exception* exceptionObject,
+     struct _Unwind_Context* context,
+     void* stop_parameter);
 
 typedef _Unwind_Reason_Code (*__personality_routine)
       (_Unwind_State state,
