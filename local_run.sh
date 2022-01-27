@@ -52,10 +52,10 @@ if [ $impure -eq 1 ]; then
     if [ $load_bitstream -eq 1 ]; then
         load_bitstream_cmd="-g $build_dir/gateware/top.bit"
     fi
-    artiq_netboot $load_bitstream_cmd -f $build_dir/$fwtype.bin -b $board_host
+    artiq_netboot $load_bitstream_cmd -f $build_dir/$fw_type.bin -b $board_host
 else
     if [ $load_bitstream -eq 1 ]; then
         load_bitstream_cmd="-g $result_dir/top.bit"
     fi
-    artiq_netboot $load_bitstream_cmd -f $result_dir/$fwtype.bin -b $board_host
+    artiq_netboot $load_bitstream_cmd -f $result_dir/$fw_type.bin -b $board_host
 fi
