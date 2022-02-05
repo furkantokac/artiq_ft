@@ -33,26 +33,19 @@ not implemented as it seems not very useful.
 Development instructions
 ------------------------
 
-Configure Nix channels:
-
-```shell
-nix-channel --add https://nixbld.m-labs.hk/channel/custom/artiq/fast-beta/artiq-fast
-nix-channel --update
-```
-
-Note: if you are using Nix channels the first time, you need to be aware of this bug: https://github.com/NixOS/nix/issues/3831
+ARTIQ on Zynq is packaged using the [Nix](https://nixos.org) Flakes system. Install Nix 2.4+ and enable flakes by adding ``experimental-features = nix-command flakes`` to ``nix.conf`` (e.g. ``~/.config/nix/nix.conf``). 
 
 Pure build with Nix and execution on a remote JTAG server:
 
 ```shell
-nix-build -A zc706-nist_clock-jtag  # or zc706-nist_qc2-jtag or zc706-nist_clock_satellite-jtag etc.
+nix build .#zc706-nist_clock-jtag  # or zc706-nist_qc2-jtag or zc706-nist_clock_satellite-jtag etc.
 ./remote_run.sh
 ```
 
 Impure incremental build and execution on a remote JTAG server:
 
 ```shell
-nix-shell
+nix develop
 cd src
 gateware/zc706.py -g ../build/gateware -v <variant> # build gateware
 make GWARGS="-V <variant>" <runtime/satman>    # build firmware
@@ -62,14 +55,11 @@ cd ..
 
 Notes:
 
-- This is developed with Nixpkgs 21.05[^1], and the ``nixbld.m-labs.hk`` binary substituter can also be used here (see the ARTIQ manual for the public key and instructions).
 - The impure build process is also compatible with non-Nix systems.
 - When calling make, you need to specify both the variant and firmware type.
 - Firmware type must be either ``runtime`` for DRTIO-less or DRTIO master variants, or ``satman`` for DRTIO satellite.
 - If the board is connected to the local machine, use the ``local_run.sh`` script.
-- To update ``zynq-rs``, update the cargo files as per usual for Rust projects, but also keep ``zynq-rs.nix`` in sync.
-
-[^1]: Thus, on newer version of NixOS, you should run `nix-shell -I nixpkgs=https://github.com/NixOS/nixpkgs/archive/21.05.tar.gz` instead
+- To update ``zynq-rs``, update the cargo files as per usual for Rust projects, but also keep ``flake.lock`` in sync.
 
 License
 -------
