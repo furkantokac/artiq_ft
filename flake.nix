@@ -247,7 +247,7 @@
       }
       else {}
     );
-  in {
+  in rec {
     packages.x86_64-linux = (build { target = "zc706"; variant = "nist_clock"; }) //
       (build { target = "zc706"; variant = "nist_clock_master"; }) //
       (build { target = "zc706"; variant = "nist_clock_satellite"; }) //
@@ -267,6 +267,8 @@
       (build { target = "kasli_soc"; variant = "demo"; json = ./demo.json; }) //
       (build { target = "kasli_soc"; variant = "master"; json = ./kasli-soc-master.json; }) //
       (build { target = "kasli_soc"; variant = "satellite"; json = ./kasli-soc-satellite.json; });
+
+    hydraJobs = packages.x86_64-linux;
 
     devShell.x86_64-linux = pkgs.mkShell {
       name = "artiq-zynq-dev-shell";
