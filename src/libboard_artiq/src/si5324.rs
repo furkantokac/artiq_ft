@@ -188,12 +188,12 @@ fn init(i2c: &mut I2c, timer: &mut GlobalTimer) -> Result<()> {
 
     #[cfg(feature = "target_kasli_soc")]
     {
-        i2c.pca9548_select(0x70, 0)?;
-        i2c.pca9548_select(0x71, 1 << 3)?;
+        i2c.pca954x_select(0x70, None)?;
+        i2c.pca954x_select(0x71, Some(3))?;
     }
     #[cfg(feature = "target_zc706")]
     {
-        i2c.pca9548_select(0x74, 1 << 4)?;
+        i2c.pca954x_select(0x74, Some(4))?;
     }
 
     if ident(i2c)? != 0x0182 {
