@@ -202,6 +202,11 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
 
         // exceptions
         api!(_Unwind_Resume = unwind::_Unwind_Resume),
+        api!(__nac3_personality = eh_artiq::artiq_personality),
+        api!(__nac3_raise = eh_artiq::raise),
+        api!(__nac3_resume = eh_artiq::resume),
+        api!(__nac3_end_catch = eh_artiq::end_catch),
+        // legacy exception symbols
         api!(__artiq_personality = eh_artiq::artiq_personality),
         api!(__artiq_raise = eh_artiq::raise),
         api!(__artiq_resume = eh_artiq::resume),
