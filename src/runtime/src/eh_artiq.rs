@@ -273,7 +273,7 @@ pub unsafe extern fn raise(exception: *const Exception) -> ! {
             error!("too many nested exceptions");
             // TODO: better reporting?
             let exception = Exception {
-                id:       get_exception_id("runtimeerror"),
+                id:       get_exception_id("RuntimeError"),
                 file:     file!().as_c_slice(),
                 line:     line!(),
                 column:   column!(),
@@ -405,13 +405,17 @@ extern fn stop_fn(_version: c_int,
     }
 }
 
-static EXCEPTION_ID_LOOKUP: [(&str, u32); 6] = [
-    ("runtimeerror", 0),
+static EXCEPTION_ID_LOOKUP: [(&str, u32); 10] = [
+    ("RuntimeError", 0),
     ("RTIOUnderflow", 1),
     ("RTIOOverflow", 2),
     ("RTIODestinationUnreachable", 3),
     ("DMAError", 4),
     ("I2CError", 5),
+    ("CacheError", 6),
+    ("SPIError", 7),
+    ("ZeroDivisionError", 8),
+    ("IndexError", 9)
 ];
 
 pub fn get_exception_id(name: &str) -> u32 {
