@@ -137,8 +137,7 @@ macro_rules! dispatch {
     ($timer:ident, $aux_mutex:ident, $routing_table:ident, $channel:expr, $func:ident $(, $param:expr)*) => {{
         let destination = ($channel >> 16) as u8;
         let channel = $channel;
-        let routing_table = $routing_table.borrow_mut();
-        let hop = routing_table.0[destination as usize][0];
+        let hop = $routing_table.0[destination as usize][0];
         if hop == 0 {
             local_moninj::$func(channel.into(), $($param, )*)
         } else {
@@ -157,7 +156,7 @@ macro_rules! dispatch {
 }
 
 async fn handle_connection(stream: &TcpStream, timer: GlobalTimer, 
-        _aux_mutex: &Rc<Mutex<bool>>, _routing_table: &Rc<RefCell<drtio_routing::RoutingTable>>) -> Result<()> {
+        _aux_mutex: &Rc<Mutex<bool>>, _routing_table: &drtio_routing::RoutingTable) -> Result<()> {
     if !expect(&stream, b"ARTIQ moninj\n").await? {
         return Err(Error::UnexpectedPattern);
     }
@@ -262,6 +261,7 @@ pub fn start(timer: GlobalTimer, aux_mutex: Rc<Mutex<bool>>, routing_table: Rc<R
             let stream = TcpStream::accept(1383, 2048, 2048).await.unwrap();
             task::spawn(async move {
                 info!("received connection");
+                let routing_table = routing_table.borrow();
                 let result = handle_connection(&stream, timer, &aux_mutex, &routing_table).await;
                 match result {
                     Err(Error::NetworkError(smoltcp::Error::Finished)) => info!("peer closed connection"),
