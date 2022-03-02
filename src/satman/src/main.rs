@@ -282,6 +282,23 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
                     &drtioaux::Packet::I2cReadReply { succeeded: false, data: 0xff })
             }
         }
+        drtioaux::Packet::I2cSwitchSelectRequest { destination: _destination, busno: _busno, address, mask } => {
+            forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
+            ch = match mask { //decode from mainline, PCA9548-centric API
+                0x00 => None,
+                0x01 => Some(0),
+                0x02 => Some(1),
+                0x04 => Some(2),
+                0x08 => Some(3),
+                0x10 => Some(4),
+                0x20 => Some(5),
+                0x40 => Some(6),
+                0x80 => Some(7),
+                _ => { return drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: false }); }
+            };
+            let succeeded = i2c.pca954x_select(address, ch).is_ok();
+            drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded })
+        }
 
         drtioaux::Packet::SpiSetConfigRequest { destination: _destination, busno: _busno, 
                                                 flags: _flags, length: _length, div: _div, cs: _cs } => {

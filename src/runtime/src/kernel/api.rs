@@ -116,6 +116,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(i2c_stop = i2c::stop),
         api!(i2c_write = i2c::write),
         api!(i2c_read = i2c::read),
+        api!(i2c_switch_select = i2c::switch_select),
 
         // Double-precision floating-point arithmetic helper functions
         // RTABI chapter 4.1.2, Table 2
