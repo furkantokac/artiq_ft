@@ -284,7 +284,7 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
         }
         drtioaux::Packet::I2cSwitchSelectRequest { destination: _destination, busno: _busno, address, mask } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
-            ch = match mask { //decode from mainline, PCA9548-centric API
+            let ch = match mask { //decode from mainline, PCA9548-centric API
                 0x00 => None,
                 0x01 => Some(0),
                 0x02 => Some(1),
