@@ -136,7 +136,7 @@ fn setup_si5324(i2c: &mut I2c, timer: &mut GlobalTimer, clk: RtioClock) {
             }
         },
         RtioClock::Ext0_Synth0_100to125 => { // 125MHz output, from 100MHz CLKINx reference, 586 Hz loop bandwidth
-            info!("using 10MHz reference to make 125MHz RTIO clock with PLL");
+            info!("using 100MHz reference to make 125MHz RTIO clock with PLL");
             si5324::FrequencySettings {
                 n1_hs  : 10,
                 nc1_ls : 4,
@@ -149,7 +149,7 @@ fn setup_si5324(i2c: &mut I2c, timer: &mut GlobalTimer, clk: RtioClock) {
             }
         },
         RtioClock::Ext0_Synth0_125to125 => { // 125MHz output, from 125MHz CLKINx reference, 606 Hz loop bandwidth
-            info!("using 10MHz reference to make 125MHz RTIO clock with PLL");
+            info!("using 125MHz reference to make 125MHz RTIO clock with PLL");
             si5324::FrequencySettings {
                 n1_hs  : 5,
                 nc1_ls : 8,
