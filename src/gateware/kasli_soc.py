@@ -209,6 +209,9 @@ class GenericMaster(SoCCore):
         self.submodules.rtio_crg = RTIOClockMultiplier(rtio_clk_freq)
         self.csr_devices.append("rtio_crg")
 
+        self.rustc_cfg["has_si5324"] = None
+        self.rustc_cfg["si5324_soft_reset"] = None
+
         self.rtio_channels = []
         has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
         if has_grabber:
@@ -392,9 +395,6 @@ class GenericSatellite(SoCCore):
         self.add_csr_group("drtioaux", drtioaux_csr_group)
         self.add_memory_group("drtioaux_mem", drtioaux_memory_group)
         self.add_csr_group("drtiorep", drtiorep_csr_group)
-
-        self.rustc_cfg["has_si5324"] = None
-        self.rustc_cfg["si5324_soft_reset"] = None
 
         if self.acpki:
             self.rustc_cfg["ki_impl"] = "acp"
