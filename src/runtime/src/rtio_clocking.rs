@@ -121,100 +121,120 @@ fn init_drtio(timer: &mut GlobalTimer)
 
 #[cfg(has_si5324)]
 fn setup_si5324(i2c: &mut I2c, timer: &mut GlobalTimer, clk: RtioClock) {
-    let si5324_settings = match clk {
+    let (si5324_settings, si5324_ref_input) = match clk {
         RtioClock::Ext0_Synth0_10to125 => { // 125 MHz output from 10 MHz CLKINx reference, 504 Hz BW
             info!("using 10MHz reference to make 125MHz RTIO clock with PLL");
-            si5324::FrequencySettings {
-                n1_hs  : 10,
-                nc1_ls : 4,
-                n2_hs  : 10,
-                n2_ls  : 300,
-                n31    : 6,
-                n32    : 6,
-                bwsel  : 4,
-                crystal_ref: false
-            }
+            (
+                si5324::FrequencySettings {
+                    n1_hs  : 10,
+                    nc1_ls : 4,
+                    n2_hs  : 10,
+                    n2_ls  : 300,
+                    n31    : 6,
+                    n32    : 6,
+                    bwsel  : 4,
+                    crystal_ref: false
+                },
+                si5324::Input::Ckin1
+            )
         },
         RtioClock::Ext0_Synth0_100to125 => { // 125MHz output, from 100MHz CLKINx reference, 586 Hz loop bandwidth
             info!("using 100MHz reference to make 125MHz RTIO clock with PLL");
-            si5324::FrequencySettings {
-                n1_hs  : 10,
-                nc1_ls : 4,
-                n2_hs  : 10,
-                n2_ls  : 260,
-                n31    : 52,
-                n32    : 52,
-                bwsel  : 4,
-                crystal_ref: false
-            }
+            (
+                si5324::FrequencySettings {
+                    n1_hs  : 10,
+                    nc1_ls : 4,
+                    n2_hs  : 10,
+                    n2_ls  : 260,
+                    n31    : 52,
+                    n32    : 52,
+                    bwsel  : 4,
+                    crystal_ref: false
+                },
+                si5324::Input::Ckin1
+            )
         },
         RtioClock::Ext0_Synth0_125to125 => { // 125MHz output, from 125MHz CLKINx reference, 606 Hz loop bandwidth
             info!("using 125MHz reference to make 125MHz RTIO clock with PLL");
-            si5324::FrequencySettings {
-                n1_hs  : 5,
-                nc1_ls : 8,
-                n2_hs  : 7,
-                n2_ls  : 360,
-                n31    : 63,
-                n32    : 63,
-                bwsel  : 4,
-                crystal_ref: false
-            }
+            (
+                si5324::FrequencySettings {
+                    n1_hs  : 5,
+                    nc1_ls : 8,
+                    n2_hs  : 7,
+                    n2_ls  : 360,
+                    n31    : 63,
+                    n32    : 63,
+                    bwsel  : 4,
+                    crystal_ref: false
+                },
+                si5324::Input::Ckin1
+            )
         },
         RtioClock::Int_150 => { // 150MHz output, from crystal
             info!("using internal 150MHz RTIO clock");
-            si5324::FrequencySettings {
-                n1_hs  : 9,
-                nc1_ls : 4,
-                n2_hs  : 10,
-                n2_ls  : 33732,
-                n31    : 7139,
-                n32    : 7139,
-                bwsel  : 3,
-                crystal_ref: true
-            }
+            (
+                si5324::FrequencySettings {
+                    n1_hs  : 9,
+                    nc1_ls : 4,
+                    n2_hs  : 10,
+                    n2_ls  : 33732,
+                    n31    : 7139,
+                    n32    : 7139,
+                    bwsel  : 3,
+                    crystal_ref: true
+                },
+                si5324::Input::Ckin2
+            )
         },
         RtioClock::Int_100 => { // 100MHz output, from crystal.
             info!("using internal 100MHz RTIO clock");
-            si5324::FrequencySettings {
-                n1_hs  : 9,
-                nc1_ls : 6,
-                n2_hs  : 10,
-                n2_ls  : 33732,
-                n31    : 7139,
-                n32    : 7139,
-                bwsel  : 3,
-                crystal_ref: true
-            }
+            (
+                si5324::FrequencySettings {
+                    n1_hs  : 9,
+                    nc1_ls : 6,
+                    n2_hs  : 10,
+                    n2_ls  : 33732,
+                    n31    : 7139,
+                    n32    : 7139,
+                    bwsel  : 3,
+                    crystal_ref: true
+                },
+                si5324::Input::Ckin2
+            )
         },
         RtioClock::Int_125 => { // 125MHz output, from crystal, 7 Hz
             info!("using internal 125MHz RTIO clock");
-            si5324::FrequencySettings {
-                n1_hs  : 10,
-                nc1_ls : 4,
-                n2_hs  : 10,
-                n2_ls  : 19972,
-                n31    : 4565,
-                n32    : 4565,
-                bwsel  : 4,
-                crystal_ref: true
-            }
-        }
+            (
+                si5324::FrequencySettings {
+                    n1_hs  : 10,
+                    nc1_ls : 4,
+                    n2_hs  : 10,
+                    n2_ls  : 19972,
+                    n31    : 4565,
+                    n32    : 4565,
+                    bwsel  : 4,
+                    crystal_ref: true
+                },
+                si5324::Input::Ckin2
+            )
+        },
         _ => { // same setting  as Int_125, but fallback to default
             warn!("rtio_clock setting '{:?}' is unsupported. Falling back to default internal 125MHz RTIO clock.", clk);
-            si5324::FrequencySettings {
-                n1_hs  : 10,
-                nc1_ls : 4,
-                n2_hs  : 10,
-                n2_ls  : 19972,
-                n31    : 4565,
-                n32    : 4565,
-                bwsel  : 4,
-                crystal_ref: true
-            }
+            (
+                si5324::FrequencySettings {
+                    n1_hs  : 10,
+                    nc1_ls : 4,
+                    n2_hs  : 10,
+                    n2_ls  : 19972,
+                    n31    : 4565,
+                    n32    : 4565,
+                    bwsel  : 4,
+                    crystal_ref: true
+                },
+                si5324::Input::Ckin2
+            )
         }
     };
-    let si5324_ref_input = si5324::Input::Ckin2;
     si5324::setup(i2c, &si5324_settings, si5324_ref_input, timer).expect("cannot initialize Si5324");
 }
 
@@ -224,7 +244,7 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
     #[cfg(has_si5324)]
     {
         let i2c = unsafe { (&mut i2c::I2C_BUS).as_mut().unwrap() };
-        let si5324_ext_input = si5324::Input::Ckin2;
+        let si5324_ext_input = si5324::Input::Ckin1;
         match clk {
             RtioClock::Ext0_Bypass => si5324::bypass(i2c, si5324_ext_input, timer).expect("cannot bypass Si5324"),
             _ => setup_si5324(i2c, timer, clk),
