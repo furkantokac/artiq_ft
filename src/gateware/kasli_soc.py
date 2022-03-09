@@ -96,6 +96,19 @@ def eem_iostandard(eem):
     return IOStandard(eem_iostandard_dict[eem])
 
 
+class SMAClkinForward(Module):
+    def __init__(self, platform):
+        sma_clkin = platform.request("sma_clkin")
+        sma_clkin_se = Signal()
+        cdr_clk_se = Signal()
+        cdr_clk = platform.request("cdr_clk")
+        self.specials += [
+            Instance("IBUFDS", i_I=sma_clkin.p, i_IB=sma_clkin.n, o_O=sma_clkin_se),
+            Instance("ODDR", i_C=sma_clkin_se, i_CE=1, i_D1=1, i_D2=0, o_Q=cdr_clk_se),
+            Instance("OBUFDS", i_I=cdr_clk_se, o_O=cdr_clk.p, o_OB=cdr_clk.n)
+        ]
+
+
 class GenericStandalone(SoCCore):
     def __init__(self, description, acpki=False):
         self.acpki = acpki
@@ -112,6 +125,8 @@ class GenericStandalone(SoCCore):
 
         platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
         platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
+
+        self.submodules += SMAClkinForward(self.platform)
 
         self.rustc_cfg["has_si5324"] = None
         self.rustc_cfg["si5324_soft_reset"] = None
@@ -196,6 +211,8 @@ class GenericMaster(SoCCore):
 
         platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
         platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
+
+        self.submodules += SMAClkinForward(self.platform)
 
         data_pads = [platform.request("sfp", i) for i in range(4)]
 
