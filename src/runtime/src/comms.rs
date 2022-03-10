@@ -365,7 +365,7 @@ async fn handle_connection(stream: &mut TcpStream, control: Rc<RefCell<kernel::C
 }
 
 pub fn main(timer: GlobalTimer, cfg: Config) {
-    let net_addresses = net_settings::get_adresses(&cfg);
+    let net_addresses = net_settings::get_addresses(&cfg);
     info!("network addresses: {}", net_addresses);
 
     let eth = zynq::eth::Eth::eth0(net_addresses.hardware_addr.0.clone());
