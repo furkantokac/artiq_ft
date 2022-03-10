@@ -82,19 +82,22 @@ async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, da
         Tag::List(it) => {
             #[repr(C)]
             struct List { elements: *mut (), length: u32 }
-            consume_value!(List, |ptr| {
+            consume_value!(*mut List, |ptr| {
                 let length = proto_async::read_i32(stream).await? as usize;
-                (*ptr).length  = length as u32;
                 let tag = it.clone().next().expect("truncated tag");
                 let data_size = tag.size() * length as usize +
                     match tag {
                         Tag::Int64 | Tag::Float64 => 4,
                         _ => 0
                     };
-                let mut data = alloc(data_size).await;
+                let data = alloc(data_size + 8).await as *mut u8;
+                *ptr = data as *mut List;
+                let ptr = data as *mut List;
+                let data = data.offset(8);
 
                 let alignment = tag.alignment();
-                data = data.offset(alignment_offset(alignment as isize, data as isize));
+                let mut data = data.offset(alignment_offset(alignment as isize, data as isize)) as *mut ();
+                (*ptr).length  = length as u32;
                 (*ptr).elements = data;
                 match tag {
                     Tag::Bool => {
@@ -250,11 +253,11 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
         Tag::List(it) => {
             #[repr(C)]
             struct List { elements: *const (), length: u32 }
-            consume_value!(List, |ptr| {
-                let length = (*ptr).length as isize;
+            consume_value!(&List, |ptr| {
+                let length = (**ptr).length as isize;
                 writer.write_u32((*ptr).length)?;
                 let tag = it.clone().next().expect("truncated tag");
-                let mut data = (*ptr).elements;
+                let mut data = (**ptr).elements;
                 writer.write_u8(tag.as_u8())?;
                 match tag {
                     Tag::Bool => {
@@ -446,10 +449,10 @@ mod tag {
                     it.take(3).map(|t| t.alignment()).max().unwrap()
                 }
                 // CSlice basically
-                Tag::Bytes | Tag::String | Tag::ByteArray | Tag::List(_) =>
+                Tag::Bytes | Tag::String | Tag::ByteArray =>
                     core::mem::align_of::<CSlice<()>>(),
                 // array buffer is allocated, so no need for alignment first
-                Tag::Array(_, _) => 1,
+                Tag::List(_) | Tag::Array(_, _) => 1,
                 // will not be sent from the host
                 _ => unreachable!("unexpected tag from host")
             }
@@ -477,7 +480,7 @@ mod tag {
                     }
                     size
                 }
-                Tag::List(_) => 8,
+                Tag::List(_) => 4,
                 Tag::Array(_, num_dims) => 4 * (1 + num_dims as usize),
                 Tag::Range(it) => {
                     let tag = it.clone().next().expect("truncated tag");
