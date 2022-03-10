@@ -4,7 +4,7 @@
       "inputs": {
         "artiq-comtools": "artiq-comtools",
         "mozilla-overlay": "mozilla-overlay",
-        "nixpkgs": "nixpkgs_2",
+        "nixpkgs": "nixpkgs_3",
         "sipyco": "sipyco_2",
         "src-migen": "src-migen",
         "src-misoc": "src-misoc",
@@ -109,6 +109,22 @@
     },
     "nixpkgs_2": {
       "locked": {
+        "lastModified": 1646588256,
+        "narHash": "sha256-ZHljmNlt19nSm0Mz8fx6QEhddKUkU4hhwFmfNmGn+EY=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "2ebb6c1e5ae402ba35cca5eec58385e5f1adea04",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-21.11",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_3": {
+      "locked": {
         "lastModified": 1644472683,
         "narHash": "sha256-sP6iM4NksOYO6NFfTJ96cg+ClPnq6cdY30xKA1iYtyU=",
         "owner": "NixOS",
@@ -123,7 +139,7 @@
         "type": "github"
       }
     },
-    "nixpkgs_3": {
+    "nixpkgs_4": {
       "locked": {
         "lastModified": 1646588256,
         "narHash": "sha256-ZHljmNlt19nSm0Mz8fx6QEhddKUkU4hhwFmfNmGn+EY=",
@@ -148,11 +164,7 @@
     },
     "sipyco": {
       "inputs": {
-        "nixpkgs": [
-          "artiq",
-          "artiq-comtools",
-          "nixpkgs"
-        ]
+        "nixpkgs": "nixpkgs_2"
       },
       "locked": {
         "lastModified": 1644649772,
@@ -170,7 +182,7 @@
     },
     "sipyco_2": {
       "inputs": {
-        "nixpkgs": "nixpkgs_3"
+        "nixpkgs": "nixpkgs_4"
       },
       "locked": {
         "lastModified": 1644649772,
