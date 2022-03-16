@@ -58,20 +58,17 @@ impl fmt::Display for RoutingTable {
 pub fn config_routing_table(default_n_links: usize, cfg: &Config) -> RoutingTable {
     let mut ret = RoutingTable::default_master(default_n_links);
     if let Ok(data) = cfg.read("routing_table") {
-        if data.len() == DEST_COUNT*MAX_HOPS
-        {
+        if data.len() == DEST_COUNT*MAX_HOPS {
             for i in 0..DEST_COUNT {
                 for j in 0..MAX_HOPS {
                     ret.0[i][j] = data[i*MAX_HOPS+j];
                 }
             }
+        } else {
+            warn!("length of the configured routing table is incorrect, using default");
         }
-        else {
-            warn!("length of the routing table is incorrect, using default");
-        }
-    }
-    else {
-        warn!("could not read routing table from configuration, using default");
+    } else {
+        info!("could not read routing table from configuration, using default");
     }
     info!("routing table: {}", ret);
     ret
