@@ -62,14 +62,14 @@ mod remote_moninj {
     use crate::rtio_mgt::drtio;
     use log::error;
 
-    pub fn read_probe(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, probe: i8) -> i32 {
+    pub fn read_probe(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, probe: i8) -> i64 {
         let reply = task::block_on(drtio::aux_transact(aux_mutex, linkno, &drtioaux::Packet::MonitorRequest { 
             destination: destination,
             channel: channel as _,
             probe: probe as _},
             timer));
         match reply {
-            Ok(drtioaux::Packet::MonitorReply { value }) => return value as i32,
+            Ok(drtioaux::Packet::MonitorReply { value }) => return value as i64,
             Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
             Err(e) => error!("aux packet error ({})", e)
         }
@@ -106,12 +106,12 @@ mod remote_moninj {
 mod local_moninj {
     use libboard_artiq::pl::csr;
 
-    pub fn read_probe(channel: i32, probe: i8) -> i32 {
+    pub fn read_probe(channel: i32, probe: i8) -> i64 {
         unsafe {
             csr::rtio_moninj::mon_chan_sel_write(channel as _);
             csr::rtio_moninj::mon_probe_sel_write(probe as _);
             csr::rtio_moninj::mon_value_update_write(1);
-            csr::rtio_moninj::mon_value_read() as i32
+            csr::rtio_moninj::mon_value_read() as i64
         }
     }
 
@@ -162,7 +162,7 @@ async fn handle_connection(stream: &TcpStream, timer: GlobalTimer,
     }
     stream.send_slice("e".as_bytes()).await?;
 
-    let mut probe_watch_list: BTreeMap<(i32, i8), Option<i32>> = BTreeMap::new();
+    let mut probe_watch_list: BTreeMap<(i32, i8), Option<i64>> = BTreeMap::new();
     let mut inject_watch_list: BTreeMap<(i32, i8), Option<i8>> = BTreeMap::new();
     let mut next_check = Milliseconds(0);
     loop {
@@ -233,7 +233,7 @@ async fn handle_connection(stream: &TcpStream, timer: GlobalTimer,
                         write_i8(&stream, DeviceMessage::MonitorStatus.to_i8().unwrap()).await?;
                         write_i32(&stream, channel).await?;
                         write_i8(&stream, probe).await?;
-                        write_i32(&stream, current).await?;
+                        write_i64(&stream, current).await?;
                         *previous = Some(current);
                     }
                 }
