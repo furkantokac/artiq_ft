@@ -233,3 +233,21 @@ extern fn dl_unwind_find_exidx(pc: *const u32, len_ptr: *mut u32) -> *const u32 
     }
     start
 }
+
+pub extern fn rtio_get_destination_status(destination: i32) -> bool {
+    #[cfg(has_drtio)]
+    if destination > 0 && destination < 255 {
+        let reply = unsafe {
+            let core1_rx = KERNEL_CHANNEL_0TO1.as_mut().unwrap();
+            let core1_tx = KERNEL_CHANNEL_1TO0.as_mut().unwrap();
+            core1_tx.send(Message::UpDestinationsRequest(destination));
+            core1_rx.recv()
+        };
+        return match reply {
+            Message::UpDestinationsReply(x) => x,
+            _ => panic!("received unexpected reply to UpDestinationsRequest: {:?}", reply)
+        };
+    }    
+
+    destination == 0
+}

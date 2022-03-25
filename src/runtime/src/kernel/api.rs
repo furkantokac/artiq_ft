@@ -13,7 +13,7 @@ use crate::i2c;
 use super::rpc::{rpc_send, rpc_send_async, rpc_recv};
 use super::dma;
 use super::cache;
-
+use super::core1::rtio_get_destination_status;
 
 extern "C" {
     fn vsnprintf_(buffer: *mut c_char, count: size_t, format: *const c_char, va: VaList) -> c_int;
@@ -87,7 +87,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
 
         // rtio
         api!(rtio_init = rtio::init),
-        api!(rtio_get_destination_status = rtio::get_destination_status),
+        api!(rtio_get_destination_status = rtio_get_destination_status),
         api!(rtio_get_counter = rtio::get_counter),
         api!(rtio_output = rtio::output),
         api!(rtio_output_wide = rtio::output_wide),

@@ -47,6 +47,9 @@ pub enum Message {
     DmaEraseRequest(String),
     DmaGetRequest(String),
     DmaGetReply(Option<(Vec<u8>, i64)>),
+
+    UpDestinationsRequest(i32),
+    UpDestinationsReply(bool),
 }
 
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Sender<'static, Message>>> = Mutex::new(None);

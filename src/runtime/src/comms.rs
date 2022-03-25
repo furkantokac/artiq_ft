@@ -159,7 +159,7 @@ async fn write_exception_string(stream: &TcpStream, s: CSlice<'static, u8>) -> R
     Ok(())
 }
 
-async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kernel::Control>>) -> Result<()> {
+async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kernel::Control>>, up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>) -> Result<()> {
     control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
     loop {
         let reply = control.borrow_mut().rx.async_recv().await;
@@ -290,6 +290,10 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                 let result = DMA_RECORD_STORE.lock().get(&name).map(|v| v.clone());
                 control.borrow_mut().tx.async_send(kernel::Message::DmaGetReply(result)).await;
             },
+            kernel::Message::UpDestinationsRequest(destination) => {
+                let result = up_destinations.borrow()[destination as usize];
+                control.borrow_mut().tx.async_send(kernel::Message::UpDestinationsReply(result)).await;
+            }
             _ => {
                 panic!("unexpected message from core1 while kernel was running: {:?}", reply);
             }
@@ -331,7 +335,7 @@ async fn load_kernel(buffer: &Vec<u8>, control: &Rc<RefCell<kernel::Control>>, s
     }
 }
 
-async fn handle_connection(stream: &mut TcpStream, control: Rc<RefCell<kernel::Control>>) -> Result<()> {
+async fn handle_connection(stream: &mut TcpStream, control: Rc<RefCell<kernel::Control>>, up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>) -> Result<()> {
     stream.set_ack_delay(None);
 
     if !expect(stream, b"ARTIQ coredev\n").await? {
@@ -354,7 +358,7 @@ async fn handle_connection(stream: &mut TcpStream, control: Rc<RefCell<kernel::C
                 load_kernel(&buffer, &control, Some(stream)).await?;
             },
             Request::RunKernel => {
-                handle_run_kernel(Some(stream), &control).await?;
+                handle_run_kernel(Some(stream), &control, &up_destinations).await?;
             },
             _ => {
                 error!("unexpected request from host: {:?}", request);
@@ -427,7 +431,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
         info!("Loading startup kernel...");
         if let Ok(()) = task::block_on(load_kernel(&buffer, &control, None)) {
             info!("Starting startup kernel...");
-            let _ = task::block_on(handle_run_kernel(None, &control));
+            let _ = task::block_on(handle_run_kernel(None, &control, &up_destinations));
             info!("Startup kernel finished!");
         } else {
             error!("Error loading startup kernel!");
@@ -452,13 +456,14 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
             let idle_kernel = idle_kernel.clone();
             let connection = connection.clone();
             let terminate = terminate.clone();
+            let up_destinations = up_destinations.clone();
 
             // we make sure the value of terminate is 0 before we start
             let _ = terminate.try_wait();
             task::spawn(async move {
                 select_biased! {
                     _ = (async {
-                        let _ = handle_connection(&mut stream, control.clone())
+                        let _ = handle_connection(&mut stream, control.clone(), &up_destinations)
                             .await
                             .map_err(|e| warn!("connection terminated: {}", e));
                         if let Some(buffer) = &*idle_kernel {
@@ -466,7 +471,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
                             let _ = load_kernel(&buffer, &control, None)
                                 .await.map_err(|_| warn!("error loading idle kernel"));
                             info!("Running idle kernel");
-                            let _ = handle_run_kernel(None, &control)
+                            let _ = handle_run_kernel(None, &control, &up_destinations)
                                 .await.map_err(|_| warn!("error running idle kernel"));
                             info!("Idle kernel terminated");
                         }

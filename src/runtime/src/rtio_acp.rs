@@ -57,11 +57,6 @@ pub extern fn init() {
     }
 }
 
-pub extern fn get_destination_status(destination: i32) -> bool {
-    // TODO
-    destination == 0
-}
-
 pub extern fn get_counter() -> i64 {
     unsafe {
         csr::rtio::counter_update_write(1);
