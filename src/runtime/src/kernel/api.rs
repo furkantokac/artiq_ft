@@ -199,7 +199,10 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__aeabi_memclr),
 
         // libc
-        api!(memcmp, extern { fn memcmp(a: *const u8, b: *mut u8, size: usize); }),
+        api!(memcpy, extern { fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8; }),
+        api!(memmove, extern { fn memmove(dest: *mut u8, src: *const u8, n: usize) -> *mut u8; }),
+        api!(memset, extern { fn memset(s: *mut u8, c: i32, n: usize) -> *mut u8; }),
+        api!(memcmp, extern { fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32; }),
 
         // exceptions
         api!(_Unwind_Resume = unwind::_Unwind_Resume),
