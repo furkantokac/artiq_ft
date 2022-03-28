@@ -47,7 +47,7 @@ Impure incremental build and execution on a remote JTAG server:
 ```shell
 nix develop
 cd src
-gateware/zc706.py -g ../build/gateware -v <variant> # build gateware
+gateware/zc706.py -g ../build/gateware -V <variant> # build gateware
 make GWARGS="-V <variant>" <runtime/satman>    # build firmware
 cd ..
 ./remote_run.sh -i
