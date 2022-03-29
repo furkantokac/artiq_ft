@@ -48,7 +48,9 @@ pub enum Message {
     DmaGetRequest(String),
     DmaGetReply(Option<(Vec<u8>, i64)>),
 
+    #[cfg(has_drtio)]
     UpDestinationsRequest(i32),
+    #[cfg(has_drtio)]
     UpDestinationsReply(bool),
 }
 

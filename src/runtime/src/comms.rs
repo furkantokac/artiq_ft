@@ -159,7 +159,7 @@ async fn write_exception_string(stream: &TcpStream, s: CSlice<'static, u8>) -> R
     Ok(())
 }
 
-async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kernel::Control>>, up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>) -> Result<()> {
+async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kernel::Control>>, _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>) -> Result<()> {
     control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
     loop {
         let reply = control.borrow_mut().rx.async_recv().await;
@@ -290,8 +290,9 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                 let result = DMA_RECORD_STORE.lock().get(&name).map(|v| v.clone());
                 control.borrow_mut().tx.async_send(kernel::Message::DmaGetReply(result)).await;
             },
+            #[cfg(has_drtio)]
             kernel::Message::UpDestinationsRequest(destination) => {
-                let result = up_destinations.borrow()[destination as usize];
+                let result = _up_destinations.borrow()[destination as usize];
                 control.borrow_mut().tx.async_send(kernel::Message::UpDestinationsReply(result)).await;
             }
             _ => {
