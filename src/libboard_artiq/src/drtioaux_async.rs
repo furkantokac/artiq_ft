@@ -42,11 +42,11 @@ async fn receive<F, T>(linkno: u8, f: F) -> Result<Option<T>, Error>
     let linkidx = linkno as usize;
     unsafe {
         if (DRTIOAUX[linkidx].aux_rx_present_read)() == 1 {
-            let ptr = (DRTIOAUX_MEM[linkidx].base + DRTIOAUX_MEM[linkidx].size / 2) as *mut u16;
+            let ptr = (DRTIOAUX_MEM[linkidx].base + DRTIOAUX_MEM[linkidx].size / 2) as *mut u32;
             let len = (DRTIOAUX[linkidx].aux_rx_length_read)() as usize;
             // work buffer to accomodate axi burst reads
             let mut buf: [u8; 1024] = [0; 1024];
-            copy_work_buffer(ptr, buf.as_mut_ptr() as *mut u16, len as isize);
+            copy_work_buffer(ptr, buf.as_mut_ptr() as *mut u32, len as isize);
             let result = f(&buf[0..len]);
             (DRTIOAUX[linkidx].aux_rx_present_write)(1);
             Ok(Some(result?))
@@ -106,12 +106,12 @@ async fn transmit<F>(linkno: u8, f: F) -> Result<(), Error>
     let linkno = linkno as usize;
     unsafe {
         let _ = block_async!(tx_ready(linkno)).await;
-        let ptr = DRTIOAUX_MEM[linkno].base as *mut u16;
+        let ptr = DRTIOAUX_MEM[linkno].base as *mut u32;
         let len = DRTIOAUX_MEM[linkno].size / 2;
         // work buffer, works with unaligned mem access
         let mut buf: [u8; 1024] = [0; 1024]; 
         let len = f(&mut buf[0..len])?;
-        copy_work_buffer(buf.as_mut_ptr() as *mut u16, ptr, len as isize);
+        copy_work_buffer(buf.as_mut_ptr() as *mut u32, ptr, len as isize);
         (DRTIOAUX[linkno].aux_tx_length_write)(len as u16);
         (DRTIOAUX[linkno].aux_tx_write)(1);
         Ok(())
