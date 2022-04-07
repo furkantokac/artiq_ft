@@ -21,7 +21,7 @@ libsupport_zynq = { default-features = false, features = ["alloc_core"], git = "
 libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
 libasync = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
 libregister = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
-libconfig = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["ipv6"] }
+libconfig = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["fat_lfn", "ipv6"] }
 
 libboard_artiq = { path = "../libboard_artiq" }
 unwind = { path = "../libunwind" }
