@@ -1,4 +1,4 @@
-use log::{info, warn};
+use log::{info, warn, error};
 use libboard_zynq::timer::GlobalTimer;
 use embedded_hal::blocking::delay::DelayMs;
 use libconfig::Config;
@@ -84,22 +84,18 @@ fn init_rtio(timer: &mut GlobalTimer, _clk: RtioClock) {
         }
     };
 
-    loop {
-        unsafe {
-            pl::csr::rtio_crg::pll_reset_write(1);
-            #[cfg(has_rtio_crg_clock_sel)]
-            pl::csr::rtio_crg::clock_sel_write(clock_sel);
-            pl::csr::rtio_crg::pll_reset_write(0);
-        }
-        timer.delay_ms(1);
-        let locked = unsafe { pl::csr::rtio_crg::pll_locked_read() != 0 };
-        if locked {
-            info!("RTIO PLL locked");
-            break;
-        } else {
-            warn!("RTIO PLL failed to lock, retrying...");
-            timer.delay_ms(500);
-        }
+    unsafe {
+        pl::csr::rtio_crg::pll_reset_write(1);
+        #[cfg(has_rtio_crg_clock_sel)]
+        pl::csr::rtio_crg::clock_sel_write(clock_sel);
+        pl::csr::rtio_crg::pll_reset_write(0);
+    }
+    timer.delay_ms(1);
+    let locked = unsafe { pl::csr::rtio_crg::pll_locked_read() != 0 };
+    if locked {
+        info!("RTIO PLL locked");
+    } else {
+        error!("RTIO PLL failed to lock");
     }
 
     unsafe {
