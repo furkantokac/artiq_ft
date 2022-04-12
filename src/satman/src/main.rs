@@ -392,7 +392,7 @@ fn drtiosat_process_errors() {
 
 
 #[cfg(has_rtio_crg)]
-fn init_rtio_crg(timer: GlobalTimer) {
+fn init_rtio_crg(timer: &mut GlobalTimer) {
     unsafe {
         csr::rtio_crg::pll_reset_write(0);
     }
@@ -401,10 +401,13 @@ fn init_rtio_crg(timer: GlobalTimer) {
     if !locked {
         error!("RTIO clock failed");
     }
+    else {
+        info!("RTIO PLL locked");
+    }
 }
 
 #[cfg(not(has_rtio_crg))]
-fn init_rtio_crg(_timer: GlobalTimer) { }
+fn init_rtio_crg(_timer: &mut GlobalTimer) { }
 
 fn hardware_tick(ts: &mut u64, timer: &mut GlobalTimer) {
     let now = timer.get_time();
@@ -477,7 +480,7 @@ pub extern fn main_core0() -> i32 {
     unsafe {
         csr::drtio_transceiver::txenable_write(0xffffffffu32 as _);
     }
-    init_rtio_crg(timer);
+    init_rtio_crg(&mut timer);
 
     #[cfg(has_drtio_routing)]
     let mut repeaters = [repeater::Repeater::default(); csr::DRTIOREP.len()];

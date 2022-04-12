@@ -340,6 +340,7 @@ class GenericSatellite(SoCCore):
         self.crg = self.ps7 # HACK for eem_7series to find the clock
         self.submodules.rtio_crg = RTIOClockMultiplier(rtio_clk_freq)
         self.csr_devices.append("rtio_crg")
+        self.rustc_cfg["has_rtio_crg"] = None
         
         data_pads = [platform.request("sfp", i) for i in range(4)]
         

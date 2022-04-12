@@ -431,6 +431,7 @@ class _SatelliteBase(SoCCore):
 
         self.submodules.rtio_crg = RTIOClockMultiplier(self.sys_clk_freq)
         self.csr_devices.append("rtio_crg")
+        self.rustc_cfg["has_rtio_crg"] = None
         fix_serdes_timing_path(self.platform)
 
     def add_rtio(self, rtio_channels):
