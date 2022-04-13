@@ -71,6 +71,19 @@ class RTIOCRG(Module, AutoCSR):
         ]
 
 
+class SMAClkinForward(Module):
+    def __init__(self, platform):
+        sma_clkin = platform.request("user_sma_clock")
+        sma_clkin_se = Signal()
+        si5324_clkin_se = Signal()
+        si5324_clkin = platform.request("si5324_clkin")
+        self.specials += [
+            Instance("IBUFDS", i_I=sma_clkin.p, i_IB=sma_clkin.n, o_O=sma_clkin_se),
+            Instance("ODDR", i_C=sma_clkin_se, i_CE=1, i_D1=1, i_D2=0, o_Q=si5324_clkin_se),
+            Instance("OBUFDS", i_I=si5324_clkin_se, o_O=si5324_clkin.p, o_OB=si5324_clkin.n)
+        ]
+
+
 # The NIST backplanes require setting VADJ to 3.3V by reprogramming the power supply.
 # This also changes the I/O standard for some on-board LEDs.
 leds_fmc33 = [
@@ -204,6 +217,8 @@ class _MasterBase(SoCCore):
             platform.request("sfp"),
             platform.request("user_sma_mgt")
         ]
+
+        self.submodules += SMAClkinForward(self.platform)
 
         # 1000BASE_BX10 Ethernet compatible, 125MHz RTIO clock
         self.submodules.drtio_transceiver = gtx_7series.GTX(
