@@ -217,7 +217,7 @@ class GenericMaster(SoCCore):
         data_pads = [platform.request("sfp", i) for i in range(4)]
 
         self.submodules.drtio_transceiver = gtx_7series.GTX(
-            clock_pads=platform.request("clk125_gtp"),
+            clock_pads=platform.request("clk_gtp"),
             pads=data_pads,
             sys_clk_freq=sys_clk_freq)
         self.csr_devices.append("drtio_transceiver")
@@ -345,7 +345,7 @@ class GenericSatellite(SoCCore):
         data_pads = [platform.request("sfp", i) for i in range(4)]
         
         self.submodules.drtio_transceiver = gtx_7series.GTX(
-            clock_pads=platform.request("clk125_gtp"),  
+            clock_pads=platform.request("clk_gtp"),  
             pads=data_pads,
             sys_clk_freq=sys_clk_freq)
         self.csr_devices.append("drtio_transceiver")
