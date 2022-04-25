@@ -247,6 +247,86 @@
       }
       else {}
     );
+
+    gateware-sim = pkgs.stdenv.mkDerivation {
+      name = "gateware-sim";
+      
+      nativeBuildInputs = [ 
+        (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi artiq ]))) 
+        artiqpkgs.artiq
+      ];
+
+      phases = [ "buildPhase" ];
+
+      buildPhase =
+        ''
+        python -m unittest discover ${self}/src/gateware -v
+        touch $out
+        '';
+    };
+
+    # for hitl-tests
+    zc706-nist_qc2 = (build { target = "zc706"; variant = "nist_qc2"; });
+    zc706-hitl-tests = pkgs.stdenv.mkDerivation {
+      name = "zc706-hitl-tests";
+
+      # requires patched Nix
+      __networked = true;
+
+      buildInputs = [
+        pkgs.netcat pkgs.openssh pkgs.rsync artiq artiq-netboot zynqpkgs.zc706-szl
+      ];
+      phases = [ "buildPhase" ];
+
+      buildPhase =
+        ''
+        export NIX_SSHOPTS="-F /dev/null -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i /opt/hydra_id_ed25519"
+        LOCKCTL=$(mktemp -d)
+        mkfifo $LOCKCTL/lockctl
+
+        cat $LOCKCTL/lockctl | ${pkgs.openssh}/bin/ssh \
+        $NIX_SSHOPTS \
+        rpi-4 \
+        'mkdir -p /tmp/board_lock && flock /tmp/board_lock/zc706-1 -c "echo Ok; cat"' \
+        | (
+          # End remote flock via FIFO
+          atexit_unlock() {
+            echo > $LOCKCTL/lockctl
+          }
+          trap atexit_unlock EXIT
+
+          # Read "Ok" line when remote successfully locked
+          read LOCK_OK
+
+          echo Power cycling board...
+          (echo b; sleep 5; echo B; sleep 5) | nc -N -w6 192.168.1.31 3131
+          echo Power cycle done.
+
+          export USER=hydra
+          export OPENOCD_ZYNQ=${zynq-rs}/openocd
+          export SZL=${zynqpkgs.zc706-szl}/szl.elf
+          bash ${self}/remote_run.sh -h rpi-4 -o "$NIX_SSHOPTS" -d ${zc706-nist_qc2.zc706-nist_qc2-jtag}
+
+          echo Waiting for the firmware to boot...
+          sleep 15
+
+          echo Running test kernel...
+          artiq_run --device-db ${self}/examples/device_db.py ${self}/examples/mandelbrot.py
+
+          echo Running ARTIQ unit tests...
+          export ARTIQ_ROOT=${self}/examples
+          export ARTIQ_LOW_LATENCY=1
+          python -m unittest discover artiq.test.coredevice -v
+
+          touch $out
+
+          echo Completed
+
+          (echo b; sleep 5) | nc -N -w6 192.168.1.31 3131
+          echo Board powered off
+        )
+        '';
+    };
   in rec {
     packages.x86_64-linux = (build { target = "zc706"; variant = "nist_clock"; }) //
       (build { target = "zc706"; variant = "nist_clock_master"; }) //
@@ -268,7 +348,7 @@
       (build { target = "kasli_soc"; variant = "master"; json = ./kasli-soc-master.json; }) //
       (build { target = "kasli_soc"; variant = "satellite"; json = ./kasli-soc-satellite.json; });
 
-    hydraJobs = packages.x86_64-linux;
+    hydraJobs = packages.x86_64-linux // { inherit zc706-hitl-tests; inherit gateware-sim; };
 
     devShell.x86_64-linux = pkgs.mkShell {
       name = "artiq-zynq-dev-shell";
