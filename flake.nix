@@ -274,7 +274,7 @@
       __networked = true;
 
       buildInputs = [
-        pkgs.netcat pkgs.openssh pkgs.rsync artiq artiq-netboot zynqpkgs.zc706-szl
+        pkgs.netcat pkgs.openssh pkgs.rsync artiqpkgs.artiq artiq-netboot zynqpkgs.zc706-szl
       ];
       phases = [ "buildPhase" ];
 
