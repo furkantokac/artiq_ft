@@ -304,7 +304,7 @@
 
           export USER=hydra
           export OPENOCD_ZYNQ=${zynq-rs}/openocd
-          export SZL=${zynqpkgs.zc706-szl}
+          export SZL=${zynqpkgs.szl}
           bash ${self}/remote_run.sh -h rpi-4 -o "$NIX_SSHOPTS" -d ${zc706-nist_qc2.zc706-nist_qc2-jtag}
 
           echo Waiting for the firmware to boot...
