@@ -311,10 +311,9 @@ class _MasterBase(SoCCore):
         self.submodules.rtio_dma = dma.DMA(self.ps7.s_axi_hp0)
         self.csr_devices.append("rtio_dma")
 
-        self.submodules.local_io = SyncRTIO(self.rtio_tsc, rtio_channels)
         self.submodules.cri_con = rtio.CRIInterconnectShared(
             [self.rtio.cri, self.rtio_dma.cri],
-            [self.local_io.cri] + self.drtio_cri,
+            [self.rtio_core.cri] + self.drtio_cri,
             mode="sync", enable_routing=True)
         self.csr_devices.append("cri_con")
 
