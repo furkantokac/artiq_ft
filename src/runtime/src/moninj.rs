@@ -58,44 +58,44 @@ enum DeviceMessage {
 #[cfg(has_drtio)]
 mod remote_moninj {
     use super::*;
-    use libboard_artiq::drtioaux;
+    use libboard_artiq::drtioaux_async;
     use crate::rtio_mgt::drtio;
     use log::error;
 
-    pub fn read_probe(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, probe: i8) -> i64 {
-        let reply = task::block_on(drtio::aux_transact(aux_mutex, linkno, &drtioaux::Packet::MonitorRequest { 
+    pub async fn read_probe(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, probe: i8) -> i64 {
+        let reply = drtio::aux_transact(aux_mutex, linkno, &drtioaux_async::Packet::MonitorRequest { 
             destination: destination,
             channel: channel as _,
             probe: probe as _},
-            timer));
+            timer).await;
         match reply {
-            Ok(drtioaux::Packet::MonitorReply { value }) => return value as i64,
+            Ok(drtioaux_async::Packet::MonitorReply { value }) => return value as i64,
             Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
             Err(e) => error!("aux packet error ({})", e)
         }
         0
     }
 
-    pub fn inject(aux_mutex: &Rc<Mutex<bool>>, _timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, overrd: i8, value: i8) {
+    pub async fn inject(aux_mutex: &Rc<Mutex<bool>>, _timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, overrd: i8, value: i8) {
         let _lock = aux_mutex.lock();
-        drtioaux::send(linkno, &drtioaux::Packet::InjectionRequest {
+        drtioaux_async::send(linkno, &drtioaux_async::Packet::InjectionRequest {
             destination: destination,
             channel: channel as _,
             overrd: overrd as _,
             value: value as _
-        }).unwrap();
+        }).await.unwrap();
     }
 
-    pub fn read_injection_status(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, overrd: i8) -> i8 {
-        let reply = task::block_on(drtio::aux_transact(aux_mutex, 
+    pub async fn read_injection_status(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, overrd: i8) -> i8 {
+        let reply = drtio::aux_transact(aux_mutex, 
             linkno, 
-            &drtioaux::Packet::InjectionStatusRequest {
+            &drtioaux_async::Packet::InjectionStatusRequest {
                 destination: destination,
                 channel: channel as _,
                 overrd: overrd as _},
-            timer));
+            timer).await;
         match reply {
-            Ok(drtioaux::Packet::InjectionStatusReply { value }) => return value as i8,
+            Ok(drtioaux_async::Packet::InjectionStatusReply { value }) => return value as i8,
             Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
             Err(e) => error!("aux packet error ({})", e)
         }
@@ -142,7 +142,7 @@ macro_rules! dispatch {
             local_moninj::$func(channel.into(), $($param, )*)
         } else {
             let linkno = hop - 1 as u8;
-            remote_moninj::$func($aux_mutex, $timer, linkno, destination, channel, $($param, )*)
+            remote_moninj::$func($aux_mutex, $timer, linkno, destination, channel, $($param, )*).await
         }
     }}
 }
@@ -163,7 +163,7 @@ async fn handle_connection(stream: &TcpStream, timer: GlobalTimer,
 
     let mut probe_watch_list: BTreeMap<(i32, i8), Option<i64>> = BTreeMap::new();
     let mut inject_watch_list: BTreeMap<(i32, i8), Option<i8>> = BTreeMap::new();
-    let mut next_check = Milliseconds(0);
+    let mut next_check = timer.get_time();
     loop {
         // TODO: we don't need fuse() here.
         // remove after https://github.com/rust-lang/futures-rs/issues/1989 lands
