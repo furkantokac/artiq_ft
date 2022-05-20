@@ -21,6 +21,7 @@ pub enum Error {
     NetworkError(smoltcp::Error),
     UnexpectedPattern,
     UnrecognizedPacket,
+
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -71,6 +72,7 @@ mod remote_moninj {
         match reply {
             Ok(drtioaux_async::Packet::MonitorReply { value }) => return value as i64,
             Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
+            Err("link went down") => {},
             Err(e) => error!("aux packet error ({})", e)
         }
         0
@@ -97,6 +99,7 @@ mod remote_moninj {
         match reply {
             Ok(drtioaux_async::Packet::InjectionStatusReply { value }) => return value as i8,
             Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
+            Err("link went down") => {},
             Err(e) => error!("aux packet error ({})", e)
         }
         0
@@ -164,19 +167,20 @@ async fn handle_connection(stream: &TcpStream, timer: GlobalTimer,
     let mut probe_watch_list: BTreeMap<(i32, i8), Option<i64>> = BTreeMap::new();
     let mut inject_watch_list: BTreeMap<(i32, i8), Option<i8>> = BTreeMap::new();
     let mut next_check = timer.get_time();
+    let timeout = |next_check: Milliseconds| -> nb::Result<(), Void> {
+        if timer.get_time() < next_check {
+            Err(nb::Error::WouldBlock)
+        } else {
+            Ok(())
+        }
+    };
     loop {
         // TODO: we don't need fuse() here.
         // remove after https://github.com/rust-lang/futures-rs/issues/1989 lands
         let read_message_f = read_i8(&stream).fuse();
         let next_check_c = next_check.clone();
-        let timeout = || -> nb::Result<(), Void> {
-            if timer.get_time() < next_check_c {
-                Err(nb::Error::WouldBlock)
-            } else {
-                Ok(())
-            }
-        };
-        let timeout_f = block_async!(timeout()).fuse();
+
+        let timeout_f = block_async!(timeout(next_check_c)).fuse();
         pin_mut!(read_message_f, timeout_f);
         select_biased! {
             message = read_message_f => {
@@ -246,7 +250,7 @@ async fn handle_connection(stream: &TcpStream, timer: GlobalTimer,
                         *previous = Some(current);
                     }
                 }
-                next_check = next_check + Milliseconds(200);
+                next_check = timer.get_time() + Milliseconds(200);
             }
         }
     }

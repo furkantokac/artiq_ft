@@ -49,6 +49,9 @@ pub mod drtio {
 
     pub async fn aux_transact(aux_mutex: &Mutex<bool>, linkno: u8, request: &Packet,
             timer: GlobalTimer) -> Result<Packet, &'static str> {
+        if !link_rx_up(linkno).await {
+            return Err("link went down");
+        }
         let _lock = aux_mutex.lock();
         drtioaux_async::send(linkno, request).await.unwrap();
         recv_aux_timeout(linkno, 200, timer).await
