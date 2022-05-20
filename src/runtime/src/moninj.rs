@@ -20,8 +20,7 @@ use crate::proto_async::*;
 pub enum Error {
     NetworkError(smoltcp::Error),
     UnexpectedPattern,
-    UnrecognizedPacket,
-
+    UnrecognizedPacket
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -72,7 +71,7 @@ mod remote_moninj {
         match reply {
             Ok(drtioaux_async::Packet::MonitorReply { value }) => return value as i64,
             Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
-            Err("link went down") => {},
+            Err("link went down") => { debug!("link is down"); },
             Err(e) => error!("aux packet error ({})", e)
         }
         0
@@ -99,7 +98,7 @@ mod remote_moninj {
         match reply {
             Ok(drtioaux_async::Packet::InjectionStatusReply { value }) => return value as i8,
             Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
-            Err("link went down") => {},
+            Err("link went down") => { debug!("link is down"); },
             Err(e) => error!("aux packet error ({})", e)
         }
         0
