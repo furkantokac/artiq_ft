@@ -72,7 +72,7 @@ unsafe fn get_ttype_entry(
     encoding: u8,
     ttype_base: usize,
     ttype: *const u8,
-) -> Result<*const u8, ()> {
+) -> Result<Option<*const u8>, ()> {
     let i = (offset * size_of_encoded_value(encoding)) as isize;
     read_encoded_pointer_with_base(
         &mut DwarfReader::new(ttype.offset(-i)),
@@ -83,7 +83,10 @@ unsafe fn get_ttype_entry(
         encoding | DW_EH_PE_pcrel,
         ttype_base,
     )
-    .map(|v| v as *const u8)
+    .map(|v| match v {
+        ttype_base => None,
+        ttype_entry => Some(ttype_entry as *const u8),
+    })
 }
 
 pub unsafe fn find_eh_action(
@@ -163,12 +166,12 @@ pub unsafe fn find_eh_action(
                                 ttype_base,
                                 ttype_table,
                             )?;
-                            let clause_ptr = *(catch_type as *const *const u32);
-                            if clause_ptr.is_null() {
-                                return Ok(EHAction::Catch(lpad));
-                            }
-                            if *clause_ptr == id {
-                                return Ok(EHAction::Catch(lpad));
+                            match catch_type {
+                                Some(clause_ptr) if *(clause_ptr as *const u32) == id => {
+                                    return Ok(EHAction::Catch(lpad))
+                                }
+                                None => return Ok(EHAction::Catch(lpad)),
+                                _ => {}
                             }
                         } else if ar_filter < 0 {
                             // FIXME: how to handle this?
