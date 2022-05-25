@@ -52,7 +52,7 @@ pub mod drtio {
         if !link_rx_up(linkno).await {
             return Err("link went down");
         }
-        let _lock = aux_mutex.lock();
+        let _lock = aux_mutex.async_lock().await;
         drtioaux_async::send(linkno, request).await.unwrap();
         recv_aux_timeout(linkno, 200, timer).await
     }
@@ -91,7 +91,7 @@ pub mod drtio {
     }
 
     async fn sync_tsc(aux_mutex: &Rc<Mutex<bool>>, linkno: u8, timer: GlobalTimer) -> Result<(), &'static str> {
-        let _lock = aux_mutex.lock();
+        let _lock = aux_mutex.async_lock().await;
 
         unsafe {
             (csr::DRTIO[linkno as usize].set_time_write)(1);
@@ -145,7 +145,7 @@ pub mod drtio {
     }
 
     async fn process_unsolicited_aux(aux_mutex: &Rc<Mutex<bool>>, linkno: u8) {
-        let _lock = aux_mutex.lock();
+        let _lock = aux_mutex.async_lock().await;
         match drtioaux_async::recv(linkno).await {
             Ok(Some(packet)) => warn!("[LINK#{}] unsolicited aux packet: {:?}", linkno, packet),
             Ok(None) => (),
