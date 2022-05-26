@@ -122,7 +122,8 @@
       "nist_clock_satellite" "nist_qc2_satellite" "acpki_nist_clock_satellite" "acpki_nist_qc2_satellite" 
       "nist_clock_satellite_100mhz" "nist_qc2_satellite_100mhz" "acpki_nist_clock_satellite_100mhz" "acpki_nist_qc2_satellite_100mhz"
     ];
-    build = { target, variant, json ? null }: let
+    build = { target, variant, json ? null, output ? null }: let
+    # output - if null will build everything (fw, gw, jtag, sd) or can be specified to build only one
       szl = zynqpkgs."${target}-szl";
       fsbl = zynqpkgs."${target}-fsbl";
       fwtype = if builtins.elem variant sat_variants then "satman" else "runtime";
@@ -235,17 +236,26 @@
           mkbootimage boot.bif $out/boot.bin
           echo file binary-dist $out/boot.bin >> $out/nix-support/hydra-build-products
         '';
-    in {
-      "${target}-${variant}-firmware" = firmware;
-      "${target}-${variant}-gateware" = gateware;
-      "${target}-${variant}-jtag" = jtag;
-      "${target}-${variant}-sd" = sd;
-    } // (
-      if builtins.elem target fsblTargets
-      then {
-        "${target}-${variant}-fsbl-sd" = fsbl-sd;
-      }
-      else {}
+    in (
+        if output == null || output == "firmware" then {
+          "${target}-${variant}-firmware" = firmware;
+        } else {}
+      ) // (
+        if output == null || output == "gateware" then {
+          "${target}-${variant}-gateware" = gateware;
+        } else {}
+      ) // (
+        if output == null || output == "jtag" then {
+          "${target}-${variant}-jtag" = jtag;
+        } else {}
+      ) // (
+        if output == null || output == "sd" then {
+          "${target}-${variant}-sd" = sd;
+        } else {}
+      ) // (
+        if builtins.elem target fsblTargets && (output == null || output == "fsbl-sd") then {
+          "${target}-${variant}-fsbl-sd" = fsbl-sd;
+        } else {}
     );
 
     gateware-sim = pkgs.stdenv.mkDerivation {
@@ -373,6 +383,8 @@
       OPENOCD_ZYNQ = "${zynq-rs}/openocd";
       SZL = "${zynqpkgs.szl}";
     };
+
+    makeArtiqZynqPackage = build;
 
   };
 }
