@@ -270,8 +270,8 @@
     zc706-hitl-tests = pkgs.stdenv.mkDerivation {
       name = "zc706-hitl-tests";
 
-      # requires patched Nix
-      __networked = true;
+      __networked = true;  # compatibility with old patched Nix
+      __impure = true;     # Nix 2.8+
 
       buildInputs = [
         pkgs.netcat pkgs.openssh pkgs.rsync artiqpkgs.artiq artiq-netboot zynqpkgs.zc706-szl
