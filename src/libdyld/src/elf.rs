@@ -2726,6 +2726,9 @@ impl Clone for Elf64_Lib {
     fn clone(&self) -> Self { *self }
 }
 pub type Elf32_Conflict = Elf32_Addr;
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct EXIDX_Entry(u32, u32);
 
 pub fn ELF32_R_SYM(info: Elf32_Word) -> Elf32_Word { info >> 8 }
 pub fn ELF32_R_TYPE(info: Elf32_Word) -> u8 { info as u8 }
