@@ -59,7 +59,8 @@ impl Relocatable for Elf32_Rela {
 enum RelType {
     None,
     Relative,
-    Lookup,
+    LookupAbs,
+    LookupRel,
 }
 
 impl RelType {
@@ -76,9 +77,11 @@ impl RelType {
                 Some(RelType::Relative),
 
             R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT
-                if arch == Arch::OpenRisc => Some(RelType::Lookup),
+                if arch == Arch::OpenRisc => Some(RelType::LookupAbs),
             R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT | R_ARM_ABS32
-                if arch == Arch::Arm => Some(RelType::Lookup),
+                if arch == Arch::Arm => Some(RelType::LookupAbs),
+
+            R_ARM_PREL31 if arch == Arch::Arm => Some(RelType::LookupRel),
 
             _ =>
                 None
@@ -106,31 +109,38 @@ pub fn relocate<R: Relocatable>(
 
     let rel_type = RelType::new(arch, rel.type_info())
         .ok_or("unsupported relocation type")?;
-    let value;
-    match rel_type {
+    let value = match rel_type {
         RelType::None =>
             return Ok(()),
 
         RelType::Relative => {
             let addend = rel.addend(&lib.image);
-            value = lib.image.ptr().wrapping_offset(addend as isize) as Elf32_Word;
+            lib.image.ptr().wrapping_offset(addend as isize) as Elf32_Word
         }
 
-        RelType::Lookup => {
+        RelType::LookupAbs | RelType::LookupRel => {
             let sym = sym.ok_or("relocation requires an associated symbol")?;
             let sym_name = lib.name_starting_at(sym.st_name as usize)?;
 
-            if let Some(addr) = lib.lookup(sym_name) {
+            let sym_addr = if let Some(addr) = lib.lookup(sym_name) {
                 // First, try to resolve against itself.
                 trace!("looked up symbol {} in image", format_sym_name(sym_name));
-                value = addr;
+                addr
             } else if let Some(addr) = resolve(sym_name) {
                 // Second, call the user-provided function.
                 trace!("resolved symbol {:?}", format_sym_name(sym_name));
-                value = addr;
+                addr
             } else {
                 // We couldn't find it anywhere.
                 return Err(Error::Lookup(format_sym_name(sym_name)))
+            };
+
+            match rel_type {
+                RelType::LookupAbs => sym_addr,
+                RelType::LookupRel =>
+                    sym_addr.wrapping_sub(
+                        lib.image.ptr().wrapping_offset(rel.offset() as isize) as Elf32_Addr),
+                _ => unreachable!()
             }
         }
     }
@@ -145,7 +155,7 @@ pub fn rebind(
         let rel_type = RelType::new(arch, rela.type_info())
             .ok_or("unsupported relocation type")?;
         match rel_type {
-            RelType::Lookup => {
+            RelType::LookupAbs => {
                 let sym = lib.symtab().get(ELF32_R_SYM(rela.r_info) as usize)
                     .ok_or("symbol out of bounds of symbol table")?;
                 let sym_name = lib.name_starting_at(sym.st_name as usize)?;
