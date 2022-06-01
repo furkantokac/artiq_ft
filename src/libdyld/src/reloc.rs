@@ -143,9 +143,17 @@ pub fn relocate<R: Relocatable>(
                 _ => unreachable!()
             }
         }
-    }
+    };
 
-    lib.image.write(rel.offset(), value)
+    match rel.type_info() {
+        R_ARM_PREL31 => {
+            let reloc_word = lib.image.get_ref::<Elf32_Word>(rel.offset())
+                                .ok_or("relocation offset cannot be read")?;
+            lib.image.write(rel.offset(), (reloc_word & 0x80000000) | (value & 0x7FFFFFFF))
+        },
+
+        _ => lib.image.write(rel.offset(), value),
+    }
 }
 
 pub fn rebind(
