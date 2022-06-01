@@ -13,7 +13,7 @@ use libcortex_a9::{
 };
 use libboard_zynq::{mpcore, gic};
 use libsupport_zynq::ram;
-use dyld::{self, Library};
+use dyld::{self, Library, elf::EXIDX_Entry};
 use crate::{eh_artiq, get_async_errors, rtio};
 use super::{
     api::resolve,
@@ -31,8 +31,8 @@ use super::{
 extern "C" {
     static __text_start: u32;
     static __text_end: u32;
-    static __exidx_start: u32;
-    static __exidx_end: u32;
+    static __exidx_start: EXIDX_Entry;
+    static __exidx_end: EXIDX_Entry;
 }
 
 unsafe fn attribute_writeback(typeinfo: *const ()) {
@@ -217,10 +217,10 @@ pub fn terminate(exceptions: &'static [Option<eh_artiq::Exception<'static>>],
 #[no_mangle]
 extern fn dl_unwind_find_exidx(pc: *const u32, len_ptr: *mut u32) -> *const u32 {
     let length;
-    let start: *const u32;
+    let start: *const EXIDX_Entry;
     unsafe {
         if &__text_start as *const u32 <= pc && pc < &__text_end as *const u32 {
-            length = (&__exidx_end as *const u32).offset_from(&__exidx_start) as u32;
+            length = (&__exidx_end as *const EXIDX_Entry).offset_from(&__exidx_start) as u32;
             start = &__exidx_start;
         } else {
             let exidx = KERNEL_IMAGE.as_ref()
@@ -231,7 +231,7 @@ extern fn dl_unwind_find_exidx(pc: *const u32, len_ptr: *mut u32) -> *const u32 
         }
         *len_ptr = length;
     }
-    start
+    start as *const u32
 }
 
 pub extern fn rtio_get_destination_status(destination: i32) -> bool {

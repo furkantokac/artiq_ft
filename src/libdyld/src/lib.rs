@@ -138,7 +138,7 @@ impl Library {
         reloc::rebind(self.arch, self, name, addr as Elf32_Word)
     }
 
-    pub fn exidx(&self) -> &[u32] {
+    pub fn exidx(&self) -> &[EXIDX_Entry] {
         self.image.get_ref_slice_unchecked(&self.exidx)
     }
 }
