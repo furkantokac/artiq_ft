@@ -271,7 +271,8 @@
       name = "zc706-hitl-tests";
 
       __networked = true;  # compatibility with old patched Nix
-      __impure = true;     # Nix 2.8+
+      # breaks hydra, https://github.com/NixOS/hydra/issues/1216
+      #__impure = true;     # Nix 2.8+
 
       buildInputs = [
         pkgs.netcat pkgs.openssh pkgs.rsync artiqpkgs.artiq artiq-netboot zynqpkgs.zc706-szl
