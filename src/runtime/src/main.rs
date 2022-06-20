@@ -22,6 +22,10 @@ use libconfig::Config;
 use libcortex_a9::l2c::enable_l2_cache;
 use libboard_artiq::{logger, identifier_read, init_gateware, pl};
 
+const ASYNC_ERROR_COLLISION: u8 = 1 << 0;
+const ASYNC_ERROR_BUSY: u8 = 1 << 1;
+const ASYNC_ERROR_SEQUENCE_ERROR: u8 = 1 << 2;
+
 mod proto_async;
 mod comms;
 mod rpc;
@@ -65,15 +69,15 @@ async fn report_async_rtio_errors() {
         let _ = block_async!(wait_for_async_rtio_error()).await;
         unsafe {
             let errors = pl::csr::rtio_core::async_error_read();
-            if errors & 1 != 0 {
+            if errors & ASYNC_ERROR_COLLISION != 0 {
                 error!("RTIO collision involving channel {}",
                        pl::csr::rtio_core::collision_channel_read());
             }
-            if errors & 2 != 0 {
+            if errors & ASYNC_ERROR_BUSY != 0 {
                 error!("RTIO busy error involving channel {}",
                        pl::csr::rtio_core::busy_channel_read());
             }
-            if errors & 4 != 0 {
+            if errors & ASYNC_ERROR_SEQUENCE_ERROR != 0 {
                 error!("RTIO sequence error involving channel {}",
                        pl::csr::rtio_core::sequence_error_channel_read());
             }
