@@ -329,7 +329,11 @@
         '';
     };
   in rec {
-    packages.x86_64-linux = (build { target = "zc706"; variant = "nist_clock"; }) //
+    packages.x86_64-linux =
+      {
+        inherit fastnumbers artiq-netboot ramda migen-axi binutils-arm;
+      } //
+      (build { target = "zc706"; variant = "nist_clock"; }) //
       (build { target = "zc706"; variant = "nist_clock_master"; }) //
       (build { target = "zc706"; variant = "nist_clock_satellite"; }) //
       (build { target = "zc706"; variant = "nist_clock_satellite_100mhz"; }) //
