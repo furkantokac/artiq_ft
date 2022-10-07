@@ -1,6 +1,6 @@
 use futures::{future::poll_fn, task::Poll};
 use libasync::{smoltcp::TcpStream, task};
-use libboard_zynq::smoltcp;
+use libboard_zynq::{smoltcp, slcr};
 use libconfig::Config;
 use core::cell::RefCell;
 use alloc::{rc::Rc, vec::Vec, string::String};
@@ -44,6 +44,7 @@ pub enum Request {
     ClearLog = 2,
     PullLog = 7,
     SetLogFilter = 3,
+    Reboot = 5,
     SetUartLogFilter = 6,
 
     ConfigRead = 12,
@@ -55,6 +56,7 @@ pub enum Request {
 pub enum Reply {
     Success = 1,
     LogContent = 2,
+    RebootImminent = 3,
     Error = 6,
     ConfigData = 7,
 }
@@ -227,6 +229,12 @@ async fn handle_connection(
                     warn!("erase failed");
                     write_i8(stream, Reply::Error as i8).await?;
                 }
+            },
+            Request::Reboot => {
+                info!("rebooting");
+                write_i8(stream, Reply::RebootImminent as i8).await?;
+                stream.flush().await?;
+                slcr::reboot();
             }
         }
     }
