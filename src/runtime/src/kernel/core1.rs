@@ -222,12 +222,15 @@ extern fn dl_unwind_find_exidx(pc: *const u32, len_ptr: *mut u32) -> *const u32 
         if &__text_start as *const u32 <= pc && pc < &__text_end as *const u32 {
             length = (&__exidx_end as *const EXIDX_Entry).offset_from(&__exidx_start) as u32;
             start = &__exidx_start;
-        } else {
+        } else if KERNEL_IMAGE != ptr::null() {
             let exidx = KERNEL_IMAGE.as_ref()
                 .expect("dl_unwind_find_exidx kernel image")
                 .library.get().as_ref().unwrap().exidx();
             length = exidx.len() as u32;
             start = exidx.as_ptr();
+        } else {
+            length = 0;
+            start = ptr::null();
         }
         *len_ptr = length;
     }

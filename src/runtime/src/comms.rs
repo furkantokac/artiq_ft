@@ -22,6 +22,8 @@ use futures::{select_biased, future::FutureExt};
 use libasync::{smoltcp::{Sockets, TcpStream}, task};
 use libconfig::{Config, net_settings};
 use libboard_artiq::drtio_routing;
+#[cfg(feature = "target_kasli_soc")]
+use libboard_zynq::error_led::ErrorLED;
 
 use crate::proto_async::*;
 use crate::kernel;
@@ -485,6 +487,64 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
             });
         }
     });
+
+    Sockets::run(&mut iface, || {
+        Instant::from_millis(timer.get_time().0 as i32)
+    });
+}
+
+
+pub fn soft_panic_main(timer: GlobalTimer, cfg: Config) -> ! {
+
+    let net_addresses = net_settings::get_addresses(&cfg);
+    info!("network addresses: {}", net_addresses);
+
+    let eth = zynq::eth::Eth::eth0(net_addresses.hardware_addr.0.clone());
+    const RX_LEN: usize = 64;
+    // Number of transmission buffers (minimum is two because with
+    // one, duplicate packet transmission occurs)
+    const TX_LEN: usize = 64;
+    let eth = eth.start_rx(RX_LEN);
+    let mut eth = eth.start_tx(TX_LEN);
+
+    let neighbor_cache = NeighborCache::new(alloc::collections::BTreeMap::new());
+    let mut iface = match net_addresses.ipv6_addr {
+        Some(addr) => {
+            let ip_addrs = [
+                IpCidr::new(net_addresses.ipv4_addr, 0),
+                IpCidr::new(net_addresses.ipv6_ll_addr, 0),
+                IpCidr::new(addr, 0)
+            ];
+            EthernetInterfaceBuilder::new(&mut eth)
+                       .ethernet_addr(net_addresses.hardware_addr)
+                       .ip_addrs(ip_addrs)
+                       .neighbor_cache(neighbor_cache)
+                       .finalize()
+        }
+        None => {
+            let ip_addrs = [
+                IpCidr::new(net_addresses.ipv4_addr, 0),
+                IpCidr::new(net_addresses.ipv6_ll_addr, 0)
+            ];
+            EthernetInterfaceBuilder::new(&mut eth)
+                       .ethernet_addr(net_addresses.hardware_addr)
+                       .ip_addrs(ip_addrs)
+                       .neighbor_cache(neighbor_cache)
+                       .finalize()
+        }
+    };
+
+    Sockets::init(32);
+
+    mgmt::start(cfg);
+
+    // getting eth settings disables the LED as it resets GPIO
+    // need to re-enable it here
+    #[cfg(feature = "target_kasli_soc")]
+    {
+        let mut err_led = ErrorLED::error_led();
+        err_led.toggle(true);
+    }
 
     Sockets::run(&mut iface, || {
         Instant::from_millis(timer.get_time().0 as i32)

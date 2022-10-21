@@ -1,4 +1,4 @@
-use log::{info, warn, error};
+use log::{info, warn};
 use libboard_zynq::timer::GlobalTimer;
 use embedded_hal::blocking::delay::DelayMs;
 use libconfig::Config;
@@ -95,7 +95,7 @@ fn init_rtio(timer: &mut GlobalTimer, _clk: RtioClock) {
     if locked {
         info!("RTIO PLL locked");
     } else {
-        error!("RTIO PLL failed to lock");
+        panic!("RTIO PLL failed to lock");
     }
 
     unsafe {
