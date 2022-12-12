@@ -219,8 +219,11 @@ pub fn bypass(i2c: &mut I2c, input: Input, timer: &mut GlobalTimer) -> Result<()
     Ok(())
 }
 
-pub fn setup(i2c: &mut I2c, settings: &FrequencySettings, input: Input, timer: &mut GlobalTimer) -> Result<()> {
+pub fn setup(i2c: &mut I2c, settings: &FrequencySettings, ext_input: Input, timer: &mut GlobalTimer) -> Result<()> {
     let s = map_frequency_settings(settings)?;
+
+    // FREE_RUN=1 routes XA/XB to CKIN2.
+    let input = if settings.crystal_ref { Input::Ckin2 } else { ext_input };
     let cksel_reg = match input {
         Input::Ckin1 => 0b00,
         Input::Ckin2 => 0b01,
