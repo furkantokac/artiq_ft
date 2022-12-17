@@ -428,7 +428,7 @@ const SI5324_SETTINGS: si5324::FrequencySettings
     n31    : 63,
     n32    : 63,
     bwsel  : 4,
-    crystal_ref: true
+    crystal_as_ckin2: true
 };
 
 #[cfg(all(has_si5324, rtio_frequency = "100.0"))]
@@ -441,7 +441,7 @@ const SI5324_SETTINGS: si5324::FrequencySettings
     n31    : 50,
     n32    : 50,
     bwsel  : 4,
-    crystal_ref: true
+    crystal_as_ckin2: true
 };
 
 static mut LOG_BUFFER: [u8; 1<<17] = [0; 1<<17];

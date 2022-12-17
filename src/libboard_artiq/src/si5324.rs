@@ -29,7 +29,7 @@ pub struct FrequencySettings {
     pub n31: u32,
     pub n32: u32,
     pub bwsel: u8,
-    pub crystal_ref: bool
+    pub crystal_as_ckin2: bool
 }
 
 pub enum Input {
@@ -84,7 +84,7 @@ fn map_frequency_settings(settings: &FrequencySettings) -> Result<FrequencySetti
         n31: settings.n31 - 1,
         n32: settings.n32 - 1,
         bwsel: settings.bwsel,
-        crystal_ref: settings.crystal_ref
+        crystal_as_ckin2: settings.crystal_as_ckin2
     };
     Ok(r)
 }
@@ -227,7 +227,7 @@ pub fn setup(i2c: &mut I2c, settings: &FrequencySettings, input: Input, timer: &
     };
 
     init(i2c, timer)?;
-    if settings.crystal_ref {
+    if settings.crystal_as_ckin2 {
         rmw(i2c, 0,   |v| v | 0x40)?;                     // FREE_RUN=1
     }
     rmw(i2c, 2,   |v| (v & 0x0f) | (s.bwsel << 4))?;
