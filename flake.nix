@@ -37,13 +37,13 @@
 
     ramda = pkgs.python3Packages.buildPythonPackage {
       pname = "ramda";
-      version = "unstable-2019-02-01";
+      version = "unstable-2020-04-11";
 
       src = pkgs.fetchFromGitHub {
         owner = "peteut";
         repo = "ramda.py";
-        rev = "bd58f8e69d0e9a713d9c1f286a1ac5e5603956b1";
-        sha256 = "0qzd5yp9lbaham8p1wiymdjapzbqsli7lvngv24c3z4ybd9jlq9g";
+        rev = "d315a9717ebd639366bf3fe26bad9e3d08ec3c49";
+        sha256 = "sha256-bmSt/IHDnULsZjsC6edELnNH7LoJSVF4L4XhwBAXRkY=";
       };
 
       nativeBuildInputs = with pkgs.python3Packages; [ pbr ];
@@ -54,46 +54,34 @@
       doCheck = false;
 
       preBuild = ''
-        export PBR_VERSION=0.0.1
+        export PBR_VERSION=0.5.5
       '';
     };
 
     migen-axi = pkgs.python3Packages.buildPythonPackage {
       pname = "migen-axi";
-      version = "unstable-2021-09-15";
+      version = "unstable-2023-01-06";
 
       src = pkgs.fetchFromGitHub {
         owner = "peteut";
         repo = "migen-axi";
-        rev = "9763505ee96acd7572280a2d1233721342dc7c3f";
-        sha256 = "15c7g05n183rka66fl1glzp6h7xjlpy1p6k8biry24dangsmxmvg";
+        rev = "27eaa84a70a3abfe1930c86c36c4de2cd652da35";
+        sha256 = "sha256-3Y9W5ns+1wbVd14iePzgSBzE+LxnGMUDtUw3BccFt80=";
       };
 
-      nativeBuildInputs = with pkgs.python3Packages; [ pbr ];
-      propagatedBuildInputs = with pkgs.python3Packages; [ setuptools click numpy toolz jinja2 ramda artiqpkgs.migen artiqpkgs.misoc ];
+      format = "pyproject";
 
-      postPatch = ''
-        substituteInPlace requirements.txt \
-          --replace "jinja2==2.11.3" "jinja2"
-        substituteInPlace requirements.txt \
-          --replace "future==0.18.2" "future"
-        substituteInPlace requirements.txt \
-          --replace "ramda==0.5.5" "ramda"
-        substituteInPlace requirements.txt \
-          --replace "colorama==0.4.3" "colorama"
-        substituteInPlace requirements.txt \
-          --replace "toolz==0.10.0" "toolz"
-        substituteInPlace requirements.txt \
-          --replace "pyserial==3.4" "pyserial"
-        substituteInPlace requirements.txt \
-          --replace "markupsafe==1.1.1" "markupsafe"
-      '';
+      propagatedBuildInputs = with pkgs.python3Packages; [ setuptools click numpy toolz jinja2 ramda artiqpkgs.migen artiqpkgs.misoc ];
 
       checkInputs = with pkgs.python3Packages; [ pytest pytest-timeout pytest-flake8 ];
       checkPhase = "pytest";
 
-      preBuild = ''
-        export PBR_VERSION=0.0.1
+      # migen/misoc version checks are broken with pyproject for some reason
+      postPatch = ''
+        substituteInPlace pyproject.toml \
+          --replace '"migen@git+https://github.com/m-labs/migen",' ""
+        substituteInPlace pyproject.toml \
+          --replace '"misoc@git+https://github.com/m-labs/misoc.git",' ""
       '';
     };
     binutils = { platform, target, zlib }: pkgs.stdenv.mkDerivation rec {
