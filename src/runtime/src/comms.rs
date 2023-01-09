@@ -252,7 +252,7 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                             } else {
                                 let msg = str::from_utf8(unsafe { slice::from_raw_parts(exception.message.as_ptr(), exception.message.len()) })
                                     .unwrap()
-                                    .replace("{rtio_channel_info:0}", &format!("{}:{}", exception.param[0], resolve_channel_name(exception.param[0] as u32)));
+                                    .replace("{rtio_channel_info:0}", &format!("0x{:04x}:{}", exception.param[0], resolve_channel_name(exception.param[0] as u32)));
                                 write_exception_string(stream, unsafe { CSlice::new(msg.as_ptr(), msg.len()) }).await?;
                             }
 

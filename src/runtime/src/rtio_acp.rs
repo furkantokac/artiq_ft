@@ -88,12 +88,12 @@ unsafe fn process_exceptional_status(channel: i32, status: i32) {
     }
     if status & RTIO_O_STATUS_UNDERFLOW != 0 {
         artiq_raise!("RTIOUnderflow",
-            format!("RTIO underflow at {{1}} mu, channel {}:{}, slack {{2}} mu", channel, resolve_channel_name(channel as u32)),
+            format!("RTIO underflow at {{1}} mu, channel 0x{:04x}:{}, slack {{2}} mu", channel, resolve_channel_name(channel as u32)),
                 channel as i64, timestamp, timestamp - get_counter());
     }
     if status & RTIO_O_STATUS_DESTINATION_UNREACHABLE != 0 {
         artiq_raise!("RTIODestinationUnreachable",
-            format!("RTIO destination unreachable, output, at {{0}} mu, channel {}:{}", channel, resolve_channel_name(channel as u32)),
+            format!("RTIO destination unreachable, output, at {{0}} mu, channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
             timestamp, channel as i64, 0);
     }
 }
@@ -177,7 +177,7 @@ pub extern fn input_timestamp(timeout: i64, channel: i32) -> i64 {
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
             artiq_raise!("RTIOOverflow",
-                         format!("RTIO input overflow on channel {}:{}", channel, resolve_channel_name(channel as u32)),
+                         format!("RTIO input overflow on channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
                          channel as i64, 0, 0);
         }
         if status & RTIO_I_STATUS_WAIT_EVENT != 0 {
@@ -185,7 +185,7 @@ pub extern fn input_timestamp(timeout: i64, channel: i32) -> i64 {
         }
         if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
             artiq_raise!("RTIODestinationUnreachable",
-                         format!("RTIO destination unreachable, input, on channel {}:{}", channel, resolve_channel_name(channel as u32)),
+                         format!("RTIO destination unreachable, input, on channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
                          channel as i64, 0, 0);
         }
 
@@ -215,12 +215,12 @@ pub extern fn input_data(channel: i32) -> i32 {
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
             artiq_raise!("RTIOOverflow",
-                         format!("RTIO input overflow on channel {}:{}", channel, resolve_channel_name(channel as u32)),
+                         format!("RTIO input overflow on channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
                          channel as i64, 0, 0);
         }
         if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
             artiq_raise!("RTIODestinationUnreachable",
-                         format!("RTIO destination unreachable, input, on channel {}:{}", channel, resolve_channel_name(channel as u32)),
+                         format!("RTIO destination unreachable, input, on channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
                          channel as i64, 0, 0);
         }
 
@@ -250,12 +250,12 @@ pub extern fn input_timestamped_data(timeout: i64, channel: i32) -> TimestampedD
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
             artiq_raise!("RTIOOverflow",
-                         format!("RTIO input overflow on channel {}:{}", channel, resolve_channel_name(channel as u32)),
+                         format!("RTIO input overflow on channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
                          channel as i64, 0, 0);
         }
         if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
             artiq_raise!("RTIODestinationUnreachable",
-                         format!("RTIO destination unreachable, input, on channel {}:{}", channel, resolve_channel_name(channel as u32)),
+                         format!("RTIO destination unreachable, input, on channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
                          channel as i64, 0, 0);
         }
 
