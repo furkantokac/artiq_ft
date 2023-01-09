@@ -1,4 +1,4 @@
-use core::fmt;
+use core::{fmt, slice, str};
 use core::cell::RefCell;
 use alloc::{vec, vec::Vec, string::String, collections::BTreeMap, rc::Rc};
 use log::{info, warn, error};
@@ -31,7 +31,7 @@ use crate::rpc;
 use crate::moninj;
 use crate::mgmt;
 use crate::analyzer;
-use crate::rtio_mgt;
+use crate::rtio_mgt::{self, resolve_channel_name};
 #[cfg(has_drtio)]
 use crate::pl;
 
@@ -246,7 +246,16 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                         for exception in exceptions.iter() {
                             let exception = exception.as_ref().unwrap();
                             write_i32(stream, exception.id as i32).await?;
-                            write_exception_string(stream, exception.message).await?;
+
+                            if exception.message.len() == usize::MAX { // exception with host string
+                                write_exception_string(stream, exception.message).await?;
+                            } else {
+                                let msg = str::from_utf8(unsafe { slice::from_raw_parts(exception.message.as_ptr(), exception.message.len()) })
+                                    .unwrap()
+                                    .replace("{rtio_channel_info:0}", &format!("{}:{}", exception.param[0], resolve_channel_name(exception.param[0] as u32)));
+                                write_exception_string(stream, unsafe { CSlice::new(msg.as_ptr(), msg.len()) }).await?;
+                            }
+
                             write_i64(stream, exception.param[0] as i64).await?;
                             write_i64(stream, exception.param[1] as i64).await?;
                             write_i64(stream, exception.param[2] as i64).await?;
@@ -423,7 +432,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
     #[cfg(has_drtio_routing)]
     drtio_routing::interconnect_disable_all();
 
-    rtio_mgt::startup(&aux_mutex, &drtio_routing_table, &up_destinations, timer);
+    rtio_mgt::startup(&aux_mutex, &drtio_routing_table, &up_destinations, timer, &cfg);
 
     analyzer::start();
     moninj::start(timer, aux_mutex, drtio_routing_table);

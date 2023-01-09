@@ -9,6 +9,7 @@
 #![feature(naked_functions)]
 #![feature(asm)]
 
+#[macro_use]
 extern crate alloc;
 
 use log::{info, warn, error};
@@ -70,16 +71,16 @@ async fn report_async_rtio_errors() {
         unsafe {
             let errors = pl::csr::rtio_core::async_error_read();
             if errors & ASYNC_ERROR_COLLISION != 0 {
-                error!("RTIO collision involving channel {}",
-                       pl::csr::rtio_core::collision_channel_read());
+                let channel = pl::csr::rtio_core::collision_channel_read();
+                error!("RTIO collision involving channel {}:{}", channel, rtio_mgt::resolve_channel_name(channel as u32));
             }
             if errors & ASYNC_ERROR_BUSY != 0 {
-                error!("RTIO busy error involving channel {}",
-                       pl::csr::rtio_core::busy_channel_read());
+                let channel = pl::csr::rtio_core::busy_channel_read();
+                error!("RTIO busy error involving channel {}:{}", channel, rtio_mgt::resolve_channel_name(channel as u32));
             }
             if errors & ASYNC_ERROR_SEQUENCE_ERROR != 0 {
-                error!("RTIO sequence error involving channel {}",
-                       pl::csr::rtio_core::sequence_error_channel_read());
+                let channel = pl::csr::rtio_core::sequence_error_channel_read();
+                error!("RTIO sequence error involving channel {}:{}", channel, rtio_mgt::resolve_channel_name(channel as u32));
             }
             SEEN_ASYNC_ERRORS = errors;
             pl::csr::rtio_core::async_error_write(errors);

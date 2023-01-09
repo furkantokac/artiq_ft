@@ -434,6 +434,7 @@ macro_rules! artiq_raise {
     ($name:expr, $message:expr, $param0:expr, $param1:expr, $param2:expr) => ({
         use cslice::AsCSlice;
         let name_id = $crate::eh_artiq::get_exception_id($name);
+        let message_cl = $message.clone();
         let exn = $crate::eh_artiq::Exception {
             id:       name_id,
             file:     file!().as_c_slice(),
@@ -441,7 +442,7 @@ macro_rules! artiq_raise {
             column:   column!(),
             // https://github.com/rust-lang/rfcs/pull/1719
             function: "(Rust function)".as_c_slice(),
-            message:  $message.as_c_slice(),
+            message:  message_cl.as_c_slice(),
             param:    [$param0, $param1, $param2]
         };
         #[allow(unused_unsafe)]
