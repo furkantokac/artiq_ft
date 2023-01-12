@@ -226,15 +226,15 @@ pub mod drtio {
                                 destination_set_up(routing_table, up_destinations, destination, false).await,
                             Ok(Packet::DestinationOkReply) => (),
                             Ok(Packet::DestinationSequenceErrorReply { channel }) =>{
-                                error!("[DEST#{}] RTIO sequence error involving channel 0x{:04x}:{}", destination, channel, resolve_channel_name(channel));
+                                error!("[DEST#{}] RTIO sequence error involving channel 0x{:04x}:{}", destination, channel, resolve_channel_name(channel as u32));
                                 unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_SEQUENCE_ERROR };
                             }
                             Ok(Packet::DestinationCollisionReply { channel }) =>{
-                                error!("[DEST#{}] RTIO collision involving channel 0x{:04x}:{}", destination, channel, resolve_channel_name(channel));
+                                error!("[DEST#{}] RTIO collision involving channel 0x{:04x}:{}", destination, channel, resolve_channel_name(channel as u32));
                                 unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_COLLISION };
                             }
                             Ok(Packet::DestinationBusyReply { channel }) =>{
-                                error!("[DEST#{}] RTIO busy error involving channel 0x{:04x}:{}", destination, channel, resolve_channel_name(channel));
+                                error!("[DEST#{}] RTIO busy error involving channel 0x{:04x}:{}", destination, channel, resolve_channel_name(channel as u32));
                                 unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_BUSY };
                             }
                             Ok(packet) => error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet),
