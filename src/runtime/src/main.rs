@@ -46,6 +46,7 @@ mod mgmt;
 mod analyzer;
 mod irq;
 mod i2c;
+#[cfg(feature = "target_kasli_soc")]
 mod io_expander;
 
 static mut SEEN_ASYNC_ERRORS: u8 = 0;
@@ -115,9 +116,9 @@ pub fn main_core0() {
 
     i2c::init();
 
-    let (mut io_expander0, mut io_expander1) = (io_expander::IoExpander::new(0).unwrap(), io_expander::IoExpander::new(1).unwrap());
     #[cfg(feature = "target_kasli_soc")]
     {
+        let (mut io_expander0, mut io_expander1) = (io_expander::IoExpander::new(0).unwrap(), io_expander::IoExpander::new(1).unwrap());
         io_expander0.init().expect("I2C I/O expander #0 initialization failed");
         io_expander1.init().expect("I2C I/O expander #1 initialization failed");
 
@@ -146,5 +147,5 @@ pub fn main_core0() {
 
     task::spawn(report_async_rtio_errors());
 
-    comms::main(timer, cfg, io_expander0, io_expander1);
+    comms::main(timer, cfg);
 }

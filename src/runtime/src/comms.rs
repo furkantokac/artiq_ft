@@ -32,7 +32,6 @@ use crate::moninj;
 use crate::mgmt;
 use crate::analyzer;
 use crate::rtio_mgt::{self, resolve_channel_name};
-use crate::io_expander;
 #[cfg(has_drtio)]
 use crate::pl;
 
@@ -381,7 +380,7 @@ async fn handle_connection(stream: &mut TcpStream, control: Rc<RefCell<kernel::C
     }
 }
 
-pub fn main(timer: GlobalTimer, cfg: Config, mut io_expander0: io_expander::IoExpander, mut io_expander1: io_expander::IoExpander) {
+pub fn main(timer: GlobalTimer, cfg: Config) {
     let net_addresses = net_settings::get_addresses(&cfg);
     info!("network addresses: {}", net_addresses);
 
@@ -495,11 +494,6 @@ pub fn main(timer: GlobalTimer, cfg: Config, mut io_expander0: io_expander::IoEx
                 let _ = stream.flush().await;
                 let _ = stream.abort().await;
             });
-            #[cfg(feature = "target_kasli_soc")]
-            {
-                io_expander0.service().expect("I2C I/O expander #0 service failed");
-                io_expander1.service().expect("I2C I/O expander #1 service failed");
-            }
         }
     });
 
