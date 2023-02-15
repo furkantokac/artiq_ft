@@ -11,9 +11,9 @@ struct Registers {
 }
 
 pub struct IoExpander {
-    busno: u8,
+    busno: i32,
     port: u8,
-    address: u8,
+    address: i32,
     virtual_led_mapping: &'static [(u8, u8, u8)],
     iodir: [u8; 2],
     out_current: [u8; 2],
@@ -22,7 +22,7 @@ pub struct IoExpander {
 }
 
 impl IoExpander {
-    #[cfg(all(soc_platform = "kasli", hw_rev = "v2.0"))]
+    #[cfg(feature = "target_kasli_soc")]
     pub fn new(index: u8) -> Result<Self, &'static str> {
         const VIRTUAL_LED_MAPPING0: [(u8, u8, u8); 2] = [(0, 0, 6), (1, 1, 6)];
         const VIRTUAL_LED_MAPPING1: [(u8, u8, u8); 2] = [(2, 0, 6), (3, 1, 6)];
@@ -81,29 +81,34 @@ impl IoExpander {
         Ok(io_expander)
     }
 
-    #[cfg(soc_platform = "kasli")]
+    #[cfg(feature = "target_kasli_soc")]
     fn select(&self) -> Result<(), &'static str> {
-        let mask: u16 = 1 << self.port;
-        i2c::switch_select(self.busno, 0x70, mask as u8)?;
-        i2c::switch_select(self.busno, 0x71, (mask >> 8) as u8)?;
+        let mask: i32 = 1 << self.port;
+        i2c::switch_select(self.busno, 0x70, mask);
+        i2c::switch_select(self.busno, 0x71, (mask >> 8));
         Ok(())
     }
 
+    #[cfg(not(feature = "target_kasli_soc"))]
+    fn select(&self) -> Result<(), &'static str> {
+        Err("the target is not supported yet")
+    }
+
     fn write(&self, addr: u8, value: u8) -> Result<(), &'static str> {
-        i2c::start(self.busno)?;
-        i2c::write(self.busno, self.address)?;
-        i2c::write(self.busno, addr)?;
-        i2c::write(self.busno, value)?;
-        i2c::stop(self.busno)?;
+        i2c::start(self.busno);
+        i2c::write(self.busno, self.address as i32);
+        i2c::write(self.busno, addr as i32);
+        i2c::write(self.busno, value as i32);
+        i2c::stop(self.busno);
         Ok(())
     }
 
     fn check_ack(&self) -> Result<bool, &'static str> {
         // Check for ack from io expander
         self.select()?;
-        i2c::start(self.busno)?;
-        let ack = i2c::write(self.busno, self.address)?;
-        i2c::stop(self.busno)?;
+        i2c::start(self.busno);
+        let ack = i2c::write(self.busno, self.address);
+        i2c::stop(self.busno);
         Ok(ack)
     }
 
@@ -144,8 +149,8 @@ impl IoExpander {
 
     pub fn service(&mut self) -> Result<(), &'static str> {
         for (led, port, bit) in self.virtual_led_mapping.iter() {
-            let level = unsafe { (csr::virtual_leds::status_read() >> led) & 1 };
-            self.set(*port, *bit, level != 0);
+            //let level = unsafe { (csr::virtual_leds::status_read() >> led) & 1 };
+            self.set(*port, *bit, true);
         }
 
         if self.out_target != self.out_current {
