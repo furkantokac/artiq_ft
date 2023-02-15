@@ -1,7 +1,8 @@
-use crate::pl::csr;
 use crate::i2c;
+use log::info;
 
 // Only the bare minimum registers. Bits/IO connections equivalent between IC types.
+#[cfg(feature = "target_kasli_soc")]
 struct Registers {
     // PCA9539 equivalent register names in comments
     iodira: u8, // Configuration Port 0
@@ -10,6 +11,7 @@ struct Registers {
     gpiob: u8,  // Output Port 1
 }
 
+#[cfg(feature = "target_kasli_soc")]
 pub struct IoExpander {
     busno: i32,
     port: u8,
@@ -21,8 +23,18 @@ pub struct IoExpander {
     registers: Registers,
 }
 
+#[cfg(not(feature = "target_kasli_soc"))]
+pub struct IoExpander;
+
+#[cfg(not(feature = "target_kasli_soc"))]
 impl IoExpander {
-    #[cfg(feature = "target_kasli_soc")]
+    pub fn new(index: u8) -> Result<Self, &'static str> {
+        Ok(IoExpander {})
+    }
+}
+
+#[cfg(feature = "target_kasli_soc")]
+impl IoExpander {
     pub fn new(index: u8) -> Result<Self, &'static str> {
         const VIRTUAL_LED_MAPPING0: [(u8, u8, u8); 2] = [(0, 0, 6), (1, 1, 6)];
         const VIRTUAL_LED_MAPPING1: [(u8, u8, u8); 2] = [(2, 0, 6), (3, 1, 6)];
@@ -62,8 +74,7 @@ impl IoExpander {
             _ => return Err("incorrect I/O expander index"),
         };
         if !io_expander.check_ack()? {
-            #[cfg(feature = "log")]
-            log::info!(
+            info!(
                 "MCP23017 io expander {} not found. Checking for PCA9539.",
                 index
             );
@@ -81,17 +92,11 @@ impl IoExpander {
         Ok(io_expander)
     }
 
-    #[cfg(feature = "target_kasli_soc")]
     fn select(&self) -> Result<(), &'static str> {
-        let mask: i32 = 1 << self.port;
-        i2c::switch_select(self.busno, 0x70, mask);
-        i2c::switch_select(self.busno, 0x71, (mask >> 8));
+        let mask: u16 = 1 << self.port;
+        i2c::switch_select(self.busno, 0x70, mask as u8 as i32);
+        i2c::switch_select(self.busno, 0x71, (mask >> 8) as u8 as i32);
         Ok(())
-    }
-
-    #[cfg(not(feature = "target_kasli_soc"))]
-    fn select(&self) -> Result<(), &'static str> {
-        Err("the target is not supported yet")
     }
 
     fn write(&self, addr: u8, value: u8) -> Result<(), &'static str> {
@@ -148,8 +153,7 @@ impl IoExpander {
     }
 
     pub fn service(&mut self) -> Result<(), &'static str> {
-        for (led, port, bit) in self.virtual_led_mapping.iter() {
-            //let level = unsafe { (csr::virtual_leds::status_read() >> led) & 1 };
+        for (_led, port, bit) in self.virtual_led_mapping.iter() {
             self.set(*port, *bit, true);
         }
 
