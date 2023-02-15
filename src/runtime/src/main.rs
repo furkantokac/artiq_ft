@@ -46,6 +46,7 @@ mod mgmt;
 mod analyzer;
 mod irq;
 mod i2c;
+mod io_expander;
 
 static mut SEEN_ASYNC_ERRORS: u8 = 0;
 
