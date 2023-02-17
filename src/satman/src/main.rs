@@ -25,6 +25,8 @@ use libboard_artiq::si5324;
 use libboard_artiq::{pl::csr, drtio_routing, drtioaux, logger, identifier_read};
 use libcortex_a9::{spin_lock_yield, interrupt_handler, regs::{MPIDR, SP}, notify_spin_lock, asm, l2c::enable_l2_cache};
 use libregister::{RegisterW, RegisterR};
+#[cfg(feature = "target_kasli_soc")]
+use libboard_zynq::error_led::ErrorLED;
 
 use embedded_hal::blocking::delay::DelayUs;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -619,7 +621,11 @@ pub fn panic_fmt(info: &core::panic::PanicInfo) -> ! {
     } else {
         println!("");
     }
-
+    #[cfg(feature = "target_kasli_soc")]
+    {
+        let mut err_led = ErrorLED::error_led();
+        err_led.toggle(true);
+    }
 
     loop {}
 }
