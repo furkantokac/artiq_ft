@@ -21,7 +21,9 @@ use nb;
 use void::Void;
 use libconfig::Config;
 use libcortex_a9::l2c::enable_l2_cache;
-use libboard_artiq::{logger, identifier_read, pl, io_expander};
+use libboard_artiq::{logger, identifier_read, pl};
+#[cfg(feature = "target_kasli_soc")]
+use libboard_artiq::io_expander;
 
 const ASYNC_ERROR_COLLISION: u8 = 1 << 0;
 const ASYNC_ERROR_BUSY: u8 = 1 << 1;
@@ -116,7 +118,7 @@ pub fn main_core0() {
     #[cfg(feature = "target_kasli_soc")]
     {
         let i2c = unsafe { (&mut i2c::I2C_BUS).as_mut().unwrap() };
-        for expander_i in 0..2 {
+        for expander_i in 0..=1 {
             let mut io_expander = io_expander::IoExpander::new(i2c, expander_i).unwrap();
             io_expander.init().expect("I2C I/O expander #0 initialization failed");
             // Actively drive TX_DISABLE to false on SFP0..3

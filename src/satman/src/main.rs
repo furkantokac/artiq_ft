@@ -22,7 +22,9 @@ use libboard_zynq::{i2c::I2c, timer::GlobalTimer, time::Milliseconds, print, pri
 use libsupport_zynq::ram;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
-use libboard_artiq::{pl::csr, drtio_routing, drtioaux, logger, identifier_read, io_expander};
+#[cfg(feature = "target_kasli_soc")]
+use libboard_artiq::io_expander;
+use libboard_artiq::{pl::csr, drtio_routing, drtioaux, logger, identifier_read};
 use libcortex_a9::{spin_lock_yield, interrupt_handler, regs::{MPIDR, SP}, notify_spin_lock, asm, l2c::enable_l2_cache};
 use libregister::{RegisterW, RegisterR};
 #[cfg(feature = "target_kasli_soc")]
@@ -451,7 +453,7 @@ pub extern fn main_core0() -> i32 {
     i2c.init().expect("I2C initialization failed");
     #[cfg(feature = "target_kasli_soc")]
     {
-        for expander_i in 0..2 {
+        for expander_i in 0..=1 {
             let mut io_expander = io_expander::IoExpander::new(&mut i2c, expander_i).unwrap();
             io_expander.init().expect("I2C I/O expander #0 initialization failed");
             // Actively drive TX_DISABLE to false on SFP0..3
