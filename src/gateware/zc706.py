@@ -15,7 +15,7 @@ from misoc.cores import gpio
 
 from artiq.gateware import rtio, nist_clock, nist_qc2
 from artiq.gateware.rtio.phy import ttl_simple, ttl_serdes_7series, dds, spi2
-from artiq.gateware.rtio.xilinx_clocking import RTIOClockMultiplier, fix_serdes_timing_path
+from artiq.gateware.rtio.xilinx_clocking import fix_serdes_timing_path
 from artiq.gateware.drtio.transceiver import gtx_7series
 from artiq.gateware.drtio.siphaser import SiPhaser7Series
 from artiq.gateware.drtio.rx_synchronizer import XilinxRXSynchronizer
@@ -25,50 +25,7 @@ import dma
 import analyzer
 import acpki
 import drtio_aux_controller
-
-
-class RTIOCRG(Module, AutoCSR):
-    def __init__(self, platform, rtio_internal_clk):
-        self.clock_sel = CSRStorage()
-        self.pll_reset = CSRStorage(reset=1)
-        self.pll_locked = CSRStatus()
-        self.clock_domains.cd_rtio = ClockDomain()
-        self.clock_domains.cd_rtiox4 = ClockDomain(reset_less=True)
-
-        rtio_external_clk = Signal()
-        user_sma_clock = platform.request("user_sma_clock")
-        platform.add_period_constraint(user_sma_clock.p, 8.0)
-        self.specials += Instance("IBUFDS",
-                                  i_I=user_sma_clock.p, i_IB=user_sma_clock.n,
-                                  o_O=rtio_external_clk)
-
-        pll_locked = Signal()
-        rtio_clk = Signal()
-        rtiox4_clk = Signal()
-        self.specials += [
-            Instance("PLLE2_ADV",
-                     p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
-
-                     p_REF_JITTER1=0.01,
-                     p_CLKIN1_PERIOD=8.0, p_CLKIN2_PERIOD=8.0,
-                     i_CLKIN1=rtio_internal_clk, i_CLKIN2=rtio_external_clk,
-                     # Warning: CLKINSEL=0 means CLKIN2 is selected
-                     i_CLKINSEL=~self.clock_sel.storage,
-
-                     # VCO @ 1GHz when using 125MHz input
-                     p_CLKFBOUT_MULT=8, p_DIVCLK_DIVIDE=1,
-                     i_CLKFBIN=self.cd_rtio.clk,
-                     i_RST=self.pll_reset.storage,
-
-                     o_CLKFBOUT=rtio_clk,
-
-                     p_CLKOUT0_DIVIDE=2, p_CLKOUT0_PHASE=0.0,
-                     o_CLKOUT0=rtiox4_clk),
-            Instance("BUFG", i_I=rtio_clk, o_O=self.cd_rtio.clk),
-            Instance("BUFG", i_I=rtiox4_clk, o_O=self.cd_rtiox4.clk),
-            AsyncResetSynchronizer(self.cd_rtio, ~pll_locked),
-            MultiReg(pll_locked, self.pll_locked.status)
-        ]
+import zynq_clocking
 
 
 class SMAClkinForward(Module):
@@ -81,6 +38,37 @@ class SMAClkinForward(Module):
             Instance("IBUFDS", i_I=sma_clkin.p, i_IB=sma_clkin.n, o_O=sma_clkin_se),
             Instance("ODDR", i_C=sma_clkin_se, i_CE=1, i_D1=1, i_D2=0, o_Q=si5324_clkin_se),
             Instance("OBUFDS", i_I=si5324_clkin_se, o_O=si5324_clkin.p, o_OB=si5324_clkin.n)
+        ]
+
+
+class CLK200BootstrapClock(Module):
+    def __init__(self, platform, freq=125e6):
+        self.clock_domains.cd_bootstrap = ClockDomain(reset_less=True)
+        self.cd_bootstrap.clk.attr.add("keep")
+
+        clk200 = platform.request("clk200")
+        clk200_se = Signal()
+
+        pll_fb = Signal()
+        pll_clkout = Signal()
+        assert freq in [125e6, 100e6]
+        divide = int(1e9/freq)
+        self.specials += [
+            Instance("IBUFDS",
+                i_I=clk200.p, i_IB=clk200.n, o_O=clk200_se),
+            Instance("PLLE2_BASE",
+                p_CLKIN1_PERIOD=5.0,
+                i_CLKIN1=clk200_se,
+                i_CLKFBIN=pll_fb,
+                o_CLKFBOUT=pll_fb,
+
+                # VCO @ 1GHz
+                p_CLKFBOUT_MULT=5, p_DIVCLK_DIVIDE=1,
+
+                # 125MHz/100MHz for bootstrap
+                p_CLKOUT1_DIVIDE=divide, p_CLKOUT1_PHASE=0.0, o_CLKOUT1=pll_clkout,
+            ),
+            Instance("BUFG", i_I=pll_clkout, o_O=self.cd_bootstrap.clk)
         ]
 
 
@@ -135,9 +123,6 @@ def prepare_zc706_platform(platform):
     platform.toolchain.bitstream_commands.extend([
         "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
     ])
-    platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
-    platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
-
 
 class ZC706(SoCCore):
     def __init__(self, acpki=False):
@@ -150,18 +135,37 @@ class ZC706(SoCCore):
         ident = self.__class__.__name__
         if self.acpki:
             ident = "acpki_" + ident
-        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
+        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
 
-        self.submodules.rtio_crg = RTIOCRG(self.platform, self.ps7.cd_sys.clk)
-        self.csr_devices.append("rtio_crg")
-        self.rustc_cfg["has_rtio_crg_clock_sel"] = None
-        self.platform.add_period_constraint(self.rtio_crg.cd_rtio.clk, 8.)
-        self.platform.add_false_path_constraints(
-            self.ps7.cd_sys.clk,
-            self.rtio_crg.cd_rtio.clk)
+        platform.add_extension(si5324_fmc33)
+        self.comb += platform.request("si5324_33").rst_n.eq(1)
+
+        cdr_clk = Signal()
+        cdr_clk_buf = Signal()
+        si5324_out = platform.request("si5324_clkout")
+        platform.add_period_constraint(si5324_out.p, 8.0)
+        self.specials += [
+            Instance("IBUFDS_GTE2",
+                i_CEB=0,
+                i_I=si5324_out.p, i_IB=si5324_out.n,
+                o_O=cdr_clk,
+                p_CLKCM_CFG="0b1",
+                p_CLKRCV_TRST="0b1",
+                p_CLKSWING_CFG="0b11"),
+            Instance("BUFG", i_I=cdr_clk, o_O=cdr_clk_buf)
+        ]
+        self.rustc_cfg["has_si5324"] = None
+        self.rustc_cfg["si5324_as_synthesizer"] = None
+        self.rustc_cfg["si5324_soft_reset"] = None
+        
+        self.submodules.bootstrap = CLK200BootstrapClock(platform)
+        self.submodules.sys_crg = zynq_clocking.SYSCRG(self.platform, self.ps7, cdr_clk_buf)
+        platform.add_false_path_constraints(
+            self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
+        self.csr_devices.append("sys_crg")
 
     def add_rtio(self, rtio_channels):
-        self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)
+        self.submodules.rtio_tsc = rtio.TSC(glbl_fine_ts_width=3)
         self.submodules.rtio_core = rtio.Core(self.rtio_tsc, rtio_channels)
         self.csr_devices.append("rtio_core")
 
@@ -198,19 +202,16 @@ class _MasterBase(SoCCore):
         self.acpki = acpki
         self.rustc_cfg = dict()
 
+        clk_freq = 100e6 if drtio100mhz else 125e6
+
         platform = zc706.Platform()
         prepare_zc706_platform(platform)
         ident = self.__class__.__name__
         if self.acpki:
             ident = "acpki_" + ident
-        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
+        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
 
         platform.add_extension(si5324_fmc33)
-
-        self.sys_clk_freq = 125e6
-        rtio_clk_freq = 100e6 if drtio100mhz else self.sys_clk_freq
-
-        platform = self.platform
 
         self.comb += platform.request("sfp_tx_disable_n").eq(1)
         data_pads = [
@@ -224,11 +225,23 @@ class _MasterBase(SoCCore):
         self.submodules.drtio_transceiver = gtx_7series.GTX(
             clock_pads=platform.request("si5324_clkout"),
             pads=data_pads,
-            sys_clk_freq=self.sys_clk_freq,
-            rtio_clk_freq=rtio_clk_freq)
+            clk_freq=clk_freq)
         self.csr_devices.append("drtio_transceiver")
 
-        self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)
+        self.submodules.rtio_tsc = rtio.TSC(glbl_fine_ts_width=3)
+        txout_buf = Signal()
+        gtx0 = self.drtio_transceiver.gtxs[0]
+        self.specials += Instance("BUFG", i_I=gtx0.txoutclk, o_O=txout_buf)
+        self.submodules.bootstrap = CLK200BootstrapClock(platform, clk_freq)
+        self.submodules.sys_crg = zynq_clocking.SYSCRG(
+            self.platform, 
+            self.ps7, 
+            txout_buf,
+            clk_sw=gtx0.tx_init.done,
+            freq=clk_freq)
+        platform.add_false_path_constraints(
+            self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
+        self.csr_devices.append("sys_crg")
 
         drtio_csr_group = []
         drtioaux_csr_group = []
@@ -271,28 +284,20 @@ class _MasterBase(SoCCore):
         self.rustc_cfg["has_si5324"] = None
         self.rustc_cfg["si5324_as_synthesizer"] = None
 
-        rtio_clk_period = 1e9/self.drtio_transceiver.rtio_clk_freq
         # Constrain TX & RX timing for the first transceiver channel
         # (First channel acts as master for phase alignment for all channels' TX)
-        gtx0 = self.drtio_transceiver.gtxs[0]
-        platform.add_period_constraint(gtx0.txoutclk, rtio_clk_period)
-        platform.add_period_constraint(gtx0.rxoutclk, rtio_clk_period)
         platform.add_false_path_constraints(
-            self.ps7.cd_sys.clk,
             gtx0.txoutclk, gtx0.rxoutclk)
         # Constrain RX timing for the each transceiver channel
         # (Each channel performs single-lane phase alignment for RX)
         for gtx in self.drtio_transceiver.gtxs[1:]:
-            platform.add_period_constraint(gtx.rxoutclk, rtio_clk_period)
             platform.add_false_path_constraints(
-                self.ps7.cd_sys.clk, gtx0.txoutclk, gtx.rxoutclk)
+                gtx0.txoutclk, gtx.rxoutclk)
 
-        self.submodules.rtio_crg = RTIOClockMultiplier(self.sys_clk_freq)
-        self.csr_devices.append("rtio_crg")
-        fix_serdes_timing_path(self.platform)
+        fix_serdes_timing_path(platform)
 
     def add_rtio(self, rtio_channels):
-        self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)
+        self.submodules.rtio_tsc = rtio.TSC(glbl_fine_ts_width=3)
         self.submodules.rtio_core = rtio.Core(self.rtio_tsc, rtio_channels)
         self.csr_devices.append("rtio_core")
 
@@ -314,7 +319,7 @@ class _MasterBase(SoCCore):
         self.submodules.cri_con = rtio.CRIInterconnectShared(
             [self.rtio.cri, self.rtio_dma.cri],
             [self.rtio_core.cri] + self.drtio_cri,
-            mode="sync", enable_routing=True)
+            enable_routing=True)
         self.csr_devices.append("cri_con")
 
         self.submodules.rtio_moninj = rtio.MonInj(rtio_channels)
@@ -333,18 +338,16 @@ class _SatelliteBase(SoCCore):
         self.acpki = acpki
         self.rustc_cfg = dict()
 
+        clk_freq = 100e6 if drtio100mhz else 125e6
+
         platform = zc706.Platform()
         prepare_zc706_platform(platform)
         ident = self.__class__.__name__
         if self.acpki:
             ident = "acpki_" + ident
-        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
+        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
 
         platform.add_extension(si5324_fmc33)
-
-        self.sys_clk_freq = 125e6
-        rtio_clk_freq = 100e6 if drtio100mhz else self.sys_clk_freq
-        platform = self.platform
 
         # SFP
         self.comb += platform.request("sfp_tx_disable_n").eq(0)
@@ -353,15 +356,32 @@ class _SatelliteBase(SoCCore):
             platform.request("user_sma_mgt")
         ]
 
-        self.submodules.rtio_tsc = rtio.TSC("sync", glbl_fine_ts_width=3)
+        self.submodules.rtio_tsc = rtio.TSC(glbl_fine_ts_width=3)
 
         # 1000BASE_BX10 Ethernet compatible, 125MHz RTIO clock
         self.submodules.drtio_transceiver = gtx_7series.GTX(
             clock_pads=platform.request("si5324_clkout"),
             pads=data_pads,
-            sys_clk_freq=self.sys_clk_freq,
-            rtio_clk_freq=rtio_clk_freq)
+            clk_freq=clk_freq)
         self.csr_devices.append("drtio_transceiver")
+
+        txout_buf = Signal()
+        txout_buf.attr.add("keep")
+        gtx0 = self.drtio_transceiver.gtxs[0]
+        self.specials += Instance(
+            "BUFG", 
+            i_I=gtx0.txoutclk, 
+            o_O=txout_buf)
+        self.submodules.bootstrap = CLK200BootstrapClock(platform, clk_freq)
+        self.submodules.sys_crg = zynq_clocking.SYSCRG(
+            self.platform, 
+            self.ps7, 
+            txout_buf,
+            clk_sw=gtx0.tx_init.done,
+            freq=clk_freq)
+        platform.add_false_path_constraints(
+            self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
+        self.csr_devices.append("sys_crg")
 
         drtioaux_csr_group = []
         drtioaux_memory_group = []
@@ -420,7 +440,7 @@ class _SatelliteBase(SoCCore):
             ultrascale=False,
             rtio_clk_freq=self.drtio_transceiver.rtio_clk_freq)
         platform.add_false_path_constraints(
-            self.ps7.cd_sys.clk, self.siphaser.mmcm_freerun_output)
+            self.sys_crg.cd_sys.clk, self.siphaser.mmcm_freerun_output)
         self.csr_devices.append("siphaser")
         self.submodules.si5324_rst_n = gpio.GPIOOut(platform.request("si5324_33").rst_n)
         self.csr_devices.append("si5324_rst_n")
@@ -430,23 +450,15 @@ class _SatelliteBase(SoCCore):
         rtio_clk_period = 1e9/self.drtio_transceiver.rtio_clk_freq
         # Constrain TX & RX timing for the first transceiver channel
         # (First channel acts as master for phase alignment for all channels' TX)
-        gtx0 = self.drtio_transceiver.gtxs[0]
-        platform.add_period_constraint(gtx0.txoutclk, rtio_clk_period)
-        platform.add_period_constraint(gtx0.rxoutclk, rtio_clk_period)
         platform.add_false_path_constraints(
-            self.ps7.cd_sys.clk,
             gtx0.txoutclk, gtx0.rxoutclk)
         # Constrain RX timing for the each transceiver channel
         # (Each channel performs single-lane phase alignment for RX)
         for gtx in self.drtio_transceiver.gtxs[1:]:
-            platform.add_period_constraint(gtx.rxoutclk, rtio_clk_period)
             platform.add_false_path_constraints(
-                self.ps7.cd_sys.clk, gtx.rxoutclk)
+                self.sys_crg.cd_sys.clk, gtx.rxoutclk)
 
-        self.submodules.rtio_crg = RTIOClockMultiplier(self.sys_clk_freq)
-        self.csr_devices.append("rtio_crg")
-        self.rustc_cfg["has_rtio_crg"] = None
-        fix_serdes_timing_path(self.platform)
+        fix_serdes_timing_path(platform)
 
     def add_rtio(self, rtio_channels):
         self.submodules.rtio_moninj = rtio.MonInj(rtio_channels)
@@ -468,7 +480,7 @@ class _SatelliteBase(SoCCore):
         self.submodules.cri_con = rtio.CRIInterconnectShared(
             [self.drtiosat.cri],
             [self.local_io.cri] + self.drtio_cri,
-            mode="sync", enable_routing=True)
+            enable_routing=True)
         self.csr_devices.append("cri_con")
 
         self.submodules.routing_table = rtio.RoutingTableAccess(self.cri_con)
@@ -616,6 +628,7 @@ class _NIST_QC2_RTIO:
 class NIST_CLOCK(ZC706, _NIST_CLOCK_RTIO):
     def __init__(self, acpki, drtio100mhz):
         ZC706.__init__(self, acpki)
+        self.submodules += SMAClkinForward(self.platform)
         _NIST_CLOCK_RTIO.__init__(self)
 
 class NIST_CLOCK_Master(_MasterBase, _NIST_CLOCK_RTIO):
@@ -631,6 +644,7 @@ class NIST_CLOCK_Satellite(_SatelliteBase, _NIST_CLOCK_RTIO):
 class NIST_QC2(ZC706, _NIST_QC2_RTIO):
     def __init__(self, acpki, drtio100mhz):
         ZC706.__init__(self, acpki)
+        self.submodules += SMAClkinForward(self.platform)
         _NIST_QC2_RTIO.__init__(self)
 
 class NIST_QC2_Master(_MasterBase, _NIST_QC2_RTIO):

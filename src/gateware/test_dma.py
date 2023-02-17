@@ -168,7 +168,7 @@ class FullStackTB(Module):
         bus = axi.Interface(ws*8)
         self.memory = AXIMemorySim(bus, sequence)
         self.submodules.dut = dma.DMA(bus)
-        self.submodules.tsc = rtio.TSC("async")
+        self.submodules.tsc = rtio.TSC()
         self.submodules.rtio = rtio.Core(self.tsc, rtio_channels)
         self.comb += self.dut.cri.connect(self.rtio.cri)
 
@@ -229,7 +229,7 @@ class TestDMA(unittest.TestCase):
             do_dma(tb.dut, 0), monitor(),
             (None for _ in range(70)),
             tb.memory.ar(), tb.memory.r()
-        ]}, {"sys": 8, "rsys": 8, "rtio": 8, "rio": 8, "rio_phy": 8})
+        ]}, {"sys": 8, "rsys": 8, "rio": 8, "rio_phy": 8})
 
         correct_changes = [(timestamp + 11, channel)
                            for channel, timestamp, _, _ in test_writes_full_stack]

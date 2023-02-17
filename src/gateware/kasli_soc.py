@@ -14,8 +14,8 @@ from misoc.integration import cpu_interface
 
 from artiq.coredevice import jsondesc
 from artiq.gateware import rtio, eem_7series
+from artiq.gateware.rtio.xilinx_clocking import fix_serdes_timing_path
 from artiq.gateware.rtio.phy import ttl_simple
-from artiq.gateware.rtio.xilinx_clocking import RTIOClockMultiplier
 from artiq.gateware.drtio.transceiver import gtx_7series
 from artiq.gateware.drtio.siphaser import SiPhaser7Series
 from artiq.gateware.drtio.rx_synchronizer import XilinxRXSynchronizer
@@ -25,57 +25,9 @@ import dma
 import analyzer
 import acpki
 import drtio_aux_controller
+import zynq_clocking
 
-class RTIOCRG(Module, AutoCSR):
-    def __init__(self, platform):
-        self.pll_reset = CSRStorage(reset=1)
-        self.pll_locked = CSRStatus()
-        self.clock_domains.cd_rtio = ClockDomain()
-        self.clock_domains.cd_rtiox4 = ClockDomain(reset_less=True)
 
-        clk_synth = platform.request("cdr_clk_clean_fabric")
-        clk_synth_se = Signal()
-        platform.add_period_constraint(clk_synth.p, 8.0)
-        self.specials += [
-            Instance("IBUFGDS",
-                p_DIFF_TERM="TRUE", p_IBUF_LOW_PWR="FALSE",
-                i_I=clk_synth.p, i_IB=clk_synth.n, o_O=clk_synth_se),
-        ]
-
-        pll_locked = Signal()
-        rtio_clk = Signal()
-        rtiox4_clk = Signal()
-        fb_clk = Signal()
-        self.specials += [
-            Instance("PLLE2_ADV",
-                     p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
-                     p_BANDWIDTH="HIGH",
-                     p_REF_JITTER1=0.001,
-                     p_CLKIN1_PERIOD=8.0, p_CLKIN2_PERIOD=8.0,
-                     i_CLKIN2=clk_synth_se,
-                     # Warning: CLKINSEL=0 means CLKIN2 is selected
-                     i_CLKINSEL=0,
-
-                     # VCO @ 1.5GHz when using 125MHz input
-                     p_CLKFBOUT_MULT=12, p_DIVCLK_DIVIDE=1,
-                     i_CLKFBIN=fb_clk,
-                     i_RST=self.pll_reset.storage,
-
-                     o_CLKFBOUT=fb_clk,
-
-                     p_CLKOUT0_DIVIDE=3, p_CLKOUT0_PHASE=0.0,
-                     o_CLKOUT0=rtiox4_clk,
-
-                     p_CLKOUT1_DIVIDE=12, p_CLKOUT1_PHASE=0.0,
-                     o_CLKOUT1=rtio_clk),
-            Instance("BUFG", i_I=rtio_clk, o_O=self.cd_rtio.clk),
-            Instance("BUFG", i_I=rtiox4_clk, o_O=self.cd_rtiox4.clk),
-
-            AsyncResetSynchronizer(self.cd_rtio, ~pll_locked),
-            MultiReg(pll_locked, self.pll_locked.status)
-        ]
-
-        
 eem_iostandard_dict = {
      0: "LVDS_25",
      1: "LVDS_25",
@@ -109,6 +61,23 @@ class SMAClkinForward(Module):
         ]
 
 
+class GTP125BootstrapClock(Module):
+    def __init__(self, platform):
+        self.clock_domains.cd_bootstrap = ClockDomain(reset_less=True)
+        self.cd_bootstrap.clk.attr.add("keep")
+
+        bootstrap_125 = platform.request("clk125_gtp")
+        bootstrap_se = Signal()
+        platform.add_period_constraint(bootstrap_125.p, 8.0)
+        self.specials += [
+            Instance("IBUFDS_GTE2",
+                p_CLKSWING_CFG="0b11",
+                i_CEB=0,
+                i_I=bootstrap_125.p, i_IB=bootstrap_125.n, o_O=bootstrap_se),
+            Instance("BUFG", i_I=bootstrap_se, o_O=self.cd_bootstrap.clk)
+        ]
+
+
 class GenericStandalone(SoCCore):
     def __init__(self, description, acpki=False):
         self.acpki = acpki
@@ -121,23 +90,30 @@ class GenericStandalone(SoCCore):
         ident = description["variant"]
         if self.acpki:
             ident = "acpki_" + ident
-        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
-
-        platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
-        platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
+        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
 
         self.submodules += SMAClkinForward(self.platform)
 
         self.rustc_cfg["has_si5324"] = None
         self.rustc_cfg["si5324_soft_reset"] = None
 
+        clk_synth = platform.request("cdr_clk_clean_fabric")
+        clk_synth_se = Signal()
+        platform.add_period_constraint(clk_synth.p, 8.0)
+
+        self.specials += Instance("IBUFGDS",
+                p_DIFF_TERM="TRUE", p_IBUF_LOW_PWR="FALSE",
+                i_I=clk_synth.p, i_IB=clk_synth.n, o_O=clk_synth_se)
+        fix_serdes_timing_path(platform)
+        self.submodules.bootstrap = GTP125BootstrapClock(self.platform)
+
+
+        self.submodules.sys_crg = zynq_clocking.SYSCRG(self.platform, self.ps7, clk_synth_se)
+        platform.add_false_path_constraints(
+            self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
+        self.csr_devices.append("sys_crg")
         self.crg = self.ps7 # HACK for eem_7series to find the clock
-        self.submodules.rtio_crg = RTIOCRG(self.platform)
-        self.csr_devices.append("rtio_crg")
-        self.platform.add_period_constraint(self.rtio_crg.cd_rtio.clk, 8.)
-        self.platform.add_false_path_constraints(
-            self.ps7.cd_sys.clk,
-            self.rtio_crg.cd_rtio.clk)
+        self.crg.cd_sys = self.sys_crg.cd_sys
 
         self.rtio_channels = []
         has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
@@ -153,7 +129,7 @@ class GenericStandalone(SoCCore):
         self.config["RTIO_LOG_CHANNEL"] = len(self.rtio_channels)
         self.rtio_channels.append(rtio.LogChannel())
 
-        self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)
+        self.submodules.rtio_tsc = rtio.TSC(glbl_fine_ts_width=3)
         self.submodules.rtio_core = rtio.Core(self.rtio_tsc, self.rtio_channels)
         self.csr_devices.append("rtio_core")
 
@@ -189,13 +165,12 @@ class GenericStandalone(SoCCore):
             self.add_csr_group("grabber", self.grabber_csr_group)
             for grabber in self.grabber_csr_group:
                 self.platform.add_false_path_constraints(
-                    self.rtio_crg.cd_rtio.clk, getattr(self, grabber).deserializer.cd_cl.clk)
+                    self.sys_crg.cd_sys.clk, getattr(self, grabber).deserializer.cd_cl.clk)
 
 
 class GenericMaster(SoCCore):
     def __init__(self, description, acpki=False):
-        sys_clk_freq = 125e6
-        rtio_clk_freq = description["rtio_frequency"]
+        clk_freq = description["rtio_frequency"]
 
         self.acpki = acpki
         self.rustc_cfg = dict()
@@ -207,10 +182,7 @@ class GenericMaster(SoCCore):
         ident = description["variant"]
         if self.acpki:
             ident = "acpki_" + ident
-        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
-
-        platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
-        platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
+        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
 
         self.submodules += SMAClkinForward(self.platform)
 
@@ -219,12 +191,25 @@ class GenericMaster(SoCCore):
         self.submodules.drtio_transceiver = gtx_7series.GTX(
             clock_pads=platform.request("clk_gtp"),
             pads=data_pads,
-            sys_clk_freq=sys_clk_freq)
+            clk_freq=clk_freq)
         self.csr_devices.append("drtio_transceiver")
 
+        txout_buf = Signal()
+        gtx0 = self.drtio_transceiver.gtxs[0]
+        self.specials += Instance("BUFG", i_I=gtx0.txoutclk, o_O=txout_buf)
+
+        self.submodules.bootstrap = GTP125BootstrapClock(self.platform)
+        self.submodules.sys_crg = zynq_clocking.SYSCRG(
+            self.platform,
+            self.ps7,
+            txout_buf,
+            clk_sw=gtx0.tx_init.done)
+        self.csr_devices.append("sys_crg")
         self.crg = self.ps7 # HACK for eem_7series to find the clock
-        self.submodules.rtio_crg = RTIOClockMultiplier(rtio_clk_freq)
-        self.csr_devices.append("rtio_crg")
+        self.crg.cd_sys = self.sys_crg.cd_sys
+        platform.add_false_path_constraints(
+            self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
+        fix_serdes_timing_path(platform)
 
         self.rustc_cfg["has_si5324"] = None
         self.rustc_cfg["si5324_soft_reset"] = None
@@ -243,7 +228,7 @@ class GenericMaster(SoCCore):
         self.config["RTIO_LOG_CHANNEL"] = len(self.rtio_channels)
         self.rtio_channels.append(rtio.LogChannel())
 
-        self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)
+        self.submodules.rtio_tsc = rtio.TSC(glbl_fine_ts_width=3)
 
         drtio_csr_group = []
         drtioaux_csr_group = []
@@ -319,8 +304,7 @@ class GenericMaster(SoCCore):
 
 class GenericSatellite(SoCCore):
     def __init__(self, description, acpki=False):
-        sys_clk_freq = 125e6  
-        rtio_clk_freq = description["rtio_frequency"]
+        clk_freq = description["rtio_frequency"]
 
         self.acpki = acpki
         self.rustc_cfg = dict()
@@ -332,23 +316,31 @@ class GenericSatellite(SoCCore):
         ident = description["variant"]
         if self.acpki:
             ident = "acpki_" + ident
-        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
+        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
 
-        platform.add_platform_command("create_clock -name clk_fpga_0 -period 8 [get_pins \"PS7/FCLKCLK[0]\"]")
-        platform.add_platform_command("set_input_jitter clk_fpga_0 0.24")
-
-        self.crg = self.ps7 # HACK for eem_7series to find the clock
-        self.submodules.rtio_crg = RTIOClockMultiplier(rtio_clk_freq)
-        self.csr_devices.append("rtio_crg")
-        self.rustc_cfg["has_rtio_crg"] = None
-        
         data_pads = [platform.request("sfp", i) for i in range(4)]
         
         self.submodules.drtio_transceiver = gtx_7series.GTX(
             clock_pads=platform.request("clk_gtp"),  
             pads=data_pads,
-            sys_clk_freq=sys_clk_freq)
+            clk_freq=clk_freq)
         self.csr_devices.append("drtio_transceiver")
+
+        txout_buf = Signal()
+        gtx0 = self.drtio_transceiver.gtxs[0]
+        self.specials += Instance("BUFG", i_I=gtx0.txoutclk, o_O=txout_buf)
+
+        self.submodules.bootstrap = GTP125BootstrapClock(self.platform)
+        self.submodules.sys_crg = zynq_clocking.SYSCRG(
+            self.platform, 
+            self.ps7,
+            txout_buf,
+            clk_sw=gtx0.tx_init.done)
+        platform.add_false_path_constraints(
+            self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
+        self.csr_devices.append("sys_crg")
+        self.crg = self.ps7 # HACK for eem_7series to find the clock
+        self.crg.cd_sys = self.sys_crg.cd_sys
 
         self.rtio_channels = []
         has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
@@ -364,7 +356,7 @@ class GenericSatellite(SoCCore):
         self.config["RTIO_LOG_CHANNEL"] = len(self.rtio_channels)
         self.rtio_channels.append(rtio.LogChannel())
 
-        self.submodules.rtio_tsc = rtio.TSC("sync", glbl_fine_ts_width=3)
+        self.submodules.rtio_tsc = rtio.TSC(glbl_fine_ts_width=3)
 
         drtioaux_csr_group = []
         drtioaux_memory_group = []
@@ -435,7 +427,7 @@ class GenericSatellite(SoCCore):
         self.submodules.cri_con = rtio.CRIInterconnectShared(
             [self.drtiosat.cri],
             [self.local_io.cri] + self.drtio_cri,
-            mode="sync", enable_routing=True)
+            enable_routing=True)
         self.csr_devices.append("cri_con")
 
         self.submodules.routing_table = rtio.RoutingTableAccess(self.cri_con)
@@ -444,31 +436,22 @@ class GenericSatellite(SoCCore):
         self.submodules.rtio_moninj = rtio.MonInj(self.rtio_channels)
         self.csr_devices.append("rtio_moninj")
 
-        rtio_clk_period = 1e9/rtio_clk_freq
-        self.rustc_cfg["rtio_frequency"] = str(rtio_clk_freq/1e6)
+        rtio_clk_period = 1e9/clk_freq
+        self.rustc_cfg["rtio_frequency"] = str(clk_freq/1e6)
 
         self.submodules.siphaser = SiPhaser7Series(
             si5324_clkin=platform.request("cdr_clk"),
             rx_synchronizer=self.rx_synchronizer,
             ultrascale=False,
             rtio_clk_freq=self.drtio_transceiver.rtio_clk_freq)
-        platform.add_false_path_constraints(
-            self.crg.cd_sys.clk, self.siphaser.mmcm_freerun_output)
         self.csr_devices.append("siphaser")
         self.rustc_cfg["has_si5324"] = None
         self.rustc_cfg["has_siphaser"] = None
         self.rustc_cfg["si5324_soft_reset"] = None
 
         gtx0 = self.drtio_transceiver.gtxs[0]
-        platform.add_period_constraint(gtx0.txoutclk, rtio_clk_period)
-        platform.add_period_constraint(gtx0.rxoutclk, rtio_clk_period)
         platform.add_false_path_constraints(
-            self.crg.cd_sys.clk,
             gtx0.txoutclk, gtx0.rxoutclk)
-        for gtx in self.drtio_transceiver.gtxs[1:]:
-            platform.add_period_constraint(gtx.rxoutclk, rtio_clk_period)
-            platform.add_false_path_constraints(
-                self.crg.cd_sys.clk, gtx.rxoutclk)
 
         if has_grabber:
             self.rustc_cfg["has_grabber"] = None

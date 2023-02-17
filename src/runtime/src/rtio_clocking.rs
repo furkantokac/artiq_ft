@@ -66,41 +66,26 @@ fn get_rtio_clock_cfg(cfg: &Config) -> RtioClock {
     res
 }
 
-
-fn init_rtio(timer: &mut GlobalTimer, _clk: RtioClock) {
-    #[cfg(has_rtio_crg_clock_sel)]
-    let clock_sel = match _clk {
-        RtioClock::Ext0_Bypass => { 
-            info!("Using bypassed external clock");
-            1
-        },
-        RtioClock::Int_125 => {
-            info!("Using internal RTIO clock");
-            0
-        },
-        _ => {
-            warn!("rtio_clock setting '{:?}' is not supported. Using default internal RTIO clock instead", _clk);
-            0
-        }
-    };
-
+#[cfg(not(has_drtio))]
+fn init_rtio(timer: &mut GlobalTimer) {
+    info!("Switching SYS clocks...");
     unsafe {
-        pl::csr::rtio_crg::pll_reset_write(1);
-        #[cfg(has_rtio_crg_clock_sel)]
-        pl::csr::rtio_crg::clock_sel_write(clock_sel);
-        pl::csr::rtio_crg::pll_reset_write(0);
+        pl::csr::sys_crg::clock_switch_write(1);
     }
-    timer.delay_ms(1);
-    let locked = unsafe { pl::csr::rtio_crg::pll_locked_read() != 0 };
-    if locked {
-        info!("RTIO PLL locked");
-    } else {
-        panic!("RTIO PLL failed to lock");
-    }
+    // if it's not locked, it will hang at the CSR.
 
+    timer.delay_ms(20); // wait for CPLL/QPLL/SYS PLL lock
+    let clk = unsafe { pl::csr::sys_crg::current_clock_read() };
+    if clk == 1 {
+        info!("SYS CLK switched successfully");
+    } else {
+        panic!("SYS CLK did not switch");
+    }
     unsafe {
         pl::csr::rtio_core::reset_phy_write(1);
     }
+    info!("SYS PLL locked");
+    
 }
 
 #[cfg(has_drtio)]
@@ -109,8 +94,16 @@ fn init_drtio(timer: &mut GlobalTimer)
     unsafe {
         pl::csr::drtio_transceiver::stable_clkin_write(1);
     }
-    timer.delay_ms(2); // wait for CPLL/QPLL lock
+    
+    timer.delay_ms(20); // wait for CPLL/QPLL/SYS PLL lock
+    let clk = unsafe { pl::csr::sys_crg::current_clock_read() };
+    if clk == 1 {
+        info!("SYS CLK switched successfully");
+    } else {
+        panic!("SYS CLK did not switch");
+    }
     unsafe {
+        pl::csr::rtio_core::reset_phy_write(1);
         pl::csr::drtio_transceiver::txenable_write(0xffffffffu32 as _);
     }
 }
@@ -249,9 +242,10 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
             _ => setup_si5324(i2c, timer, clk),
         }
     }
+
     #[cfg(has_drtio)]
     init_drtio(timer);
 
-    init_rtio(timer, clk);
-
+    #[cfg(not(has_drtio))]
+    init_rtio(timer);
 }

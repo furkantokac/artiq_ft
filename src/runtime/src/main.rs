@@ -21,7 +21,7 @@ use nb;
 use void::Void;
 use libconfig::Config;
 use libcortex_a9::l2c::enable_l2_cache;
-use libboard_artiq::{logger, identifier_read, init_gateware, pl};
+use libboard_artiq::{logger, identifier_read, pl};
 
 const ASYNC_ERROR_COLLISION: u8 = 1 << 0;
 const ASYNC_ERROR_BUSY: u8 = 1 << 1;
@@ -111,7 +111,6 @@ pub fn main_core0() {
     ram::init_alloc_core0();
     gic::InterruptController::gic(mpcore::RegisterBlock::mpcore()).enable_interrupts();
 
-    init_gateware();
     info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
     i2c::init();
@@ -142,7 +141,7 @@ pub fn main_core0() {
             Config::new_dummy()
         }
     };
-
+    
     rtio_clocking::init(&mut timer, &cfg);
 
     task::spawn(report_async_rtio_errors());

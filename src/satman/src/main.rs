@@ -22,7 +22,7 @@ use libboard_zynq::{i2c::I2c, timer::GlobalTimer, time::Milliseconds, print, pri
 use libsupport_zynq::ram;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
-use libboard_artiq::{pl::csr, drtio_routing, drtioaux, logger, identifier_read, init_gateware};
+use libboard_artiq::{pl::csr, drtio_routing, drtioaux, logger, identifier_read};
 use libcortex_a9::{spin_lock_yield, interrupt_handler, regs::{MPIDR, SP}, notify_spin_lock, asm, l2c::enable_l2_cache};
 use libregister::{RegisterW, RegisterR};
 
@@ -390,25 +390,6 @@ fn drtiosat_process_errors() {
     }
 }
 
-
-#[cfg(has_rtio_crg)]
-fn init_rtio_crg(timer: &mut GlobalTimer) {
-    unsafe {
-        csr::rtio_crg::pll_reset_write(0);
-    }
-    timer.delay_us(150);
-    let locked = unsafe { csr::rtio_crg::pll_locked_read() != 0 };
-    if !locked {
-        error!("RTIO clock failed");
-    }
-    else {
-        info!("RTIO PLL locked");
-    }
-}
-
-#[cfg(not(has_rtio_crg))]
-fn init_rtio_crg(_timer: &mut GlobalTimer) { }
-
 fn hardware_tick(ts: &mut u64, timer: &mut GlobalTimer) {
     let now = timer.get_time();
     let mut ts_ms = Milliseconds(*ts);
@@ -458,8 +439,6 @@ pub extern fn main_core0() -> i32 {
     buffer_logger.set_uart_log_level(log::LevelFilter::Info);
     buffer_logger.register();
     log::set_max_level(log::LevelFilter::Info);
-    
-    init_gateware();
 
     info!("ARTIQ satellite manager starting...");
     info!("gateware ident {}", identifier_read(&mut [0; 64]));
@@ -472,15 +451,22 @@ pub extern fn main_core0() -> i32 {
     #[cfg(has_si5324)]
     si5324::setup(&mut i2c, &SI5324_SETTINGS, si5324::Input::Ckin1, &mut timer).expect("cannot initialize Si5324");
 
+    timer.delay_us(100_000);
+    info!("Switching SYS clocks...");
     unsafe {
         csr::drtio_transceiver::stable_clkin_write(1);
     }
-    timer.delay_us(1500); // wait for CPLL/QPLL lock
+    timer.delay_us(20_000); // wait for CPLL/QPLL/MMCM lock
+    let clk = unsafe { csr::sys_crg::current_clock_read() };
+    if clk == 1 {
+        info!("SYS CLK switched successfully");
+    } else {
+        panic!("SYS CLK did not switch");
+    }
 
     unsafe {
         csr::drtio_transceiver::txenable_write(0xffffffffu32 as _);
     }
-    init_rtio_crg(&mut timer);
 
     #[cfg(has_drtio_routing)]
     let mut repeaters = [repeater::Repeater::default(); csr::DRTIOREP.len()];

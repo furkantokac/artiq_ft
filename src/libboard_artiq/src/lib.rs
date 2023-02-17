@@ -29,8 +29,6 @@ pub mod drtioaux_async;
 pub mod mem;
 
 use core::{cmp, str};
-use libboard_zynq::slcr;
-use libregister::RegisterW;
 
 pub fn identifier_read(buf: &mut [u8]) -> &str {
     unsafe {
@@ -43,27 +41,4 @@ pub fn identifier_read(buf: &mut [u8]) -> &str {
         }
         str::from_utf8_unchecked(&buf[..len as usize])
     }
-}
-
-pub fn init_gateware() {
-    // Set up PS->PL clocks
-    slcr::RegisterBlock::unlocked(|slcr| {
-        // As we are touching the mux, the clock may glitch, so reset the PL.
-        slcr.fpga_rst_ctrl.write(
-            slcr::FpgaRstCtrl::zeroed()
-                .fpga0_out_rst(true)
-                .fpga1_out_rst(true)
-                .fpga2_out_rst(true)
-                .fpga3_out_rst(true)
-        );
-        slcr.fpga0_clk_ctrl.write(
-            slcr::Fpga0ClkCtrl::zeroed()
-                .src_sel(slcr::PllSource::IoPll)
-                .divisor0(8)
-                .divisor1(1)
-        );
-        slcr.fpga_rst_ctrl.write(
-            slcr::FpgaRstCtrl::zeroed()
-        );
-    });
 }
