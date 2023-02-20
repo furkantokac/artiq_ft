@@ -342,6 +342,8 @@ class GenericSatellite(SoCCore):
         self.crg = self.ps7 # HACK for eem_7series to find the clock
         self.crg.cd_sys = self.sys_crg.cd_sys
 
+        fix_serdes_timing_path(platform)
+
         self.rtio_channels = []
         has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
         if has_grabber:
