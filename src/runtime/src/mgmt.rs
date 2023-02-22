@@ -1,15 +1,16 @@
+use alloc::{rc::Rc, string::String, vec::Vec};
+use core::cell::RefCell;
+
 use futures::{future::poll_fn, task::Poll};
 use libasync::{smoltcp::TcpStream, task};
-use libboard_zynq::{smoltcp, slcr};
-use libconfig::Config;
-use core::cell::RefCell;
-use alloc::{rc::Rc, vec::Vec, string::String};
-use log::{self, info, debug, warn, error, LevelFilter};
-
 use libboard_artiq::logger::{BufferLogger, LogBufferRef};
-use crate::proto_async::*;
+use libboard_zynq::{slcr, smoltcp};
+use libconfig::Config;
+use log::{self, debug, error, info, warn, LevelFilter};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
+
+use crate::proto_async::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -24,10 +25,10 @@ type Result<T> = core::result::Result<T, Error>;
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
-            &Error::NetworkError(error)  => write!(f, "network error: {}", error),
+            &Error::NetworkError(error) => write!(f, "network error: {}", error),
             &Error::UnknownLogLevel(lvl) => write!(f, "unknown log level {}", lvl),
-            &Error::UnexpectedPattern    => write!(f, "unexpected pattern"),
-            &Error::UnrecognizedPacket   => write!(f, "unrecognized packet"),
+            &Error::UnexpectedPattern => write!(f, "unexpected pattern"),
+            &Error::UnrecognizedPacket => write!(f, "unrecognized packet"),
         }
     }
 }
@@ -74,9 +75,7 @@ async fn read_log_level_filter(stream: &mut TcpStream) -> Result<log::LevelFilte
 }
 
 async fn get_logger_buffer_pred<F>(f: F) -> LogBufferRef<'static>
-where
-    F: Fn(&LogBufferRef) -> bool,
-{
+where F: Fn(&LogBufferRef) -> bool {
     poll_fn(|ctx| {
         let logger = unsafe { BufferLogger::get_logger().as_mut().unwrap() };
         match logger.buffer() {
@@ -112,10 +111,7 @@ async fn read_key(stream: &mut TcpStream) -> Result<String> {
     Ok(String::from_utf8(buffer).unwrap())
 }
 
-async fn handle_connection(
-    stream: &mut TcpStream,
-    pull_id: Rc<RefCell<u32>>,
-    cfg: Rc<Config>) -> Result<()> {
+async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>, cfg: Rc<Config>) -> Result<()> {
     if !expect(&stream, b"ARTIQ management\n").await? {
         return Err(Error::UnexpectedPattern);
     }
@@ -163,7 +159,7 @@ async fn handle_connection(
                         logger.set_buffer_log_level(LevelFilter::Trace);
                     }
                 }
-            },
+            }
             Request::SetLogFilter => {
                 let lvl = read_log_level_filter(stream).await?;
                 info!("Changing log level to {}", lvl);
@@ -174,10 +170,7 @@ async fn handle_connection(
                 let lvl = read_log_level_filter(stream).await?;
                 info!("Changing UART log level to {}", lvl);
                 unsafe {
-                    BufferLogger::get_logger()
-                        .as_ref()
-                        .unwrap()
-                        .set_uart_log_level(lvl);
+                    BufferLogger::get_logger().as_ref().unwrap().set_uart_log_level(lvl);
                 }
                 write_i8(stream, Reply::Success as i8).await?;
             }
@@ -193,16 +186,12 @@ async fn handle_connection(
                     warn!("read error: no such key");
                     write_i8(stream, Reply::Error as i8).await?;
                 }
-            },
+            }
             Request::ConfigWrite => {
                 let key = read_key(stream).await?;
                 debug!("write key: {}", key);
                 let len = read_i32(stream).await?;
-                let len = if len <= 0 {
-                    0
-                } else {
-                    len as usize
-                };
+                let len = if len <= 0 { 0 } else { len as usize };
                 let mut buffer = Vec::with_capacity(len);
                 unsafe {
                     buffer.set_len(len);
@@ -217,7 +206,7 @@ async fn handle_connection(
                     error!("failed to write: {:?}", value);
                     write_i8(stream, Reply::Error as i8).await?;
                 }
-            },
+            }
             Request::ConfigRemove => {
                 let key = read_key(stream).await?;
                 debug!("erase key: {}", key);
@@ -229,7 +218,7 @@ async fn handle_connection(
                     warn!("erase failed");
                     write_i8(stream, Reply::Error as i8).await?;
                 }
-            },
+            }
             Request::Reboot => {
                 info!("rebooting");
                 write_i8(stream, Reply::RebootImminent as i8).await?;

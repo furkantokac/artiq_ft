@@ -21,8 +21,7 @@ pub use _Unwind_Reason_Code::*;
 pub type _Unwind_Exception_Class = u64;
 pub type _Unwind_Word = uintptr_t;
 pub type _Unwind_Ptr = uintptr_t;
-pub type _Unwind_Trace_Fn =
-    extern "C" fn(ctx: *mut _Unwind_Context, arg: *mut c_void) -> _Unwind_Reason_Code;
+pub type _Unwind_Trace_Fn = extern "C" fn(ctx: *mut _Unwind_Context, arg: *mut c_void) -> _Unwind_Reason_Code;
 
 #[cfg(target_arch = "x86")]
 pub const unwinder_private_data_size: usize = 5;
@@ -279,7 +278,6 @@ if #[cfg(all(windows, target_arch = "x86_64", target_env = "gnu"))] {
 } // cfg_if!
 
 #[no_mangle]
-extern fn abort() {
+extern "C" fn abort() {
     panic!("Abort!");
 }
-

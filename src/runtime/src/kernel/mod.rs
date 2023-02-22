@@ -1,15 +1,16 @@
+use alloc::{string::String, vec::Vec};
 use core::ptr;
-use alloc::{vec::Vec, string::String};
 
-use libcortex_a9::{mutex::Mutex, sync_channel, semaphore::Semaphore};
+use libcortex_a9::{mutex::Mutex, semaphore::Semaphore, sync_channel};
+
 use crate::eh_artiq;
 
 mod control;
 pub use control::Control;
-pub mod core1;
 mod api;
-mod rpc;
+pub mod core1;
 mod dma;
+mod rpc;
 pub use dma::DmaRecorder;
 mod cache;
 
@@ -21,7 +22,7 @@ pub struct RPCException {
     pub file: u32,
     pub line: i32,
     pub column: i32,
-    pub function: u32
+    pub function: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -31,11 +32,16 @@ pub enum Message {
     LoadFailed,
     StartRequest,
     KernelFinished(u8),
-    KernelException(&'static [Option<eh_artiq::Exception<'static>>],
-                    &'static [eh_artiq::StackPointerBacktrace],
-                    &'static [(usize, usize)],
-                    u8),
-    RpcSend { is_async: bool, data: Vec<u8> },
+    KernelException(
+        &'static [Option<eh_artiq::Exception<'static>>],
+        &'static [eh_artiq::StackPointerBacktrace],
+        &'static [(usize, usize)],
+        u8,
+    ),
+    RpcSend {
+        is_async: bool,
+        data: Vec<u8>,
+    },
     RpcRecvRequest(*mut ()),
     RpcRecvReply(Result<usize, RPCException>),
 
@@ -64,4 +70,3 @@ static mut KERNEL_CHANNEL_1TO0: Option<sync_channel::Sender<'static, Message>> =
 pub static mut KERNEL_IMAGE: *const core1::KernelImage = ptr::null();
 
 static INIT_LOCK: Mutex<()> = Mutex::new(());
-

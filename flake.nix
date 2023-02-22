@@ -253,6 +253,23 @@
         '';
     };
 
+    fmt-check = pkgs.stdenv.mkDerivation {
+      name = "fmt-check";
+
+      nativeBuildInputs = [
+        rustPlatform.rust.cargo
+      ];
+
+      phases = [ "buildPhase" ];
+
+      buildPhase =
+        ''
+        cd ${self}/src
+        cargo fmt -- --check
+        touch $out
+        '';
+    };
+
     # for hitl-tests
     zc706-nist_qc2 = (build { target = "zc706"; variant = "nist_qc2"; });
     zc706-hitl-tests = pkgs.stdenv.mkDerivation {
@@ -341,7 +358,7 @@
       (build { target = "kasli_soc"; variant = "master"; json = ./kasli-soc-master.json; }) //
       (build { target = "kasli_soc"; variant = "satellite"; json = ./kasli-soc-satellite.json; });
 
-    hydraJobs = packages.x86_64-linux // { inherit zc706-hitl-tests; inherit gateware-sim; };
+    hydraJobs = packages.x86_64-linux // { inherit zc706-hitl-tests; inherit gateware-sim; inherit fmt-check; };
 
     devShell.x86_64-linux = pkgs.mkShell {
       name = "artiq-zynq-dev-shell";

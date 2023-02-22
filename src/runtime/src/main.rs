@@ -1,6 +1,6 @@
 #![no_std]
 #![no_main]
-#![recursion_limit="1024"]  // for futures_util::select!
+#![recursion_limit = "1024"] // for futures_util::select!
 #![feature(alloc_error_handler)]
 #![feature(panic_info_message)]
 #![feature(c_variadic)]
@@ -12,25 +12,32 @@
 #[macro_use]
 extern crate alloc;
 
-use log::{info, warn, error};
-
-use libboard_zynq::{timer::GlobalTimer, mpcore, gic};
-use libasync::{task, block_async};
-use libsupport_zynq::ram;
-use nb;
-use void::Void;
-use libconfig::Config;
-use libcortex_a9::l2c::enable_l2_cache;
-use libboard_artiq::{logger, identifier_read, pl};
+use libasync::{block_async, task};
 #[cfg(feature = "target_kasli_soc")]
 use libboard_artiq::io_expander;
+use libboard_artiq::{identifier_read, logger, pl};
+use libboard_zynq::{gic, mpcore, timer::GlobalTimer};
+use libconfig::Config;
+use libcortex_a9::l2c::enable_l2_cache;
+use libsupport_zynq::ram;
+use log::{error, info, warn};
+use nb;
+use void::Void;
 
 const ASYNC_ERROR_COLLISION: u8 = 1 << 0;
 const ASYNC_ERROR_BUSY: u8 = 1 << 1;
 const ASYNC_ERROR_SEQUENCE_ERROR: u8 = 1 << 2;
 
-mod proto_async;
+mod analyzer;
 mod comms;
+mod eh_artiq;
+mod i2c;
+mod irq;
+mod kernel;
+mod mgmt;
+mod moninj;
+mod panic;
+mod proto_async;
 mod rpc;
 #[cfg(ki_impl = "csr")]
 #[path = "rtio_csr.rs"]
@@ -38,16 +45,8 @@ mod rtio;
 #[cfg(ki_impl = "acp")]
 #[path = "rtio_acp.rs"]
 mod rtio;
-mod rtio_mgt;
 mod rtio_clocking;
-mod kernel;
-mod moninj;
-mod eh_artiq;
-mod panic;
-mod mgmt;
-mod analyzer;
-mod irq;
-mod i2c;
+mod rtio_mgt;
 
 static mut SEEN_ASYNC_ERRORS: u8 = 0;
 
@@ -74,15 +73,27 @@ async fn report_async_rtio_errors() {
             let errors = pl::csr::rtio_core::async_error_read();
             if errors & ASYNC_ERROR_COLLISION != 0 {
                 let channel = pl::csr::rtio_core::collision_channel_read();
-                error!("RTIO collision involving channel 0x{:04x}:{}", channel, rtio_mgt::resolve_channel_name(channel as u32));
+                error!(
+                    "RTIO collision involving channel 0x{:04x}:{}",
+                    channel,
+                    rtio_mgt::resolve_channel_name(channel as u32)
+                );
             }
             if errors & ASYNC_ERROR_BUSY != 0 {
                 let channel = pl::csr::rtio_core::busy_channel_read();
-                error!("RTIO busy error involving channel 0x{:04x}:{}", channel, rtio_mgt::resolve_channel_name(channel as u32));
+                error!(
+                    "RTIO busy error involving channel 0x{:04x}:{}",
+                    channel,
+                    rtio_mgt::resolve_channel_name(channel as u32)
+                );
             }
             if errors & ASYNC_ERROR_SEQUENCE_ERROR != 0 {
                 let channel = pl::csr::rtio_core::sequence_error_channel_read();
-                error!("RTIO sequence error involving channel 0x{:04x}:{}", channel, rtio_mgt::resolve_channel_name(channel as u32));
+                error!(
+                    "RTIO sequence error involving channel 0x{:04x}:{}",
+                    channel,
+                    rtio_mgt::resolve_channel_name(channel as u32)
+                );
             }
             SEEN_ASYNC_ERRORS = errors;
             pl::csr::rtio_core::async_error_write(errors);
@@ -90,18 +101,14 @@ async fn report_async_rtio_errors() {
     }
 }
 
-
-
-static mut LOG_BUFFER: [u8; 1<<17] = [0; 1<<17];
+static mut LOG_BUFFER: [u8; 1 << 17] = [0; 1 << 17];
 
 #[no_mangle]
 pub fn main_core0() {
     enable_l2_cache(0x8);
     let mut timer = GlobalTimer::start();
 
-    let buffer_logger = unsafe {
-        logger::BufferLogger::new(&mut LOG_BUFFER[..])
-    };
+    let buffer_logger = unsafe { logger::BufferLogger::new(&mut LOG_BUFFER[..]) };
     buffer_logger.set_uart_log_level(log::LevelFilter::Info);
     buffer_logger.register();
     log::set_max_level(log::LevelFilter::Info);
@@ -137,7 +144,7 @@ pub fn main_core0() {
             Config::new_dummy()
         }
     };
-    
+
     rtio_clocking::init(&mut timer, &cfg);
 
     task::spawn(report_async_rtio_errors());

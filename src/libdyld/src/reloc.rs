@@ -1,16 +1,10 @@
 use alloc::string::String;
+
+use libcortex_a9::{asm::{dsb, isb},
+                   cache::{bpiall, dcci_slice, iciallu}};
 use log::trace;
-use super::{
-    Arch,
-    elf::*,
-    Error,
-    image::Image,
-    Library,
-};
-use libcortex_a9::{
-    cache::{dcci_slice, iciallu, bpiall},
-    asm::{dsb, isb},
-};
+
+use super::{elf::*, image::Image, Arch, Error, Library};
 
 pub trait Relocatable {
     fn offset(&self) -> usize;
@@ -66,25 +60,18 @@ enum RelType {
 impl RelType {
     pub fn new(arch: Arch, type_info: u8) -> Option<Self> {
         match type_info {
-            R_OR1K_NONE if arch == Arch::OpenRisc =>
-                Some(RelType::None),
-            R_ARM_NONE if arch == Arch::Arm =>
-                Some(RelType::None),
+            R_OR1K_NONE if arch == Arch::OpenRisc => Some(RelType::None),
+            R_ARM_NONE if arch == Arch::Arm => Some(RelType::None),
 
-            R_OR1K_RELATIVE if arch == Arch::OpenRisc =>
-                Some(RelType::Relative),
-            R_ARM_RELATIVE if arch == Arch::Arm =>
-                Some(RelType::Relative),
+            R_OR1K_RELATIVE if arch == Arch::OpenRisc => Some(RelType::Relative),
+            R_ARM_RELATIVE if arch == Arch::Arm => Some(RelType::Relative),
 
-            R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT
-                if arch == Arch::OpenRisc => Some(RelType::LookupAbs),
-            R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT | R_ARM_ABS32
-                if arch == Arch::Arm => Some(RelType::LookupAbs),
+            R_OR1K_32 | R_OR1K_GLOB_DAT | R_OR1K_JMP_SLOT if arch == Arch::OpenRisc => Some(RelType::LookupAbs),
+            R_ARM_GLOB_DAT | R_ARM_JUMP_SLOT | R_ARM_ABS32 if arch == Arch::Arm => Some(RelType::LookupAbs),
 
             R_ARM_PREL31 if arch == Arch::Arm => Some(RelType::LookupRel),
 
-            _ =>
-                None
+            _ => None,
         }
     }
 }
@@ -96,22 +83,25 @@ fn format_sym_name(sym_name: &[u8]) -> String {
 }
 
 pub fn relocate<R: Relocatable>(
-    arch: Arch, lib: &Library,
-    rel: &R, resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>
+    arch: Arch,
+    lib: &Library,
+    rel: &R,
+    resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>,
 ) -> Result<(), Error> {
     let sym;
     if rel.sym_info() == 0 {
         sym = None;
     } else {
-        sym = Some(lib.symtab().get(rel.sym_info() as usize)
-                   .ok_or("symbol out of bounds of symbol table")?)
+        sym = Some(
+            lib.symtab()
+                .get(rel.sym_info() as usize)
+                .ok_or("symbol out of bounds of symbol table")?,
+        )
     }
 
-    let rel_type = RelType::new(arch, rel.type_info())
-        .ok_or("unsupported relocation type")?;
+    let rel_type = RelType::new(arch, rel.type_info()).ok_or("unsupported relocation type")?;
     let value = match rel_type {
-        RelType::None =>
-            return Ok(()),
+        RelType::None => return Ok(()),
 
         RelType::Relative => {
             let addend = rel.addend(&lib.image);
@@ -132,42 +122,48 @@ pub fn relocate<R: Relocatable>(
                 addr
             } else {
                 // We couldn't find it anywhere.
-                return Err(Error::Lookup(format_sym_name(sym_name)))
+                return Err(Error::Lookup(format_sym_name(sym_name)));
             };
 
             match rel_type {
                 RelType::LookupAbs => sym_addr,
-                RelType::LookupRel =>
-                    sym_addr.wrapping_sub(
-                        lib.image.ptr().wrapping_offset(rel.offset() as isize) as Elf32_Addr),
-                _ => unreachable!()
+                RelType::LookupRel => {
+                    sym_addr.wrapping_sub(lib.image.ptr().wrapping_offset(rel.offset() as isize) as Elf32_Addr)
+                }
+                _ => unreachable!(),
             }
         }
     };
 
     match rel.type_info() {
         R_ARM_PREL31 => {
-            let reloc_word = lib.image.get_ref::<Elf32_Word>(rel.offset())
-                                .ok_or("relocation offset cannot be read")?;
-            lib.image.write(rel.offset(), (reloc_word & 0x80000000) | (value & 0x7FFFFFFF))
-        },
+            let reloc_word = lib
+                .image
+                .get_ref::<Elf32_Word>(rel.offset())
+                .ok_or("relocation offset cannot be read")?;
+            lib.image
+                .write(rel.offset(), (reloc_word & 0x80000000) | (value & 0x7FFFFFFF))
+        }
 
         _ => lib.image.write(rel.offset(), value),
     }
 }
 
-pub fn rebind(
-    arch: Arch, lib: &Library, name: &[u8], value: Elf32_Word
-) -> Result<(), Error> {
+pub fn rebind(arch: Arch, lib: &Library, name: &[u8], value: Elf32_Word) -> Result<(), Error> {
     fn rebind_symbol_to_value<R: Relocatable>(
-        arch: Arch, lib: &Library,name: &[u8], value: Elf32_Word, relocs: &[R]
+        arch: Arch,
+        lib: &Library,
+        name: &[u8],
+        value: Elf32_Word,
+        relocs: &[R],
     ) -> Result<(), Error> {
         for reloc in relocs {
-            let rel_type = RelType::new(arch, reloc.type_info())
-                .ok_or("unsupported relocation type")?;
+            let rel_type = RelType::new(arch, reloc.type_info()).ok_or("unsupported relocation type")?;
             match rel_type {
                 RelType::LookupAbs => {
-                    let sym = lib.symtab().get(reloc.sym_info() as usize)
+                    let sym = lib
+                        .symtab()
+                        .get(reloc.sym_info() as usize)
                         .ok_or("symbol out of bounds of symbol table")?;
                     let sym_name = lib.name_starting_at(sym.st_name as usize)?;
 

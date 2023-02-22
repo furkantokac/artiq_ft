@@ -1,9 +1,10 @@
-use libconfig::Config;
-#[cfg(has_drtio_routing)]
-use crate::pl::csr;
 use core::fmt;
 
-use log::{warn, info};
+use libconfig::Config;
+use log::{info, warn};
+
+#[cfg(has_drtio_routing)]
+use crate::pl::csr;
 
 #[cfg(has_drtio_routing)]
 pub const DEST_COUNT: usize = 256;
@@ -18,7 +19,7 @@ impl RoutingTable {
     // default routing table is for star topology with no repeaters
     pub fn default_master(default_n_links: usize) -> RoutingTable {
         let mut ret = RoutingTable([[INVALID_HOP; MAX_HOPS]; DEST_COUNT]);
-        let n_entries = default_n_links + 1;  // include local RTIO
+        let n_entries = default_n_links + 1; // include local RTIO
         for i in 0..n_entries {
             ret.0[i][0] = i as u8;
         }
@@ -58,10 +59,10 @@ impl fmt::Display for RoutingTable {
 pub fn config_routing_table(default_n_links: usize, cfg: &Config) -> RoutingTable {
     let mut ret = RoutingTable::default_master(default_n_links);
     if let Ok(data) = cfg.read("routing_table") {
-        if data.len() == DEST_COUNT*MAX_HOPS {
+        if data.len() == DEST_COUNT * MAX_HOPS {
             for i in 0..DEST_COUNT {
                 for j in 0..MAX_HOPS {
-                    ret.0[i][j] = data[i*MAX_HOPS+j];
+                    ret.0[i][j] = data[i * MAX_HOPS + j];
                 }
             }
         } else {

@@ -1,14 +1,12 @@
+use core_io::{Error as IoError, ErrorKind as IoErrorKind};
 use crc;
-
-use core_io::{ErrorKind as IoErrorKind, Error as IoError};
-use io::{proto::ProtoRead, proto::ProtoWrite, Cursor};
-use libboard_zynq::{timer::GlobalTimer, time::Milliseconds};
+use io::{proto::{ProtoRead, ProtoWrite},
+         Cursor};
+use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use libcortex_a9::asm::dmb;
-use crate::mem::mem::DRTIOAUX_MEM;
-use crate::pl::csr::DRTIOAUX;
-use crate::drtioaux_proto::Error as ProtocolError;
 
 pub use crate::drtioaux_proto::Packet;
+use crate::{drtioaux_proto::Error as ProtocolError, mem::mem::DRTIOAUX_MEM, pl::csr::DRTIOAUX};
 
 #[derive(Debug)]
 pub enum Error {
@@ -21,7 +19,7 @@ pub enum Error {
 
     RoutingError,
 
-    Protocol(ProtocolError)
+    Protocol(ProtocolError),
 }
 
 impl From<ProtocolError> for Error {
@@ -63,7 +61,7 @@ pub fn copy_work_buffer(src: *mut u32, dst: *mut u32, len: isize) {
     // and AXI burst reads/writes are not implemented yet in gateware
     // thus the need for a work buffer for transmitting and copying it over
     unsafe {
-        for i in 0..(len/4) {
+        for i in 0..(len / 4) {
             *dst.offset(i) = *src.offset(i);
             //data memory barrier to prevent bursts
             dmb();
@@ -72,8 +70,7 @@ pub fn copy_work_buffer(src: *mut u32, dst: *mut u32, len: isize) {
 }
 
 fn receive<F, T>(linkno: u8, f: F) -> Result<Option<T>, Error>
-    where F: FnOnce(&[u8]) -> Result<T, Error>
-{
+where F: FnOnce(&[u8]) -> Result<T, Error> {
     let linkidx = linkno as usize;
     unsafe {
         if (DRTIOAUX[linkidx].aux_rx_present_read)() == 1 {
@@ -93,12 +90,12 @@ fn receive<F, T>(linkno: u8, f: F) -> Result<Option<T>, Error>
 
 pub fn recv(linkno: u8) -> Result<Option<Packet>, Error> {
     if has_rx_error(linkno) {
-        return Err(Error::GatewareError)
+        return Err(Error::GatewareError);
     }
 
     receive(linkno, |buffer| {
         if buffer.len() < 8 {
-            return Err(IoError::new(IoErrorKind::UnexpectedEof, "Unexpected end").into())
+            return Err(IoError::new(IoErrorKind::UnexpectedEof, "Unexpected end").into());
         }
 
         let mut reader = Cursor::new(buffer);
@@ -107,7 +104,7 @@ pub fn recv(linkno: u8) -> Result<Option<Packet>, Error> {
         let checksum = crc::crc32::checksum_ieee(&reader.get_ref()[0..checksum_at]);
         reader.set_position(checksum_at);
         if reader.read_u32()? != checksum {
-            return Err(Error::CorruptedPacket)
+            return Err(Error::CorruptedPacket);
         }
         reader.set_position(0);
 
@@ -115,9 +112,7 @@ pub fn recv(linkno: u8) -> Result<Option<Packet>, Error> {
     })
 }
 
-pub fn recv_timeout(linkno: u8, timeout_ms: Option<u64>,
-    timer: GlobalTimer) -> Result<Packet, Error> 
-{
+pub fn recv_timeout(linkno: u8, timeout_ms: Option<u64>, timer: GlobalTimer) -> Result<Packet, Error> {
     let timeout_ms = Milliseconds(timeout_ms.unwrap_or(10));
     let limit = timer.get_time() + timeout_ms;
     while timer.get_time() < limit {
@@ -130,15 +125,14 @@ pub fn recv_timeout(linkno: u8, timeout_ms: Option<u64>,
 }
 
 fn transmit<F>(linkno: u8, f: F) -> Result<(), Error>
-    where F: FnOnce(&mut [u8]) -> Result<usize, Error>
-{
+where F: FnOnce(&mut [u8]) -> Result<usize, Error> {
     let linkno = linkno as usize;
     unsafe {
         while (DRTIOAUX[linkno].aux_tx_read)() != 0 {}
         let ptr = DRTIOAUX_MEM[linkno].base as *mut u32;
         let len = DRTIOAUX_MEM[linkno].size / 2;
         // work buffer, works with unaligned mem access
-        let mut buf: [u8; 1024] = [0; 1024]; 
+        let mut buf: [u8; 1024] = [0; 1024];
         let len = f(&mut buf[0..len])?;
         copy_work_buffer(buf.as_mut_ptr() as *mut u32, ptr, len as isize);
         (DRTIOAUX[linkno].aux_tx_length_write)(len as u16);
@@ -152,7 +146,7 @@ pub fn send(linkno: u8, packet: &Packet) -> Result<(), Error> {
         let mut writer = Cursor::new(buffer);
 
         packet.write_to(&mut writer)?;
-        
+
         // Pad till offset 4, insert checksum there
         let padding = (12 - (writer.position() % 8)) % 8;
         for _ in 0..padding {

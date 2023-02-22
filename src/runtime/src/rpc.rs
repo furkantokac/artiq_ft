@@ -1,18 +1,17 @@
-use core::str;
-use core::future::Future;
-use cslice::{CSlice, CMutSlice};
-use log::trace;
-use byteorder::{NativeEndian, ByteOrder};
-
-use core_io::{Write, Error};
-use libboard_zynq::smoltcp;
-use libasync::smoltcp::TcpStream;
 use alloc::boxed::Box;
-use async_recursion::async_recursion;
+use core::{future::Future, str};
 
+use async_recursion::async_recursion;
+use byteorder::{ByteOrder, NativeEndian};
+use core_io::{Error, Write};
+use cslice::{CMutSlice, CSlice};
 use io::proto::ProtoWrite;
+use libasync::smoltcp::TcpStream;
+use libboard_zynq::smoltcp;
+use log::trace;
+
+use self::tag::{split_tag, Tag, TagIterator};
 use crate::proto_async;
-use self::tag::{Tag, TagIterator, split_tag};
 
 #[inline]
 fn round_up(val: usize, power_of_two: usize) -> usize {
@@ -52,17 +51,17 @@ async unsafe fn recv_elements<F>(
     elt_tag: Tag<'async_recursion>,
     length: usize,
     storage: *mut (),
-    alloc: &(impl Fn(usize) -> F + 'async_recursion)
+    alloc: &(impl Fn(usize) -> F + 'async_recursion),
 ) -> Result<(), smoltcp::Error>
 where
-    F: Future<Output=*mut ()>,
+    F: Future<Output = *mut ()>,
 {
     // List of simple types are special-cased in the protocol for performance.
     match elt_tag {
         Tag::Bool => {
             let dest = core::slice::from_raw_parts_mut(storage as *mut u8, length);
             proto_async::read_chunk(stream, dest).await?;
-        },
+        }
         Tag::Int32 => {
             let ptr = storage as *mut u32;
             let dest = core::slice::from_raw_parts_mut(ptr as *mut u8, length * 4);
@@ -70,7 +69,7 @@ where
             drop(dest);
             let dest = core::slice::from_raw_parts_mut(ptr, length);
             NativeEndian::from_slice_u32(dest);
-        },
+        }
         Tag::Int64 | Tag::Float64 => {
             let ptr = storage as *mut u64;
             let dest = core::slice::from_raw_parts_mut(ptr as *mut u8, length * 8);
@@ -78,7 +77,7 @@ where
             drop(dest);
             let dest = core::slice::from_raw_parts_mut(ptr, length);
             NativeEndian::from_slice_u64(dest);
-        },
+        }
         _ => {
             let mut data = storage;
             for _ in 0..length {
@@ -95,36 +94,37 @@ where
 /// invoked any number of times with the size of the required allocation as a parameter
 /// (which is assumed to be correctly aligned for all payload types).
 #[async_recursion(?Send)]
-async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, data: &mut *mut (),
-                              alloc: &(impl Fn(usize) -> F + 'async_recursion))
-                             -> Result<(), smoltcp::Error>
-                          where F: Future<Output=*mut ()>
+async unsafe fn recv_value<F>(
+    stream: &TcpStream,
+    tag: Tag<'async_recursion>,
+    data: &mut *mut (),
+    alloc: &(impl Fn(usize) -> F + 'async_recursion),
+) -> Result<(), smoltcp::Error>
+where
+    F: Future<Output = *mut ()>,
 {
     macro_rules! consume_value {
-        ($ty:ty, |$ptr:ident| $map:expr) => ({
+        ($ty:ty, | $ptr:ident | $map:expr) => {{
             let $ptr = align_ptr_mut::<$ty>(*data);
             *data = $ptr.offset(1) as *mut ();
             $map
-        })
+        }};
     }
 
     match tag {
         Tag::None => Ok(()),
-        Tag::Bool =>
-            consume_value!(i8, |ptr| {
-                *ptr = proto_async::read_i8(stream).await?;
-                Ok(())
-            }),
-        Tag::Int32 =>
-            consume_value!(i32, |ptr| {
-                *ptr = proto_async::read_i32(stream).await?;
-                Ok(())
-            }),
-        Tag::Int64 | Tag::Float64 =>
-            consume_value!(i64, |ptr| {
-                *ptr = proto_async::read_i64(stream).await?;
-                Ok(())
-            }),
+        Tag::Bool => consume_value!(i8, |ptr| {
+            *ptr = proto_async::read_i8(stream).await?;
+            Ok(())
+        }),
+        Tag::Int32 => consume_value!(i32, |ptr| {
+            *ptr = proto_async::read_i32(stream).await?;
+            Ok(())
+        }),
+        Tag::Int64 | Tag::Float64 => consume_value!(i64, |ptr| {
+            *ptr = proto_async::read_i64(stream).await?;
+            Ok(())
+        }),
         Tag::String | Tag::Bytes | Tag::ByteArray => {
             consume_value!(CMutSlice<u8>, |ptr| {
                 let length = proto_async::read_i32(stream).await? as usize;
@@ -148,7 +148,10 @@ async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, da
         }
         Tag::List(it) => {
             #[repr(C)]
-            struct List { elements: *mut (), length: usize }
+            struct List {
+                elements: *mut (),
+                length: usize,
+            }
             consume_value!(*mut List, |ptr_to_list| {
                 let tag = it.clone().next().expect("truncated tag");
                 let length = proto_async::read_i32(stream).await? as usize;
@@ -180,7 +183,7 @@ async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, da
                 for _ in 0..num_dims {
                     let len = proto_async::read_i32(stream).await? as usize;
                     total_len *= len;
-                    consume_value!(usize, |ptr| *ptr = len )
+                    consume_value!(usize, |ptr| *ptr = len)
                 }
 
                 // Allocate backing storage for elements; deserialize them.
@@ -198,14 +201,18 @@ async unsafe fn recv_value<F>(stream: &TcpStream, tag: Tag<'async_recursion>, da
             Ok(())
         }
         Tag::Keyword(_) => unreachable!(),
-        Tag::Object => unreachable!()
+        Tag::Object => unreachable!(),
     }
 }
 
-pub async fn recv_return<F>(stream: &TcpStream, tag_bytes: &[u8], data: *mut (),
-                            alloc: &impl Fn(usize) -> F)
-                           -> Result<(), smoltcp::Error>
-                        where F: Future<Output=*mut ()>
+pub async fn recv_return<F>(
+    stream: &TcpStream,
+    tag_bytes: &[u8],
+    data: *mut (),
+    alloc: &impl Fn(usize) -> F,
+) -> Result<(), smoltcp::Error>
+where
+    F: Future<Output = *mut ()>,
 {
     let mut it = TagIterator::new(tag_bytes);
     trace!("recv ...->{}", it);
@@ -217,10 +224,8 @@ pub async fn recv_return<F>(stream: &TcpStream, tag_bytes: &[u8], data: *mut (),
     Ok(())
 }
 
-unsafe fn send_elements<W>(writer: &mut W, elt_tag: Tag, length: usize, data: *const ())
-                          -> Result<(), Error>
-    where W: Write + ?Sized
-{
+unsafe fn send_elements<W>(writer: &mut W, elt_tag: Tag, length: usize, data: *const ()) -> Result<(), Error>
+where W: Write + ?Sized {
     writer.write_u8(elt_tag.as_u8())?;
     match elt_tag {
         // we cannot use NativeEndian::from_slice_i32 as the data is not mutable,
@@ -228,15 +233,15 @@ unsafe fn send_elements<W>(writer: &mut W, elt_tag: Tag, length: usize, data: *c
         Tag::Bool => {
             let slice = core::slice::from_raw_parts(data as *const u8, length);
             writer.write_all(slice)?;
-        },
+        }
         Tag::Int32 => {
             let slice = core::slice::from_raw_parts(data as *const u8, length * 4);
             writer.write_all(slice)?;
-        },
+        }
         Tag::Int64 | Tag::Float64 => {
             let slice = core::slice::from_raw_parts(data as *const u8, length * 8);
             writer.write_all(slice)?;
-        },
+        }
         _ => {
             let mut data = data;
             for _ in 0..length {
@@ -247,36 +252,26 @@ unsafe fn send_elements<W>(writer: &mut W, elt_tag: Tag, length: usize, data: *c
     Ok(())
 }
 
-unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
-                       -> Result<(), Error>
-    where W: Write + ?Sized
-{
+unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ()) -> Result<(), Error>
+where W: Write + ?Sized {
     macro_rules! consume_value {
-        ($ty:ty, |$ptr:ident| $map:expr) => ({
+        ($ty:ty, | $ptr:ident | $map:expr) => {{
             let $ptr = align_ptr::<$ty>(*data);
             *data = $ptr.offset(1) as *const ();
             $map
-        })
+        }};
     }
 
     writer.write_u8(tag.as_u8())?;
     match tag {
         Tag::None => Ok(()),
-        Tag::Bool =>
-            consume_value!(u8, |ptr|
-                writer.write_u8(*ptr)),
-        Tag::Int32 =>
-            consume_value!(u32, |ptr|
-                writer.write_u32(*ptr)),
-        Tag::Int64 | Tag::Float64 =>
-            consume_value!(u64, |ptr|
-                writer.write_u64(*ptr)),
-        Tag::String =>
-            consume_value!(CSlice<u8>, |ptr|
-                writer.write_string(str::from_utf8((*ptr).as_ref()).unwrap())),
-        Tag::Bytes | Tag::ByteArray =>
-            consume_value!(CSlice<u8>, |ptr|
-                writer.write_bytes((*ptr).as_ref())),
+        Tag::Bool => consume_value!(u8, |ptr| writer.write_u8(*ptr)),
+        Tag::Int32 => consume_value!(u32, |ptr| writer.write_u32(*ptr)),
+        Tag::Int64 | Tag::Float64 => consume_value!(u64, |ptr| writer.write_u64(*ptr)),
+        Tag::String => consume_value!(CSlice<u8>, |ptr| {
+            writer.write_string(str::from_utf8((*ptr).as_ref()).unwrap())
+        }),
+        Tag::Bytes | Tag::ByteArray => consume_value!(CSlice<u8>, |ptr| writer.write_bytes((*ptr).as_ref())),
         Tag::Tuple(it, arity) => {
             let mut it = it.clone();
             writer.write_u8(arity)?;
@@ -291,7 +286,10 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
         }
         Tag::List(it) => {
             #[repr(C)]
-            struct List { elements: *const (), length: u32 }
+            struct List {
+                elements: *const (),
+                length: u32,
+            }
             consume_value!(&List, |ptr| {
                 let length = (**ptr).length as usize;
                 writer.write_u32((*ptr).length)?;
@@ -301,7 +299,7 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
         }
         Tag::Array(it, num_dims) => {
             writer.write_u8(num_dims)?;
-            consume_value!(*const(), |buffer| {
+            consume_value!(*const (), |buffer| {
                 let elt_tag = it.clone().next().expect("truncated tag");
 
                 let mut total_len = 1;
@@ -324,7 +322,9 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
         }
         Tag::Keyword(it) => {
             #[repr(C)]
-            struct Keyword<'a> { name: CSlice<'a, u8> }
+            struct Keyword<'a> {
+                name: CSlice<'a, u8>,
+            }
             consume_value!(Keyword, |ptr| {
                 writer.write_string(str::from_utf8((*ptr).name.as_ref()).unwrap())?;
                 let tag = it.clone().next().expect("truncated tag");
@@ -336,17 +336,16 @@ unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const ())
         }
         Tag::Object => {
             #[repr(C)]
-            struct Object { id: u32 }
-            consume_value!(*const Object, |ptr|
-                writer.write_u32((**ptr).id))
+            struct Object {
+                id: u32,
+            }
+            consume_value!(*const Object, |ptr| writer.write_u32((**ptr).id))
         }
     }
 }
 
-pub fn send_args<W>(writer: &mut W, service: u32, tag_bytes: &[u8], data: *const *const ())
-                   -> Result<(), Error>
-    where W: Write + ?Sized
-{
+pub fn send_args<W>(writer: &mut W, service: u32, tag_bytes: &[u8], data: *const *const ()) -> Result<(), Error>
+where W: Write + ?Sized {
     let (arg_tags_bytes, return_tag_bytes) = split_tag(tag_bytes);
 
     let mut args_it = TagIterator::new(arg_tags_bytes);
@@ -359,7 +358,7 @@ pub fn send_args<W>(writer: &mut W, service: u32, tag_bytes: &[u8], data: *const
             let mut data = unsafe { *data.offset(index) };
             unsafe { send_value(writer, arg_tag, &mut data)? };
         } else {
-            break
+            break;
         }
     }
     writer.write_u8(0)?;
@@ -372,10 +371,10 @@ mod tag {
     use core::fmt;
 
     pub fn split_tag(tag_bytes: &[u8]) -> (&[u8], &[u8]) {
-        let tag_separator =
-            tag_bytes.iter()
-                     .position(|&b| b == b':')
-                     .expect("tag without a return separator");
+        let tag_separator = tag_bytes
+            .iter()
+            .position(|&b| b == b':')
+            .expect("tag without a return separator");
         let (arg_tags_bytes, rest) = tag_bytes.split_at(tag_separator);
         let return_tag_bytes = &rest[1..];
         (arg_tags_bytes, return_tag_bytes)
@@ -396,7 +395,7 @@ mod tag {
         Array(TagIterator<'a>, u8),
         Range(TagIterator<'a>),
         Keyword(TagIterator<'a>),
-        Object
+        Object,
     }
 
     impl<'a> Tag<'a> {
@@ -431,14 +430,15 @@ mod tag {
                 Tag::Tuple(it, arity) => {
                     let it = it.clone();
                     it.take(arity.into()).map(|t| t.alignment()).max().unwrap()
-                },
+                }
                 Tag::Range(it) => {
                     let it = it.clone();
                     it.take(3).map(|t| t.alignment()).max().unwrap()
                 }
                 // the ptr/length(s) pair is basically CSlice
-                Tag::Bytes | Tag::String | Tag::ByteArray | Tag::List(_) | Tag::Array(_, _) =>
-                    core::mem::align_of::<CSlice<()>>(),
+                Tag::Bytes | Tag::String | Tag::ByteArray | Tag::List(_) | Tag::Array(_, _) => {
+                    core::mem::align_of::<CSlice<()>>()
+                }
                 Tag::Keyword(_) => unreachable!("Tag::Keyword should not appear in composite types"),
                 Tag::Object => core::mem::align_of::<u32>(),
             }
@@ -484,7 +484,7 @@ mod tag {
 
     #[derive(Debug, Clone, Copy)]
     pub struct TagIterator<'a> {
-        data: &'a [u8]
+        data: &'a [u8],
     }
 
     impl<'a> TagIterator<'a> {
@@ -492,13 +492,14 @@ mod tag {
             TagIterator { data }
         }
 
-
         fn sub(&mut self, count: u8) -> TagIterator<'a> {
             let data = self.data;
             for _ in 0..count {
                 self.next().expect("truncated tag");
             }
-            TagIterator { data: &data[..(data.len() - self.data.len())] }
+            TagIterator {
+                data: &data[..(data.len() - self.data.len())],
+            }
         }
     }
 
@@ -507,7 +508,7 @@ mod tag {
 
         fn next(&mut self) -> Option<Tag<'a>> {
             if self.data.len() == 0 {
-                return None
+                return None;
             }
 
             let tag_byte = self.data[0];
@@ -535,7 +536,7 @@ mod tag {
                 b'r' => Tag::Range(self.sub(1)),
                 b'k' => Tag::Keyword(self.sub(1)),
                 b'O' => Tag::Object,
-                _    => unreachable!()
+                _ => unreachable!(),
             })
         }
     }
@@ -552,22 +553,14 @@ mod tag {
                 }
 
                 match tag {
-                    Tag::None =>
-                        write!(f, "None")?,
-                    Tag::Bool =>
-                        write!(f, "Bool")?,
-                    Tag::Int32 =>
-                        write!(f, "Int32")?,
-                    Tag::Int64 =>
-                        write!(f, "Int64")?,
-                    Tag::Float64 =>
-                        write!(f, "Float64")?,
-                    Tag::String =>
-                        write!(f, "String")?,
-                    Tag::Bytes =>
-                        write!(f, "Bytes")?,
-                    Tag::ByteArray =>
-                        write!(f, "ByteArray")?,
+                    Tag::None => write!(f, "None")?,
+                    Tag::Bool => write!(f, "Bool")?,
+                    Tag::Int32 => write!(f, "Int32")?,
+                    Tag::Int64 => write!(f, "Int64")?,
+                    Tag::Float64 => write!(f, "Float64")?,
+                    Tag::String => write!(f, "String")?,
+                    Tag::Bytes => write!(f, "Bytes")?,
+                    Tag::ByteArray => write!(f, "ByteArray")?,
                     Tag::Tuple(it, _) => {
                         write!(f, "Tuple(")?;
                         it.fmt(f)?;
@@ -593,8 +586,7 @@ mod tag {
                         it.fmt(f)?;
                         write!(f, ")")?;
                     }
-                    Tag::Object =>
-                        write!(f, "Object")?,
+                    Tag::Object => write!(f, "Object")?,
                 }
             }
 

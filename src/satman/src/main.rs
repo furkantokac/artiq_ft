@@ -8,30 +8,34 @@ extern crate log;
 
 extern crate embedded_hal;
 
-extern crate libboard_zynq;
 extern crate libboard_artiq;
-extern crate libsupport_zynq;
+extern crate libboard_zynq;
 extern crate libcortex_a9;
 extern crate libregister;
+extern crate libsupport_zynq;
 
 extern crate unwind;
 
 extern crate alloc;
 
-use libboard_zynq::{i2c::I2c, timer::GlobalTimer, time::Milliseconds, print, println, mpcore, gic, stdio};
-use libsupport_zynq::ram;
-#[cfg(has_si5324)]
-use libboard_artiq::si5324;
-#[cfg(feature = "target_kasli_soc")]
-use libboard_artiq::io_expander;
-use libboard_artiq::{pl::csr, drtio_routing, drtioaux, logger, identifier_read};
-use libcortex_a9::{spin_lock_yield, interrupt_handler, regs::{MPIDR, SP}, notify_spin_lock, asm, l2c::enable_l2_cache};
-use libregister::{RegisterW, RegisterR};
-#[cfg(feature = "target_kasli_soc")]
-use libboard_zynq::error_led::ErrorLED;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use embedded_hal::blocking::delay::DelayUs;
-use core::sync::atomic::{AtomicBool, Ordering};
+#[cfg(feature = "target_kasli_soc")]
+use libboard_artiq::io_expander;
+#[cfg(has_si5324)]
+use libboard_artiq::si5324;
+use libboard_artiq::{drtio_routing, drtioaux, identifier_read, logger, pl::csr};
+#[cfg(feature = "target_kasli_soc")]
+use libboard_zynq::error_led::ErrorLED;
+use libboard_zynq::{gic, i2c::I2c, mpcore, print, println, stdio, time::Milliseconds, timer::GlobalTimer};
+use libcortex_a9::{asm, interrupt_handler,
+                   l2c::enable_l2_cache,
+                   notify_spin_lock,
+                   regs::{MPIDR, SP},
+                   spin_lock_yield};
+use libregister::{RegisterR, RegisterW};
+use libsupport_zynq::ram;
 
 mod repeater;
 
@@ -48,9 +52,7 @@ fn drtiosat_reset_phy(reset: bool) {
 }
 
 fn drtiosat_link_rx_up() -> bool {
-    unsafe {
-        csr::drtiosat::rx_up_read() == 1
-    }
+    unsafe { csr::drtiosat::rx_up_read() == 1 }
 }
 
 fn drtiosat_tsc_loaded() -> bool {
@@ -62,7 +64,6 @@ fn drtiosat_tsc_loaded() -> bool {
         tsc_loaded
     }
 }
-
 
 #[cfg(has_drtio_routing)]
 macro_rules! forward {
@@ -76,22 +77,26 @@ macro_rules! forward {
                 return Err(drtioaux::Error::RoutingError);
             }
         }
-    }}
+    }};
 }
 
 #[cfg(not(has_drtio_routing))]
 macro_rules! forward {
-    ($routing_table:expr, $destination:expr, $rank:expr, $repeaters:expr, $packet:expr, $timer:expr) => {}
+    ($routing_table:expr, $destination:expr, $rank:expr, $repeaters:expr, $packet:expr, $timer:expr) => {};
 }
 
-fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
-        _routing_table: &mut drtio_routing::RoutingTable, _rank: &mut u8,
-        packet: drtioaux::Packet, timer: &mut GlobalTimer, i2c: &mut I2c) -> Result<(), drtioaux::Error> {
+fn process_aux_packet(
+    _repeaters: &mut [repeater::Repeater],
+    _routing_table: &mut drtio_routing::RoutingTable,
+    _rank: &mut u8,
+    packet: drtioaux::Packet,
+    timer: &mut GlobalTimer,
+    i2c: &mut I2c,
+) -> Result<(), drtioaux::Error> {
     // In the code below, *_chan_sel_write takes an u8 if there are fewer than 256 channels,
     // and u16 otherwise; hence the `as _` conversion.
     match packet {
-        drtioaux::Packet::EchoRequest =>
-            drtioaux::send(0, &drtioaux::Packet::EchoReply),
+        drtioaux::Packet::EchoRequest => drtioaux::send(0, &drtioaux::Packet::EchoReply),
         drtioaux::Packet::ResetRequest => {
             info!("resetting RTIO");
             drtiosat_reset(true);
@@ -103,9 +108,11 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
                 }
             }
             drtioaux::send(0, &drtioaux::Packet::ResetAck)
-        },
+        }
 
-        drtioaux::Packet::DestinationStatusRequest { destination: _destination } => {
+        drtioaux::Packet::DestinationStatusRequest {
+            destination: _destination,
+        } => {
             #[cfg(has_drtio_routing)]
             let hop = _routing_table.0[_destination as usize][*_rank as usize];
             #[cfg(not(has_drtio_routing))]
@@ -122,26 +129,22 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
                         channel = csr::drtiosat::sequence_error_channel_read();
                         csr::drtiosat::rtio_error_write(1);
                     }
-                    drtioaux::send(0,
-                        &drtioaux::Packet::DestinationSequenceErrorReply { channel })?;
+                    drtioaux::send(0, &drtioaux::Packet::DestinationSequenceErrorReply { channel })?;
                 } else if errors & 2 != 0 {
                     let channel;
                     unsafe {
                         channel = csr::drtiosat::collision_channel_read();
                         csr::drtiosat::rtio_error_write(2);
                     }
-                    drtioaux::send(0,
-                        &drtioaux::Packet::DestinationCollisionReply { channel })?;
+                    drtioaux::send(0, &drtioaux::Packet::DestinationCollisionReply { channel })?;
                 } else if errors & 4 != 0 {
                     let channel;
                     unsafe {
                         channel = csr::drtiosat::busy_channel_read();
                         csr::drtiosat::rtio_error_write(4);
                     }
-                    drtioaux::send(0,
-                        &drtioaux::Packet::DestinationBusyReply { channel })?;
-                }
-                else {
+                    drtioaux::send(0, &drtioaux::Packet::DestinationBusyReply { channel })?;
+                } else {
                     drtioaux::send(0, &drtioaux::Packet::DestinationOkReply)?;
                 }
             }
@@ -152,15 +155,20 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
                     let hop = hop as usize;
                     if hop <= csr::DRTIOREP.len() {
                         let repno = hop - 1;
-                        match _repeaters[repno].aux_forward(&drtioaux::Packet::DestinationStatusRequest {
-                            destination: _destination
-                        }, timer) {
+                        match _repeaters[repno].aux_forward(
+                            &drtioaux::Packet::DestinationStatusRequest {
+                                destination: _destination,
+                            },
+                            timer,
+                        ) {
                             Ok(()) => (),
-                            Err(drtioaux::Error::LinkDown) => drtioaux::send(0, &drtioaux::Packet::DestinationDownReply)?,
+                            Err(drtioaux::Error::LinkDown) => {
+                                drtioaux::send(0, &drtioaux::Packet::DestinationDownReply)?
+                            }
                             Err(e) => {
                                 drtioaux::send(0, &drtioaux::Packet::DestinationDownReply)?;
                                 error!("aux error when handling destination status request: {:?}", e);
-                            },
+                            }
                         }
                     } else {
                         drtioaux::send(0, &drtioaux::Packet::DestinationDownReply)?;
@@ -200,15 +208,18 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
         }
 
         #[cfg(not(has_drtio_routing))]
-        drtioaux::Packet::RoutingSetPath { destination: _, hops: _ } => {
-            drtioaux::send(0, &drtioaux::Packet::RoutingAck)
-        }
+        drtioaux::Packet::RoutingSetPath {
+            destination: _,
+            hops: _,
+        } => drtioaux::send(0, &drtioaux::Packet::RoutingAck),
         #[cfg(not(has_drtio_routing))]
-        drtioaux::Packet::RoutingSetRank { rank: _ } => {
-            drtioaux::send(0, &drtioaux::Packet::RoutingAck)
-        }
+        drtioaux::Packet::RoutingSetRank { rank: _ } => drtioaux::send(0, &drtioaux::Packet::RoutingAck),
 
-        drtioaux::Packet::MonitorRequest { destination: _destination, channel: _channel, probe: _probe } => {
+        drtioaux::Packet::MonitorRequest {
+            destination: _destination,
+            channel: _channel,
+            probe: _probe,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             let value;
             #[cfg(has_rtio_moninj)]
@@ -224,9 +235,13 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
             }
             let reply = drtioaux::Packet::MonitorReply { value: value };
             drtioaux::send(0, &reply)
-        },
-        drtioaux::Packet::InjectionRequest { destination: _destination, channel: _channel, 
-                                             overrd: _overrd, value: _value } => {
+        }
+        drtioaux::Packet::InjectionRequest {
+            destination: _destination,
+            channel: _channel,
+            overrd: _overrd,
+            value: _value,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             #[cfg(has_rtio_moninj)]
             unsafe {
@@ -235,9 +250,12 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
                 csr::rtio_moninj::inj_value_write(value);
             }
             Ok(())
-        },
-        drtioaux::Packet::InjectionStatusRequest { destination: _destination, 
-                                                   channel: _channel, overrd: _overrd } => {
+        }
+        drtioaux::Packet::InjectionStatusRequest {
+            destination: _destination,
+            channel: _channel,
+            overrd: _overrd,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             let value;
             #[cfg(has_rtio_moninj)]
@@ -251,44 +269,87 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
                 value = 0;
             }
             drtioaux::send(0, &drtioaux::Packet::InjectionStatusReply { value: value })
-        },
+        }
 
-        drtioaux::Packet::I2cStartRequest { destination: _destination, busno: _busno } => {
+        drtioaux::Packet::I2cStartRequest {
+            destination: _destination,
+            busno: _busno,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             let succeeded = i2c.start().is_ok();
             drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded })
         }
-        drtioaux::Packet::I2cRestartRequest { destination: _destination, busno: _busno } => {
+        drtioaux::Packet::I2cRestartRequest {
+            destination: _destination,
+            busno: _busno,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             let succeeded = i2c.restart().is_ok();
             drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded })
         }
-        drtioaux::Packet::I2cStopRequest { destination: _destination, busno: _busno } => {
+        drtioaux::Packet::I2cStopRequest {
+            destination: _destination,
+            busno: _busno,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             let succeeded = i2c.stop().is_ok();
             drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded })
         }
-        drtioaux::Packet::I2cWriteRequest { destination: _destination, busno: _busno, data } => {
+        drtioaux::Packet::I2cWriteRequest {
+            destination: _destination,
+            busno: _busno,
+            data,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             match i2c.write(data) {
-                Ok(ack) => drtioaux::send(0,
-                    &drtioaux::Packet::I2cWriteReply { succeeded: true, ack: ack }),
-                Err(_) => drtioaux::send(0,
-                    &drtioaux::Packet::I2cWriteReply { succeeded: false, ack: false })
+                Ok(ack) => drtioaux::send(
+                    0,
+                    &drtioaux::Packet::I2cWriteReply {
+                        succeeded: true,
+                        ack: ack,
+                    },
+                ),
+                Err(_) => drtioaux::send(
+                    0,
+                    &drtioaux::Packet::I2cWriteReply {
+                        succeeded: false,
+                        ack: false,
+                    },
+                ),
             }
         }
-        drtioaux::Packet::I2cReadRequest { destination: _destination, busno: _busno, ack } => {
+        drtioaux::Packet::I2cReadRequest {
+            destination: _destination,
+            busno: _busno,
+            ack,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             match i2c.read(ack) {
-                Ok(data) => drtioaux::send(0,
-                    &drtioaux::Packet::I2cReadReply { succeeded: true, data: data }),
-                Err(_) => drtioaux::send(0,
-                    &drtioaux::Packet::I2cReadReply { succeeded: false, data: 0xff })
+                Ok(data) => drtioaux::send(
+                    0,
+                    &drtioaux::Packet::I2cReadReply {
+                        succeeded: true,
+                        data: data,
+                    },
+                ),
+                Err(_) => drtioaux::send(
+                    0,
+                    &drtioaux::Packet::I2cReadReply {
+                        succeeded: false,
+                        data: 0xff,
+                    },
+                ),
             }
         }
-        drtioaux::Packet::I2cSwitchSelectRequest { destination: _destination, busno: _busno, address, mask } => {
+        drtioaux::Packet::I2cSwitchSelectRequest {
+            destination: _destination,
+            busno: _busno,
+            address,
+            mask,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
-            let ch = match mask { //decode from mainline, PCA9548-centric API
+            let ch = match mask {
+                //decode from mainline, PCA9548-centric API
                 0x00 => None,
                 0x01 => Some(0),
                 0x02 => Some(1),
@@ -298,28 +359,39 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
                 0x20 => Some(5),
                 0x40 => Some(6),
                 0x80 => Some(7),
-                _ => { return drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: false }); }
+                _ => return drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: false }),
             };
             let succeeded = i2c.pca954x_select(address, ch).is_ok();
             drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded })
         }
 
-        drtioaux::Packet::SpiSetConfigRequest { destination: _destination, busno: _busno, 
-                                                flags: _flags, length: _length, div: _div, cs: _cs } => {
+        drtioaux::Packet::SpiSetConfigRequest {
+            destination: _destination,
+            busno: _busno,
+            flags: _flags,
+            length: _length,
+            div: _div,
+            cs: _cs,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             // todo: reimplement when/if SPI is available
             //let succeeded = spi::set_config(busno, flags, length, div, cs).is_ok();
-            drtioaux::send(0,
-                &drtioaux::Packet::SpiBasicReply { succeeded: false })
-        },
-        drtioaux::Packet::SpiWriteRequest { destination: _destination, busno: _busno, data: _data } => {
+            drtioaux::send(0, &drtioaux::Packet::SpiBasicReply { succeeded: false })
+        }
+        drtioaux::Packet::SpiWriteRequest {
+            destination: _destination,
+            busno: _busno,
+            data: _data,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             // todo: reimplement when/if SPI is available
             //let succeeded = spi::write(busno, data).is_ok();
-            drtioaux::send(0,
-                &drtioaux::Packet::SpiBasicReply { succeeded: false })
+            drtioaux::send(0, &drtioaux::Packet::SpiBasicReply { succeeded: false })
         }
-        drtioaux::Packet::SpiReadRequest { destination: _destination, busno: _busno } => {
+        drtioaux::Packet::SpiReadRequest {
+            destination: _destination,
+            busno: _busno,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             // todo: reimplement when/if SPI is available
             // match spi::read(busno) {
@@ -328,8 +400,13 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
             //     Err(_) => drtioaux::send(0,
             //         &drtioaux::Packet::SpiReadReply { succeeded: false, data: 0 })
             // }
-            drtioaux::send(0,
-                &drtioaux::Packet::SpiReadReply { succeeded: false, data: 0 })
+            drtioaux::send(
+                0,
+                &drtioaux::Packet::SpiReadReply {
+                    succeeded: false,
+                    data: 0,
+                },
+            )
         }
 
         _ => {
@@ -339,20 +416,23 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
     }
 }
 
-fn process_aux_packets(repeaters: &mut [repeater::Repeater],
-        routing_table: &mut drtio_routing::RoutingTable, rank: &mut u8, 
-        timer: &mut GlobalTimer, i2c: &mut I2c) {
-    let result =
-        drtioaux::recv(0).and_then(|packet| {
-            if let Some(packet) = packet {
-                process_aux_packet(repeaters, routing_table, rank, packet, timer, i2c)
-            } else {
-                Ok(())
-            }
-        });
+fn process_aux_packets(
+    repeaters: &mut [repeater::Repeater],
+    routing_table: &mut drtio_routing::RoutingTable,
+    rank: &mut u8,
+    timer: &mut GlobalTimer,
+    i2c: &mut I2c,
+) {
+    let result = drtioaux::recv(0).and_then(|packet| {
+        if let Some(packet) = packet {
+            process_aux_packet(repeaters, routing_table, rank, packet, timer, i2c)
+        } else {
+            Ok(())
+        }
+    });
     match result {
         Ok(()) => (),
-        Err(e) => warn!("aux packet error ({:?})", e)
+        Err(e) => warn!("aux packet error ({:?})", e),
     }
 }
 
@@ -372,7 +452,10 @@ fn drtiosat_process_errors() {
         unsafe {
             destination = csr::drtiosat::buffer_space_timeout_dest_read();
         }
-        error!("timeout attempting to get buffer space from CRI, destination=0x{:02x}", destination)
+        error!(
+            "timeout attempting to get buffer space from CRI, destination=0x{:02x}",
+            destination
+        )
     }
     if errors & 8 != 0 {
         let channel;
@@ -383,8 +466,13 @@ fn drtiosat_process_errors() {
             timestamp_event = csr::drtiosat::underflow_timestamp_event_read() as i64;
             timestamp_counter = csr::drtiosat::underflow_timestamp_counter_read() as i64;
         }
-        error!("write underflow, channel={}, timestamp={}, counter={}, slack={}",
-               channel, timestamp_event, timestamp_counter, timestamp_event-timestamp_counter);
+        error!(
+            "write underflow, channel={}, timestamp={}, counter={}, slack={}",
+            channel,
+            timestamp_event,
+            timestamp_counter,
+            timestamp_event - timestamp_counter
+        );
     }
     if errors & 16 != 0 {
         error!("write overflow");
@@ -404,42 +492,38 @@ fn hardware_tick(ts: &mut u64, timer: &mut GlobalTimer) {
 }
 
 #[cfg(all(has_si5324, rtio_frequency = "125.0"))]
-const SI5324_SETTINGS: si5324::FrequencySettings
-    = si5324::FrequencySettings {
-    n1_hs  : 5,
-    nc1_ls : 8,
-    n2_hs  : 7,
-    n2_ls  : 360,
-    n31    : 63,
-    n32    : 63,
-    bwsel  : 4,
-    crystal_as_ckin2: true
+const SI5324_SETTINGS: si5324::FrequencySettings = si5324::FrequencySettings {
+    n1_hs: 5,
+    nc1_ls: 8,
+    n2_hs: 7,
+    n2_ls: 360,
+    n31: 63,
+    n32: 63,
+    bwsel: 4,
+    crystal_as_ckin2: true,
 };
 
 #[cfg(all(has_si5324, rtio_frequency = "100.0"))]
-const SI5324_SETTINGS: si5324::FrequencySettings
-    = si5324::FrequencySettings {
-    n1_hs  : 5,
-    nc1_ls : 10,
-    n2_hs  : 10,
-    n2_ls  : 250,
-    n31    : 50,
-    n32    : 50,
-    bwsel  : 4,
-    crystal_as_ckin2: true
+const SI5324_SETTINGS: si5324::FrequencySettings = si5324::FrequencySettings {
+    n1_hs: 5,
+    nc1_ls: 10,
+    n2_hs: 10,
+    n2_ls: 250,
+    n31: 50,
+    n32: 50,
+    bwsel: 4,
+    crystal_as_ckin2: true,
 };
 
-static mut LOG_BUFFER: [u8; 1<<17] = [0; 1<<17];
+static mut LOG_BUFFER: [u8; 1 << 17] = [0; 1 << 17];
 
 #[no_mangle]
-pub extern fn main_core0() -> i32 {
+pub extern "C" fn main_core0() -> i32 {
     enable_l2_cache(0x8);
 
     let mut timer = GlobalTimer::start();
 
-    let buffer_logger = unsafe {
-        logger::BufferLogger::new(&mut LOG_BUFFER[..])
-    };
+    let buffer_logger = unsafe { logger::BufferLogger::new(&mut LOG_BUFFER[..]) };
     buffer_logger.set_uart_log_level(log::LevelFilter::Info);
     buffer_logger.register();
     log::set_max_level(log::LevelFilter::Info);
@@ -491,7 +575,7 @@ pub extern fn main_core0() -> i32 {
     let mut repeaters = [repeater::Repeater::default(); 0];
     for i in 0..repeaters.len() {
         repeaters[i] = repeater::Repeater::new(i as u8);
-    } 
+    }
     let mut routing_table = drtio_routing::RoutingTable::default_empty();
     let mut rank = 1;
 
@@ -553,7 +637,7 @@ extern "C" {
 }
 
 interrupt_handler!(IRQ, irq, __irq_stack0_start, __irq_stack1_start, {
-    if MPIDR.read().cpu_id() == 1{
+    if MPIDR.read().cpu_id() == 1 {
         let mpcore = mpcore::RegisterBlock::mpcore();
         let mut gic = gic::InterruptController::gic(mpcore);
         let id = gic.get_interrupt_id();
@@ -566,7 +650,7 @@ interrupt_handler!(IRQ, irq, __irq_stack0_start, __irq_stack1_start, {
             notify_spin_lock();
             main_core1();
         }
-    stdio::drop_uart();
+        stdio::drop_uart();
     }
     loop {}
 });
@@ -593,18 +677,21 @@ pub fn main_core1() {
 }
 
 #[no_mangle]
-pub extern fn exception(_vect: u32, _regs: *const u32, pc: u32, ea: u32) {
-
+pub extern "C" fn exception(_vect: u32, _regs: *const u32, pc: u32, ea: u32) {
     fn hexdump(addr: u32) {
         let addr = (addr - addr % 4) as *const u32;
-        let mut ptr  = addr;
+        let mut ptr = addr;
         println!("@ {:08p}", ptr);
         for _ in 0..4 {
             print!("+{:04x}: ", ptr as usize - addr as usize);
-            print!("{:08x} ",   unsafe { *ptr }); ptr = ptr.wrapping_offset(1);
-            print!("{:08x} ",   unsafe { *ptr }); ptr = ptr.wrapping_offset(1);
-            print!("{:08x} ",   unsafe { *ptr }); ptr = ptr.wrapping_offset(1);
-            print!("{:08x}\n",  unsafe { *ptr }); ptr = ptr.wrapping_offset(1);
+            print!("{:08x} ", unsafe { *ptr });
+            ptr = ptr.wrapping_offset(1);
+            print!("{:08x} ", unsafe { *ptr });
+            ptr = ptr.wrapping_offset(1);
+            print!("{:08x} ", unsafe { *ptr });
+            ptr = ptr.wrapping_offset(1);
+            print!("{:08x}\n", unsafe { *ptr });
+            ptr = ptr.wrapping_offset(1);
         }
     }
 
@@ -654,7 +741,7 @@ extern "C" {
 }
 
 #[no_mangle]
-extern fn dl_unwind_find_exidx(_pc: *const u32, len_ptr: *mut u32) -> *const u32 {
+extern "C" fn dl_unwind_find_exidx(_pc: *const u32, len_ptr: *mut u32) -> *const u32 {
     let length;
     let start: *const u32;
     unsafe {

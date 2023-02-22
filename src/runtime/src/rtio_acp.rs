@@ -1,19 +1,18 @@
-use cslice::CSlice;
-use vcell::VolatileCell;
-use libcortex_a9::asm;
-use crate::artiq_raise;
 use core::sync::atomic::{fence, Ordering};
 
-use crate::pl::csr;
-use crate::rtio_mgt::resolve_channel_name;
+use cslice::CSlice;
+use libcortex_a9::asm;
+use vcell::VolatileCell;
 
-pub const RTIO_O_STATUS_WAIT:                      i32 = 1;
-pub const RTIO_O_STATUS_UNDERFLOW:                 i32 = 2;
-pub const RTIO_O_STATUS_DESTINATION_UNREACHABLE:   i32 = 4;
-pub const RTIO_I_STATUS_WAIT_EVENT:                i32 = 1;
-pub const RTIO_I_STATUS_OVERFLOW:                  i32 = 2;
-pub const RTIO_I_STATUS_WAIT_STATUS:               i32 = 4; // TODO
-pub const RTIO_I_STATUS_DESTINATION_UNREACHABLE:   i32 = 8;
+use crate::{artiq_raise, pl::csr, rtio_mgt::resolve_channel_name};
+
+pub const RTIO_O_STATUS_WAIT: i32 = 1;
+pub const RTIO_O_STATUS_UNDERFLOW: i32 = 2;
+pub const RTIO_O_STATUS_DESTINATION_UNREACHABLE: i32 = 4;
+pub const RTIO_I_STATUS_WAIT_EVENT: i32 = 1;
+pub const RTIO_I_STATUS_OVERFLOW: i32 = 2;
+pub const RTIO_I_STATUS_WAIT_STATUS: i32 = 4; // TODO
+pub const RTIO_I_STATUS_DESTINATION_UNREACHABLE: i32 = 8;
 
 #[repr(C)]
 pub struct TimestampedData {
@@ -47,10 +46,10 @@ static mut TRANSACTION_BUFFER: Transaction = Transaction {
     reply_timestamp: VolatileCell::new(0),
     padding0: [0; 2],
     padding1: [0; 2],
-    padding2: [0; 2]
+    padding2: [0; 2],
 };
 
-pub extern fn init() {
+pub extern "C" fn init() {
     unsafe {
         csr::rtio_core::reset_write(1);
         csr::rtio::engine_addr_base_write(&TRANSACTION_BUFFER as *const Transaction as u32);
@@ -58,7 +57,7 @@ pub extern fn init() {
     }
 }
 
-pub extern fn get_counter() -> i64 {
+pub extern "C" fn get_counter() -> i64 {
     unsafe {
         csr::rtio::counter_update_write(1);
         csr::rtio::counter_read() as i64
@@ -67,15 +66,15 @@ pub extern fn get_counter() -> i64 {
 
 static mut NOW: i64 = 0;
 
-pub extern fn now_mu() -> i64 {
+pub extern "C" fn now_mu() -> i64 {
     unsafe { NOW }
 }
 
-pub extern fn at_mu(t: i64) {
+pub extern "C" fn at_mu(t: i64) {
     unsafe { NOW = t }
 }
 
-pub extern fn delay_mu(dt: i64) {
+pub extern "C" fn delay_mu(dt: i64) {
     unsafe { NOW += dt }
 }
 
@@ -87,18 +86,34 @@ unsafe fn process_exceptional_status(channel: i32, status: i32) {
         while csr::rtio::o_status_read() as i32 & RTIO_O_STATUS_WAIT != 0 {}
     }
     if status & RTIO_O_STATUS_UNDERFLOW != 0 {
-        artiq_raise!("RTIOUnderflow",
-            format!("RTIO underflow at {{1}} mu, channel 0x{:04x}:{}, slack {{2}} mu", channel, resolve_channel_name(channel as u32)),
-                channel as i64, timestamp, timestamp - get_counter());
+        artiq_raise!(
+            "RTIOUnderflow",
+            format!(
+                "RTIO underflow at {{1}} mu, channel 0x{:04x}:{}, slack {{2}} mu",
+                channel,
+                resolve_channel_name(channel as u32)
+            ),
+            channel as i64,
+            timestamp,
+            timestamp - get_counter()
+        );
     }
     if status & RTIO_O_STATUS_DESTINATION_UNREACHABLE != 0 {
-        artiq_raise!("RTIODestinationUnreachable",
-            format!("RTIO destination unreachable, output, at {{0}} mu, channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
-            timestamp, channel as i64, 0);
+        artiq_raise!(
+            "RTIODestinationUnreachable",
+            format!(
+                "RTIO destination unreachable, output, at {{0}} mu, channel 0x{:04x}:{}",
+                channel,
+                resolve_channel_name(channel as u32)
+            ),
+            timestamp,
+            channel as i64,
+            0
+        );
     }
 }
 
-pub extern fn output(target: i32, data: i32) {
+pub extern "C" fn output(target: i32, data: i32) {
     unsafe {
         // Clear status so we can observe response
         TRANSACTION_BUFFER.reply_status.set(0);
@@ -126,7 +141,7 @@ pub extern fn output(target: i32, data: i32) {
     }
 }
 
-pub extern fn output_wide(target: i32, data: CSlice<i32>) {
+pub extern "C" fn output_wide(target: i32, data: CSlice<i32>) {
     unsafe {
         // Clear status so we can observe response
         TRANSACTION_BUFFER.reply_status.set(0);
@@ -143,7 +158,7 @@ pub extern fn output_wide(target: i32, data: CSlice<i32>) {
         loop {
             status = TRANSACTION_BUFFER.reply_status.get();
             if status != 0 {
-                break
+                break;
             }
         }
 
@@ -154,8 +169,8 @@ pub extern fn output_wide(target: i32, data: CSlice<i32>) {
     }
 }
 
-pub extern fn input_timestamp(timeout: i64, channel: i32) -> i64 {
-   unsafe {
+pub extern "C" fn input_timestamp(timeout: i64, channel: i32) -> i64 {
+    unsafe {
         // Clear status so we can observe response
         TRANSACTION_BUFFER.reply_status.set(0);
 
@@ -171,29 +186,45 @@ pub extern fn input_timestamp(timeout: i64, channel: i32) -> i64 {
         loop {
             status = TRANSACTION_BUFFER.reply_status.get();
             if status != 0 {
-                break
+                break;
             }
         }
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
-            artiq_raise!("RTIOOverflow",
-                         format!("RTIO input overflow on channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
-                         channel as i64, 0, 0);
+            artiq_raise!(
+                "RTIOOverflow",
+                format!(
+                    "RTIO input overflow on channel 0x{:04x}:{}",
+                    channel,
+                    resolve_channel_name(channel as u32)
+                ),
+                channel as i64,
+                0,
+                0
+            );
         }
         if status & RTIO_I_STATUS_WAIT_EVENT != 0 {
-            return -1
+            return -1;
         }
         if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
-            artiq_raise!("RTIODestinationUnreachable",
-                         format!("RTIO destination unreachable, input, on channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
-                         channel as i64, 0, 0);
+            artiq_raise!(
+                "RTIODestinationUnreachable",
+                format!(
+                    "RTIO destination unreachable, input, on channel 0x{:04x}:{}",
+                    channel,
+                    resolve_channel_name(channel as u32)
+                ),
+                channel as i64,
+                0,
+                0
+            );
         }
 
         TRANSACTION_BUFFER.reply_timestamp.get()
     }
 }
 
-pub extern fn input_data(channel: i32) -> i32 {
+pub extern "C" fn input_data(channel: i32) -> i32 {
     unsafe {
         TRANSACTION_BUFFER.reply_status.set(0);
 
@@ -209,26 +240,42 @@ pub extern fn input_data(channel: i32) -> i32 {
         loop {
             status = TRANSACTION_BUFFER.reply_status.get();
             if status != 0 {
-                break
+                break;
             }
         }
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
-            artiq_raise!("RTIOOverflow",
-                         format!("RTIO input overflow on channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
-                         channel as i64, 0, 0);
+            artiq_raise!(
+                "RTIOOverflow",
+                format!(
+                    "RTIO input overflow on channel 0x{:04x}:{}",
+                    channel,
+                    resolve_channel_name(channel as u32)
+                ),
+                channel as i64,
+                0,
+                0
+            );
         }
         if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
-            artiq_raise!("RTIODestinationUnreachable",
-                         format!("RTIO destination unreachable, input, on channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
-                         channel as i64, 0, 0);
+            artiq_raise!(
+                "RTIODestinationUnreachable",
+                format!(
+                    "RTIO destination unreachable, input, on channel 0x{:04x}:{}",
+                    channel,
+                    resolve_channel_name(channel as u32)
+                ),
+                channel as i64,
+                0,
+                0
+            );
         }
 
         TRANSACTION_BUFFER.reply_data.get()
     }
 }
 
-pub extern fn input_timestamped_data(timeout: i64, channel: i32) -> TimestampedData {
+pub extern "C" fn input_timestamped_data(timeout: i64, channel: i32) -> TimestampedData {
     unsafe {
         TRANSACTION_BUFFER.reply_status.set(0);
 
@@ -244,19 +291,35 @@ pub extern fn input_timestamped_data(timeout: i64, channel: i32) -> TimestampedD
         loop {
             status = TRANSACTION_BUFFER.reply_status.get();
             if status != 0 {
-                break
+                break;
             }
         }
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
-            artiq_raise!("RTIOOverflow",
-                         format!("RTIO input overflow on channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
-                         channel as i64, 0, 0);
+            artiq_raise!(
+                "RTIOOverflow",
+                format!(
+                    "RTIO input overflow on channel 0x{:04x}:{}",
+                    channel,
+                    resolve_channel_name(channel as u32)
+                ),
+                channel as i64,
+                0,
+                0
+            );
         }
         if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
-            artiq_raise!("RTIODestinationUnreachable",
-                         format!("RTIO destination unreachable, input, on channel 0x{:04x}:{}", channel, resolve_channel_name(channel as u32)),
-                         channel as i64, 0, 0);
+            artiq_raise!(
+                "RTIODestinationUnreachable",
+                format!(
+                    "RTIO destination unreachable, input, on channel 0x{:04x}:{}",
+                    channel,
+                    resolve_channel_name(channel as u32)
+                ),
+                channel as i64,
+                0,
+                0
+            );
         }
 
         TimestampedData {

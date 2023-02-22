@@ -1,13 +1,9 @@
-use core::{
-    ops::{Deref, DerefMut, Range},
-    mem,
-    slice,
-};
 use alloc::alloc::{alloc_zeroed, dealloc, Layout, LayoutError};
-use super::{
-    elf::*,
-    Error,
-};
+use core::{mem,
+           ops::{Deref, DerefMut, Range},
+           slice};
+
+use super::{elf::*, Error};
 
 pub struct DynamicSection {
     pub strtab: Range<usize>,
@@ -34,17 +30,12 @@ impl Image {
             slice::from_raw_parts_mut(ptr, size)
         };
 
-        Ok(Image {
-            layout,
-            data,
-        })
+        Ok(Image { layout, data })
     }
 
     /// assumes that self.data is properly aligned
     pub(crate) fn get_ref<T>(&self, offset: usize) -> Option<&T>
-    where
-        T: Copy,
-    {
+    where T: Copy {
         if self.data.len() < offset + mem::size_of::<T>() {
             None
         } else if (self.data.as_ptr() as usize + offset) & (mem::align_of::<T>() - 1) != 0 {
@@ -66,55 +57,53 @@ impl Image {
         unsafe { slice::from_raw_parts(ptr, len) }
     }
 
-    fn dyn_headers<'a>(&'a self, range: Range<usize>) ->
-        impl Iterator<Item = &'a Elf32_Dyn> + 'a
-    {
+    fn dyn_headers<'a>(&'a self, range: Range<usize>) -> impl Iterator<Item = &'a Elf32_Dyn> + 'a {
         range
             .step_by(mem::size_of::<Elf32_Dyn>())
-            .filter_map(move |offset| {
-                self.get_ref::<Elf32_Dyn>(offset)
-            })
+            .filter_map(move |offset| self.get_ref::<Elf32_Dyn>(offset))
             .take_while(|d| unsafe { d.d_un.d_val } as i32 != DT_NULL)
     }
 
     pub fn dyn_section(&self, range: Range<usize>) -> Result<DynamicSection, Error> {
         let (mut strtab_off, mut strtab_sz) = (0, 0);
-        let (mut rel_off,    mut rel_sz)    = (0, 0);
-        let (mut rela_off,   mut rela_sz)   = (0, 0);
+        let (mut rel_off, mut rel_sz) = (0, 0);
+        let (mut rela_off, mut rela_sz) = (0, 0);
         let (mut pltrel_off, mut pltrel_sz) = (0, 0);
-        let (mut hash_off,   mut hash_sz)   = (0, 0);
+        let (mut hash_off, mut hash_sz) = (0, 0);
         let mut symtab_off = 0;
-        let mut sym_ent    = 0;
-        let mut rel_ent    = 0;
-        let mut rela_ent   = 0;
-        let mut nbucket    = 0;
-        let mut nchain     = 0;
+        let mut sym_ent = 0;
+        let mut rel_ent = 0;
+        let mut rela_ent = 0;
+        let mut nbucket = 0;
+        let mut nchain = 0;
 
         for dyn_header in self.dyn_headers(range) {
             let val = unsafe { dyn_header.d_un.d_val } as usize;
             match dyn_header.d_tag {
-                DT_NULL     => break,
-                DT_STRTAB   => strtab_off = val,
-                DT_STRSZ    => strtab_sz  = val,
-                DT_SYMTAB   => symtab_off = val,
-                DT_SYMENT   => sym_ent    = val,
-                DT_REL      => rel_off    = val,
-                DT_RELSZ    => rel_sz     = val,
-                DT_RELENT   => rel_ent    = val,
-                DT_RELA     => rela_off   = val,
-                DT_RELASZ   => rela_sz    = val,
-                DT_RELAENT  => rela_ent   = val,
-                DT_JMPREL   => pltrel_off = val,
-                DT_PLTRELSZ => pltrel_sz  = val,
-                DT_HASH     => {
-                    nbucket  = *self.get_ref::<Elf32_Word>(val + 0)
+                DT_NULL => break,
+                DT_STRTAB => strtab_off = val,
+                DT_STRSZ => strtab_sz = val,
+                DT_SYMTAB => symtab_off = val,
+                DT_SYMENT => sym_ent = val,
+                DT_REL => rel_off = val,
+                DT_RELSZ => rel_sz = val,
+                DT_RELENT => rel_ent = val,
+                DT_RELA => rela_off = val,
+                DT_RELASZ => rela_sz = val,
+                DT_RELAENT => rela_ent = val,
+                DT_JMPREL => pltrel_off = val,
+                DT_PLTRELSZ => pltrel_sz = val,
+                DT_HASH => {
+                    nbucket = *self
+                        .get_ref::<Elf32_Word>(val + 0)
                         .ok_or("cannot read hash bucket count")? as usize;
-                    nchain   = *self.get_ref::<Elf32_Word>(val + 4)
+                    nchain = *self
+                        .get_ref::<Elf32_Word>(val + 4)
                         .ok_or("cannot read hash chain count")? as usize;
                     hash_off = val + 8;
-                    hash_sz  = (nbucket + nchain) * mem::size_of::<Elf32_Word>();
+                    hash_sz = (nbucket + nchain) * mem::size_of::<Elf32_Word>();
                 }
-                _ => ()
+                _ => (),
             }
         }
 
@@ -123,28 +112,28 @@ impl Image {
         let symtab_sz = nchain * mem::size_of::<Elf32_Sym>();
 
         if strtab_off + strtab_sz > self.data.len() {
-            return Err("invalid strtab offset/size")?
+            return Err("invalid strtab offset/size")?;
         }
         if symtab_off + symtab_sz > self.data.len() {
-            return Err("invalid symtab offset/size")?
+            return Err("invalid symtab offset/size")?;
         }
         if sym_ent != mem::size_of::<Elf32_Sym>() {
-            return Err("incorrect symbol entry size")?
+            return Err("incorrect symbol entry size")?;
         }
         if rel_off + rel_sz > self.data.len() {
-            return Err("invalid rel offset/size")?
+            return Err("invalid rel offset/size")?;
         }
         if rel_ent != 0 && rel_ent != mem::size_of::<Elf32_Rel>() {
-            return Err("incorrect relocation entry size")?
+            return Err("incorrect relocation entry size")?;
         }
         if rela_off + rela_sz > self.data.len() {
-            return Err("invalid rela offset/size")?
+            return Err("invalid rela offset/size")?;
         }
         if rela_ent != 0 && rela_ent != mem::size_of::<Elf32_Rela>() {
-            return Err("incorrect relocation entry size")?
+            return Err("incorrect relocation entry size")?;
         }
         if pltrel_off + pltrel_sz > self.data.len() {
-            return Err("invalid pltrel offset/size")?
+            return Err("invalid pltrel offset/size")?;
         }
 
         Ok(DynamicSection {
@@ -165,7 +154,7 @@ impl Image {
 
     pub fn write(&self, offset: usize, value: Elf32_Word) -> Result<(), Error> {
         if offset + mem::size_of::<Elf32_Addr>() > self.data.len() {
-            return Err("relocation out of image bounds")?
+            return Err("relocation out of image bounds")?;
         }
 
         let ptr = (self.data.as_ptr() as usize + offset) as *mut Elf32_Addr;

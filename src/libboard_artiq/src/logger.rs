@@ -1,13 +1,13 @@
-use core::cell::Cell;
-use core::fmt::Write;
-use log::{Log, LevelFilter};
-use log_buffer::LogBuffer;
-use libcortex_a9::mutex::{Mutex, MutexGuard};
+use core::{cell::Cell, fmt::Write};
+
 use libboard_zynq::{println, timer::GlobalTimer};
+use libcortex_a9::mutex::{Mutex, MutexGuard};
+use log::{LevelFilter, Log};
+use log_buffer::LogBuffer;
 
 pub struct LogBufferRef<'a> {
-    buffer:        MutexGuard<'a, LogBuffer<&'static mut [u8]>>,
-    old_log_level: LevelFilter
+    buffer: MutexGuard<'a, LogBuffer<&'static mut [u8]>>,
+    old_log_level: LevelFilter,
 }
 
 impl<'a> LogBufferRef<'a> {
@@ -37,7 +37,7 @@ impl<'a> Drop for LogBufferRef<'a> {
 }
 
 pub struct BufferLogger {
-    buffer:      Mutex<LogBuffer<&'static mut [u8]>>,
+    buffer: Mutex<LogBuffer<&'static mut [u8]>>,
     uart_filter: Cell<LevelFilter>,
     buffer_filter: Cell<LevelFilter>,
 }
@@ -56,8 +56,7 @@ impl BufferLogger {
     pub fn register(self) {
         unsafe {
             LOGGER = Some(self);
-            log::set_logger(LOGGER.as_ref().unwrap())
-                .expect("global logger can only be initialized once");
+            log::set_logger(LOGGER.as_ref().unwrap()).expect("global logger can only be initialized once");
         }
     }
 
@@ -66,9 +65,7 @@ impl BufferLogger {
     }
 
     pub fn buffer<'a>(&'a self) -> Option<LogBufferRef<'a>> {
-        self.buffer
-            .try_lock()
-            .map(LogBufferRef::new)
+        self.buffer.try_lock().map(LogBufferRef::new)
     }
 
     pub fn uart_log_level(&self) -> LevelFilter {
@@ -99,25 +96,36 @@ impl Log for BufferLogger {
 
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
-            let timestamp = unsafe {
-                GlobalTimer::get()
-            }.get_us().0;
-            let seconds   = timestamp / 1_000_000;
-            let micros    = timestamp % 1_000_000;
+            let timestamp = unsafe { GlobalTimer::get() }.get_us().0;
+            let seconds = timestamp / 1_000_000;
+            let micros = timestamp % 1_000_000;
 
             if record.level() <= self.buffer_log_level() {
                 let mut buffer = self.buffer.lock();
-                writeln!(buffer, "[{:6}.{:06}s] {:>5}({}): {}", seconds, micros,
-                         record.level(), record.target(), record.args()).unwrap();
+                writeln!(
+                    buffer,
+                    "[{:6}.{:06}s] {:>5}({}): {}",
+                    seconds,
+                    micros,
+                    record.level(),
+                    record.target(),
+                    record.args()
+                )
+                .unwrap();
             }
 
             if record.level() <= self.uart_log_level() {
-                println!("[{:6}.{:06}s] {:>5}({}): {}", seconds, micros,
-                         record.level(), record.target(), record.args());
+                println!(
+                    "[{:6}.{:06}s] {:>5}({}): {}",
+                    seconds,
+                    micros,
+                    record.level(),
+                    record.target(),
+                    record.args()
+                );
             }
         }
     }
 
-    fn flush(&self) {
-    }
+    fn flush(&self) {}
 }

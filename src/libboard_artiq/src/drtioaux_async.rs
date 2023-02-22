@@ -1,18 +1,16 @@
+use core_io::{Error as IoError, ErrorKind as IoErrorKind};
 use crc;
-
-use core_io::{ErrorKind as IoErrorKind, Error as IoError};
-use void::Void;
+use io::{proto::{ProtoRead, ProtoWrite},
+         Cursor};
+use libasync::{block_async, task};
+use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use nb;
-
-use libboard_zynq::{timer::GlobalTimer, time::Milliseconds};
-use libasync::{task, block_async};
-
-use io::{proto::ProtoRead, proto::ProtoWrite, Cursor};
-use crate::mem::mem::DRTIOAUX_MEM;
-use crate::pl::csr::DRTIOAUX;
-use crate::drtioaux::{Error, has_rx_error, copy_work_buffer};
+use void::Void;
 
 pub use crate::drtioaux_proto::Packet;
+use crate::{drtioaux::{copy_work_buffer, has_rx_error, Error},
+            mem::mem::DRTIOAUX_MEM,
+            pl::csr::DRTIOAUX};
 
 pub async fn reset(linkno: u8) {
     let linkno = linkno as usize;
@@ -29,16 +27,14 @@ fn tx_ready(linkno: usize) -> nb::Result<(), Void> {
     unsafe {
         if (DRTIOAUX[linkno].aux_tx_read)() != 0 {
             Err(nb::Error::WouldBlock)
-        }
-        else {
+        } else {
             Ok(())
         }
     }
 }
 
 async fn receive<F, T>(linkno: u8, f: F) -> Result<Option<T>, Error>
-    where F: FnOnce(&[u8]) -> Result<T, Error>
-{
+where F: FnOnce(&[u8]) -> Result<T, Error> {
     let linkidx = linkno as usize;
     unsafe {
         if (DRTIOAUX[linkidx].aux_rx_present_read)() == 1 {
@@ -58,12 +54,12 @@ async fn receive<F, T>(linkno: u8, f: F) -> Result<Option<T>, Error>
 
 pub async fn recv(linkno: u8) -> Result<Option<Packet>, Error> {
     if has_rx_error(linkno) {
-        return Err(Error::GatewareError)
+        return Err(Error::GatewareError);
     }
 
     receive(linkno, |buffer| {
         if buffer.len() < 8 {
-            return Err(IoError::new(IoErrorKind::UnexpectedEof, "Unexpected end").into())
+            return Err(IoError::new(IoErrorKind::UnexpectedEof, "Unexpected end").into());
         }
 
         let mut reader = Cursor::new(buffer);
@@ -72,17 +68,16 @@ pub async fn recv(linkno: u8) -> Result<Option<Packet>, Error> {
         let checksum = crc::crc32::checksum_ieee(&reader.get_ref()[0..checksum_at]);
         reader.set_position(checksum_at);
         if reader.read_u32()? != checksum {
-            return Err(Error::CorruptedPacket)
+            return Err(Error::CorruptedPacket);
         }
         reader.set_position(0);
 
         Ok(Packet::read_from(&mut reader)?)
-    }).await
+    })
+    .await
 }
 
-pub async fn recv_timeout(linkno: u8, timeout_ms: Option<u64>,
-    timer: GlobalTimer) -> Result<Packet, Error> 
-{
+pub async fn recv_timeout(linkno: u8, timeout_ms: Option<u64>, timer: GlobalTimer) -> Result<Packet, Error> {
     let timeout_ms = Milliseconds(timeout_ms.unwrap_or(10));
     let limit = timer.get_time() + timeout_ms;
     let mut would_block = false;
@@ -93,7 +88,9 @@ pub async fn recv_timeout(linkno: u8, timeout_ms: Option<u64>,
             task::r#yield().await;
         }
         match recv(linkno).await? {
-            None => { would_block = true; },
+            None => {
+                would_block = true;
+            }
             Some(packet) => return Ok(packet),
         }
     }
@@ -101,15 +98,14 @@ pub async fn recv_timeout(linkno: u8, timeout_ms: Option<u64>,
 }
 
 async fn transmit<F>(linkno: u8, f: F) -> Result<(), Error>
-    where F: FnOnce(&mut [u8]) -> Result<usize, Error>
-{
+where F: FnOnce(&mut [u8]) -> Result<usize, Error> {
     let linkno = linkno as usize;
     unsafe {
         let _ = block_async!(tx_ready(linkno)).await;
         let ptr = DRTIOAUX_MEM[linkno].base as *mut u32;
         let len = DRTIOAUX_MEM[linkno].size / 2;
         // work buffer, works with unaligned mem access
-        let mut buf: [u8; 1024] = [0; 1024]; 
+        let mut buf: [u8; 1024] = [0; 1024];
         let len = f(&mut buf[0..len])?;
         copy_work_buffer(buf.as_mut_ptr() as *mut u32, ptr, len as isize);
         (DRTIOAUX[linkno].aux_tx_length_write)(len as u16);
@@ -123,7 +119,7 @@ pub async fn send(linkno: u8, packet: &Packet) -> Result<(), Error> {
         let mut writer = Cursor::new(buffer);
 
         packet.write_to(&mut writer)?;
-        
+
         // Pad till offset 4, insert checksum there
         let padding = (12 - (writer.position() % 8)) % 8;
         for _ in 0..padding {
@@ -134,5 +130,6 @@ pub async fn send(linkno: u8, packet: &Packet) -> Result<(), Error> {
         writer.write_u32(checksum)?;
 
         Ok(writer.position())
-    }).await
+    })
+    .await
 }

@@ -1,26 +1,23 @@
-use core::{fmt, cell::RefCell};
 use alloc::{collections::BTreeMap, rc::Rc};
-use log::{debug, info, warn};
-use void::Void;
+use core::{cell::RefCell, fmt};
 
+use futures::{pin_mut, select_biased, FutureExt};
+use libasync::{block_async, nb, smoltcp::TcpStream, task};
 use libboard_artiq::drtio_routing;
-
-use libboard_zynq::{smoltcp, timer::GlobalTimer, time::Milliseconds};
-use libasync::{task, smoltcp::TcpStream, block_async, nb};
+use libboard_zynq::{smoltcp, time::Milliseconds, timer::GlobalTimer};
 use libcortex_a9::mutex::Mutex;
-
+use log::{debug, info, warn};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
-use futures::{pin_mut, select_biased, FutureExt};
+use void::Void;
 
 use crate::proto_async::*;
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     NetworkError(smoltcp::Error),
     UnexpectedPattern,
-    UnrecognizedPacket
+    UnrecognizedPacket,
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -29,8 +26,8 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Error::NetworkError(error) => write!(f, "network error: {}", error),
-            &Error::UnexpectedPattern   => write!(f, "unexpected pattern"),
-            &Error::UnrecognizedPacket  => write!(f, "unrecognized packet"),
+            &Error::UnexpectedPattern => write!(f, "unexpected pattern"),
+            &Error::UnrecognizedPacket => write!(f, "unrecognized packet"),
         }
     }
 }
@@ -46,60 +43,102 @@ enum HostMessage {
     MonitorProbe = 0,
     MonitorInjection = 3,
     Inject = 1,
-    GetInjectionStatus = 2
+    GetInjectionStatus = 2,
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
 enum DeviceMessage {
     MonitorStatus = 0,
-    InjectionStatus = 1
+    InjectionStatus = 1,
 }
 
 #[cfg(has_drtio)]
 mod remote_moninj {
-    use super::*;
     use libboard_artiq::drtioaux_async;
-    use crate::rtio_mgt::drtio;
     use log::error;
 
-    pub async fn read_probe(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, probe: i8) -> i64 {
-        let reply = drtio::aux_transact(aux_mutex, linkno, &drtioaux_async::Packet::MonitorRequest { 
-            destination: destination,
-            channel: channel as _,
-            probe: probe as _},
-            timer).await;
+    use super::*;
+    use crate::rtio_mgt::drtio;
+
+    pub async fn read_probe(
+        aux_mutex: &Rc<Mutex<bool>>,
+        timer: GlobalTimer,
+        linkno: u8,
+        destination: u8,
+        channel: i32,
+        probe: i8,
+    ) -> i64 {
+        let reply = drtio::aux_transact(
+            aux_mutex,
+            linkno,
+            &drtioaux_async::Packet::MonitorRequest {
+                destination: destination,
+                channel: channel as _,
+                probe: probe as _,
+            },
+            timer,
+        )
+        .await;
         match reply {
             Ok(drtioaux_async::Packet::MonitorReply { value }) => return value as i64,
             Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
-            Err("link went down") => { debug!("link is down"); },
-            Err(e) => error!("aux packet error ({})", e)
+            Err("link went down") => {
+                debug!("link is down");
+            }
+            Err(e) => error!("aux packet error ({})", e),
         }
         0
     }
 
-    pub async fn inject(aux_mutex: &Rc<Mutex<bool>>, _timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, overrd: i8, value: i8) {
+    pub async fn inject(
+        aux_mutex: &Rc<Mutex<bool>>,
+        _timer: GlobalTimer,
+        linkno: u8,
+        destination: u8,
+        channel: i32,
+        overrd: i8,
+        value: i8,
+    ) {
         let _lock = aux_mutex.lock();
-        drtioaux_async::send(linkno, &drtioaux_async::Packet::InjectionRequest {
-            destination: destination,
-            channel: channel as _,
-            overrd: overrd as _,
-            value: value as _
-        }).await.unwrap();
+        drtioaux_async::send(
+            linkno,
+            &drtioaux_async::Packet::InjectionRequest {
+                destination: destination,
+                channel: channel as _,
+                overrd: overrd as _,
+                value: value as _,
+            },
+        )
+        .await
+        .unwrap();
     }
 
-    pub async fn read_injection_status(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, overrd: i8) -> i8 {
-        let reply = drtio::aux_transact(aux_mutex, 
-            linkno, 
+    pub async fn read_injection_status(
+        aux_mutex: &Rc<Mutex<bool>>,
+        timer: GlobalTimer,
+        linkno: u8,
+        destination: u8,
+        channel: i32,
+        overrd: i8,
+    ) -> i8 {
+        let reply = drtio::aux_transact(
+            aux_mutex,
+            linkno,
             &drtioaux_async::Packet::InjectionStatusRequest {
                 destination: destination,
                 channel: channel as _,
-                overrd: overrd as _},
-            timer).await;
+                overrd: overrd as _,
+            },
+            timer,
+        )
+        .await;
         match reply {
             Ok(drtioaux_async::Packet::InjectionStatusReply { value }) => return value as i8,
             Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
-            Err("link went down") => { debug!("link is down"); },
-            Err(e) => error!("aux packet error ({})", e)
+            Err("link went down") => {
+                debug!("link is down");
+            }
+            Err(e) => error!("aux packet error ({})", e),
         }
         0
     }
@@ -157,8 +196,12 @@ macro_rules! dispatch {
     }}
 }
 
-async fn handle_connection(stream: &TcpStream, timer: GlobalTimer, 
-        _aux_mutex: &Rc<Mutex<bool>>, _routing_table: &drtio_routing::RoutingTable) -> Result<()> {
+async fn handle_connection(
+    stream: &TcpStream,
+    timer: GlobalTimer,
+    _aux_mutex: &Rc<Mutex<bool>>,
+    _routing_table: &drtio_routing::RoutingTable,
+) -> Result<()> {
     if !expect(&stream, b"ARTIQ moninj\n").await? {
         return Err(Error::UnexpectedPattern);
     }

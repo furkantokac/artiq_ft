@@ -1,7 +1,9 @@
 use core::result;
-use log::info;
-use libboard_zynq::{i2c::I2c, timer::GlobalTimer, time::Milliseconds};
+
 use embedded_hal::blocking::delay::DelayUs;
+use libboard_zynq::{i2c::I2c, time::Milliseconds, timer::GlobalTimer};
+use log::info;
+
 #[cfg(not(si5324_soft_reset))]
 use crate::pl::csr;
 
@@ -11,9 +13,13 @@ const ADDRESS: u8 = 0x68;
 
 #[cfg(not(si5324_soft_reset))]
 fn hard_reset(timer: &mut GlobalTimer) {
-    unsafe { csr::si5324_rst_n::out_write(0); }
+    unsafe {
+        csr::si5324_rst_n::out_write(0);
+    }
     timer.delay_us(1_000);
-    unsafe { csr::si5324_rst_n::out_write(1); }
+    unsafe {
+        csr::si5324_rst_n::out_write(1);
+    }
     timer.delay_us(10_000);
 }
 
@@ -29,7 +35,7 @@ pub struct FrequencySettings {
     pub n31: u32,
     pub n32: u32,
     pub bwsel: u8,
-    pub crystal_as_ckin2: bool
+    pub crystal_as_ckin2: bool,
 }
 
 pub enum Input {
@@ -39,52 +45,52 @@ pub enum Input {
 
 fn map_frequency_settings(settings: &FrequencySettings) -> Result<FrequencySettings> {
     if settings.nc1_ls != 0 && (settings.nc1_ls % 2) == 1 {
-        return Err("NC1_LS must be 0 or even")
+        return Err("NC1_LS must be 0 or even");
     }
     if settings.nc1_ls > (1 << 20) {
-        return Err("NC1_LS is too high")
+        return Err("NC1_LS is too high");
     }
     if (settings.n2_ls % 2) == 1 {
-        return Err("N2_LS must be even")
+        return Err("N2_LS must be even");
     }
     if settings.n2_ls > (1 << 20) {
-        return Err("N2_LS is too high")
+        return Err("N2_LS is too high");
     }
     if settings.n31 > (1 << 19) {
-        return Err("N31 is too high")
+        return Err("N31 is too high");
     }
     if settings.n32 > (1 << 19) {
-        return Err("N32 is too high")
+        return Err("N32 is too high");
     }
     let r = FrequencySettings {
         n1_hs: match settings.n1_hs {
-            4  => 0b000,
-            5  => 0b001,
-            6  => 0b010,
-            7  => 0b011,
-            8  => 0b100,
-            9  => 0b101,
+            4 => 0b000,
+            5 => 0b001,
+            6 => 0b010,
+            7 => 0b011,
+            8 => 0b100,
+            9 => 0b101,
             10 => 0b110,
             11 => 0b111,
-            _  => return Err("N1_HS has an invalid value")
+            _ => return Err("N1_HS has an invalid value"),
         },
         nc1_ls: settings.nc1_ls - 1,
         n2_hs: match settings.n2_hs {
-            4  => 0b000,
-            5  => 0b001,
-            6  => 0b010,
-            7  => 0b011,
-            8  => 0b100,
-            9  => 0b101,
+            4 => 0b000,
+            5 => 0b001,
+            6 => 0b010,
+            7 => 0b011,
+            8 => 0b100,
+            9 => 0b101,
             10 => 0b110,
             11 => 0b111,
-            _  => return Err("N2_HS has an invalid value")
+            _ => return Err("N2_HS has an invalid value"),
         },
         n2_ls: settings.n2_ls - 1,
         n31: settings.n31 - 1,
         n32: settings.n32 - 1,
         bwsel: settings.bwsel,
-        crystal_as_ckin2: settings.crystal_as_ckin2
+        crystal_as_ckin2: settings.crystal_as_ckin2,
     };
     Ok(r)
 }
@@ -92,13 +98,13 @@ fn map_frequency_settings(settings: &FrequencySettings) -> Result<FrequencySetti
 fn write(i2c: &mut I2c, reg: u8, val: u8) -> Result<()> {
     i2c.start().unwrap();
     if !i2c.write(ADDRESS << 1).unwrap() {
-        return Err("Si5324 failed to ack write address")
+        return Err("Si5324 failed to ack write address");
     }
     if !i2c.write(reg).unwrap() {
-        return Err("Si5324 failed to ack register")
+        return Err("Si5324 failed to ack register");
     }
     if !i2c.write(val).unwrap() {
-        return Err("Si5324 failed to ack value")
+        return Err("Si5324 failed to ack value");
     }
     i2c.stop().unwrap();
     Ok(())
@@ -108,10 +114,10 @@ fn write(i2c: &mut I2c, reg: u8, val: u8) -> Result<()> {
 fn write_no_ack_value(i2c: &mut I2c, reg: u8, val: u8) -> Result<()> {
     i2c.start().unwrap();
     if !i2c.write(ADDRESS << 1).unwrap() {
-        return Err("Si5324 failed to ack write address")
+        return Err("Si5324 failed to ack write address");
     }
     if !i2c.write(reg).unwrap() {
-        return Err("Si5324 failed to ack register")
+        return Err("Si5324 failed to ack register");
     }
     i2c.write(val).unwrap();
     i2c.stop().unwrap();
@@ -121,22 +127,22 @@ fn write_no_ack_value(i2c: &mut I2c, reg: u8, val: u8) -> Result<()> {
 fn read(i2c: &mut I2c, reg: u8) -> Result<u8> {
     i2c.start().unwrap();
     if !i2c.write(ADDRESS << 1).unwrap() {
-        return Err("Si5324 failed to ack write address")
+        return Err("Si5324 failed to ack write address");
     }
     if !i2c.write(reg).unwrap() {
-        return Err("Si5324 failed to ack register")
+        return Err("Si5324 failed to ack register");
     }
     i2c.restart().unwrap();
     if !i2c.write((ADDRESS << 1) | 1).unwrap() {
-        return Err("Si5324 failed to ack read address")
+        return Err("Si5324 failed to ack read address");
     }
     let val = i2c.read(false).unwrap();
     i2c.stop().unwrap();
     Ok(val)
 }
 
-fn rmw<F>(i2c: &mut I2c, reg: u8, f: F) -> Result<()> where
-        F: Fn(u8) -> u8 {
+fn rmw<F>(i2c: &mut I2c, reg: u8, f: F) -> Result<()>
+where F: Fn(u8) -> u8 {
     let value = read(i2c, reg)?;
     write(i2c, reg, f(value))?;
     Ok(())
@@ -155,18 +161,18 @@ fn soft_reset(i2c: &mut I2c, timer: &mut GlobalTimer) -> Result<()> {
 }
 
 fn has_xtal(i2c: &mut I2c) -> Result<bool> {
-    Ok((read(i2c, 129)? & 0x01) == 0)  // LOSX_INT=0
+    Ok((read(i2c, 129)? & 0x01) == 0) // LOSX_INT=0
 }
 
 fn has_ckin(i2c: &mut I2c, input: Input) -> Result<bool> {
     match input {
-        Input::Ckin1 => Ok((read(i2c, 129)? & 0x02) == 0),  // LOS1_INT=0
-        Input::Ckin2 => Ok((read(i2c, 129)? & 0x04) == 0),  // LOS2_INT=0
+        Input::Ckin1 => Ok((read(i2c, 129)? & 0x02) == 0), // LOS1_INT=0
+        Input::Ckin2 => Ok((read(i2c, 129)? & 0x04) == 0), // LOS2_INT=0
     }
 }
 
 fn locked(i2c: &mut I2c) -> Result<bool> {
-    Ok((read(i2c, 130)? & 0x01) == 0)  // LOL_INT=0
+    Ok((read(i2c, 130)? & 0x01) == 0) // LOL_INT=0
 }
 
 fn monitor_lock(i2c: &mut I2c, timer: &mut GlobalTimer) -> Result<()> {
@@ -211,11 +217,11 @@ pub fn bypass(i2c: &mut I2c, input: Input, timer: &mut GlobalTimer) -> Result<()
         Input::Ckin2 => 0b01,
     };
     init(i2c, timer)?;
-    rmw(i2c, 21,  |v| v & 0xfe)?;                        // CKSEL_PIN=0
-    rmw(i2c, 3,   |v| (v & 0x3f) | (cksel_reg << 6))?;   // CKSEL_REG
-    rmw(i2c, 4,   |v| (v & 0x3f) | (0b00 << 6))?;        // AUTOSEL_REG=b00
-    rmw(i2c, 6,   |v| (v & 0xc0) | 0b111111)?;           // SFOUT2_REG=b111 SFOUT1_REG=b111
-    rmw(i2c, 0,   |v| (v & 0xfd) | 0x02)?;               // BYPASS_REG=1
+    rmw(i2c, 21, |v| v & 0xfe)?; // CKSEL_PIN=0
+    rmw(i2c, 3, |v| (v & 0x3f) | (cksel_reg << 6))?; // CKSEL_REG
+    rmw(i2c, 4, |v| (v & 0x3f) | (0b00 << 6))?; // AUTOSEL_REG=b00
+    rmw(i2c, 6, |v| (v & 0xc0) | 0b111111)?; // SFOUT2_REG=b111 SFOUT1_REG=b111
+    rmw(i2c, 0, |v| (v & 0xfd) | 0x02)?; // BYPASS_REG=1
     Ok(())
 }
 
@@ -228,31 +234,31 @@ pub fn setup(i2c: &mut I2c, settings: &FrequencySettings, input: Input, timer: &
 
     init(i2c, timer)?;
     if settings.crystal_as_ckin2 {
-        rmw(i2c, 0,   |v| v | 0x40)?;                     // FREE_RUN=1
+        rmw(i2c, 0, |v| v | 0x40)?; // FREE_RUN=1
     }
-    rmw(i2c, 2,   |v| (v & 0x0f) | (s.bwsel << 4))?;
-    rmw(i2c, 21,  |v| v & 0xfe)?;                        // CKSEL_PIN=0
-    rmw(i2c, 3,   |v| (v & 0x2f) | (cksel_reg << 6) | 0x10)?;  // CKSEL_REG, SQ_ICAL=1
-    rmw(i2c, 4,   |v| (v & 0x3f) | (0b00 << 6))?;        // AUTOSEL_REG=b00
-    rmw(i2c, 6,   |v| (v & 0xc0) | 0b111111)?;           // SFOUT2_REG=b111 SFOUT1_REG=b111
-    write(i2c, 25,  (s.n1_hs  << 5 ) as u8)?;
-    write(i2c, 31,  (s.nc1_ls >> 16) as u8)?;
-    write(i2c, 32,  (s.nc1_ls >> 8 ) as u8)?;
-    write(i2c, 33,  (s.nc1_ls)       as u8)?;
-    write(i2c, 34,  (s.nc1_ls >> 16) as u8)?;            // write to NC2_LS as well
-    write(i2c, 35,  (s.nc1_ls >> 8 ) as u8)?;
-    write(i2c, 36,  (s.nc1_ls)       as u8)?;
-    write(i2c, 40,  (s.n2_hs  << 5 ) as u8 | (s.n2_ls  >> 16) as u8)?;
-    write(i2c, 41,  (s.n2_ls  >> 8 ) as u8)?;
-    write(i2c, 42,  (s.n2_ls)        as u8)?;
-    write(i2c, 43,  (s.n31    >> 16) as u8)?;
-    write(i2c, 44,  (s.n31    >> 8)  as u8)?;
-    write(i2c, 45,  (s.n31)          as u8)?;
-    write(i2c, 46,  (s.n32    >> 16) as u8)?;
-    write(i2c, 47,  (s.n32    >> 8)  as u8)?;
-    write(i2c, 48,  (s.n32)          as u8)?;
-    rmw(i2c, 137, |v| v | 0x01)?;                       // FASTLOCK=1
-    rmw(i2c, 136, |v| v | 0x40)?;                       // ICAL=1
+    rmw(i2c, 2, |v| (v & 0x0f) | (s.bwsel << 4))?;
+    rmw(i2c, 21, |v| v & 0xfe)?; // CKSEL_PIN=0
+    rmw(i2c, 3, |v| (v & 0x2f) | (cksel_reg << 6) | 0x10)?; // CKSEL_REG, SQ_ICAL=1
+    rmw(i2c, 4, |v| (v & 0x3f) | (0b00 << 6))?; // AUTOSEL_REG=b00
+    rmw(i2c, 6, |v| (v & 0xc0) | 0b111111)?; // SFOUT2_REG=b111 SFOUT1_REG=b111
+    write(i2c, 25, (s.n1_hs << 5) as u8)?;
+    write(i2c, 31, (s.nc1_ls >> 16) as u8)?;
+    write(i2c, 32, (s.nc1_ls >> 8) as u8)?;
+    write(i2c, 33, (s.nc1_ls) as u8)?;
+    write(i2c, 34, (s.nc1_ls >> 16) as u8)?; // write to NC2_LS as well
+    write(i2c, 35, (s.nc1_ls >> 8) as u8)?;
+    write(i2c, 36, (s.nc1_ls) as u8)?;
+    write(i2c, 40, (s.n2_hs << 5) as u8 | (s.n2_ls >> 16) as u8)?;
+    write(i2c, 41, (s.n2_ls >> 8) as u8)?;
+    write(i2c, 42, (s.n2_ls) as u8)?;
+    write(i2c, 43, (s.n31 >> 16) as u8)?;
+    write(i2c, 44, (s.n31 >> 8) as u8)?;
+    write(i2c, 45, (s.n31) as u8)?;
+    write(i2c, 46, (s.n32 >> 16) as u8)?;
+    write(i2c, 47, (s.n32 >> 8) as u8)?;
+    write(i2c, 48, (s.n32) as u8)?;
+    rmw(i2c, 137, |v| v | 0x01)?; // FASTLOCK=1
+    rmw(i2c, 136, |v| v | 0x40)?; // ICAL=1
 
     if !has_xtal(i2c)? {
         return Err("Si5324 misses XA/XB signal");
@@ -270,7 +276,7 @@ pub fn select_input(i2c: &mut I2c, input: Input, timer: &mut GlobalTimer) -> Res
         Input::Ckin1 => 0b00,
         Input::Ckin2 => 0b01,
     };
-    rmw(i2c, 3,   |v| (v & 0x3f) | (cksel_reg << 6))?;
+    rmw(i2c, 3, |v| (v & 0x3f) | (cksel_reg << 6))?;
     if !has_ckin(i2c, input)? {
         return Err("Si5324 misses clock input signal");
     }
@@ -285,12 +291,12 @@ pub mod siphaser {
 
     pub fn select_recovered_clock(i2c: &mut I2c, rc: bool, timer: &mut GlobalTimer) -> Result<()> {
         let val = read(i2c, 3)?;
-        write(i2c, 3,   (val & 0xdf) | (1 << 5))?;  // DHOLD=1
+        write(i2c, 3, (val & 0xdf) | (1 << 5))?; // DHOLD=1
         unsafe {
             csr::siphaser::switch_clocks_write(if rc { 1 } else { 0 });
         }
         let val = read(i2c, 3)?;
-        write(i2c, 3,   (val & 0xdf) | (0 << 5))?;  // DHOLD=0
+        write(i2c, 3, (val & 0xdf) | (0 << 5))?; // DHOLD=0
         monitor_lock(i2c, timer)?;
         Ok(())
     }
@@ -309,9 +315,7 @@ pub mod siphaser {
             csr::siphaser::error_write(1);
         }
         timer.delay_us(5_000);
-        unsafe {
-            csr::siphaser::error_read() != 0
-        }
+        unsafe { csr::siphaser::error_read() != 0 }
     }
 
     fn find_edge(target: bool, timer: &mut GlobalTimer) -> Result<u32> {
@@ -340,11 +344,16 @@ pub mod siphaser {
         }
         let width = find_edge(true, timer)? + jitter_margin;
         // width is 360 degrees (one full rotation of the phase between s/h limits) minus jitter
-        info!("calibration successful, lead: {}, width: {} ({}deg)", lead, width, width*360/(56*8));
+        info!(
+            "calibration successful, lead: {}, width: {} ({}deg)",
+            lead,
+            width,
+            width * 360 / (56 * 8)
+        );
 
         // Apply reverse phase shift for half the width to get into the
         // middle of the working region.
-        for _ in 0..width/2 {
+        for _ in 0..width / 2 {
             phase_shift(0, timer);
         }
 

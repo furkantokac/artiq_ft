@@ -11,9 +11,11 @@
 #![allow(non_upper_case_globals)]
 #![allow(unused)]
 
-use crate::DwarfReader;
 use core::mem;
+
 use cslice::CSlice;
+
+use crate::DwarfReader;
 
 pub const DW_EH_PE_omit: u8 = 0xFF;
 pub const DW_EH_PE_absptr: u8 = 0x00;
@@ -160,15 +162,11 @@ pub unsafe fn find_eh_action(
                         if ar_filter == 0 {
                             saw_cleanup = true;
                         } else if ar_filter > 0 {
-                            let catch_type = get_ttype_entry(
-                                ar_filter as usize,
-                                ttype_encoding,
-                                ttype_base,
-                                ttype_table,
-                            )?;
+                            let catch_type =
+                                get_ttype_entry(ar_filter as usize, ttype_encoding, ttype_base, ttype_table)?;
                             match catch_type {
                                 Some(clause_ptr) if *(clause_ptr as *const u32) == id => {
-                                    return Ok(EHAction::Catch(lpad))
+                                    return Ok(EHAction::Catch(lpad));
                                 }
                                 None => return Ok(EHAction::Catch(lpad)),
                                 _ => {}
@@ -251,19 +249,11 @@ fn get_base(encoding: u8, context: &EHContext<'_>) -> Result<usize, ()> {
     }
 }
 
-unsafe fn read_encoded_pointer(
-    reader: &mut DwarfReader,
-    context: &EHContext<'_>,
-    encoding: u8,
-) -> Result<usize, ()> {
+unsafe fn read_encoded_pointer(reader: &mut DwarfReader, context: &EHContext<'_>, encoding: u8) -> Result<usize, ()> {
     read_encoded_pointer_with_base(reader, encoding, get_base(encoding, context)?)
 }
 
-unsafe fn read_encoded_pointer_with_base(
-    reader: &mut DwarfReader,
-    encoding: u8,
-    base: usize,
-) -> Result<usize, ()> {
+unsafe fn read_encoded_pointer_with_base(reader: &mut DwarfReader, encoding: u8, base: usize) -> Result<usize, ()> {
     if encoding == DW_EH_PE_omit {
         return Err(());
     }

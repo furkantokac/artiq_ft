@@ -1,39 +1,33 @@
-use core::{fmt, slice, str};
-use core::cell::RefCell;
-use alloc::{vec, vec::Vec, string::String, collections::BTreeMap, rc::Rc};
-use log::{info, warn, error};
+use alloc::{collections::BTreeMap, rc::Rc, string::String, vec, vec::Vec};
+use core::{cell::RefCell, fmt, slice, str};
+
 use cslice::CSlice;
-
-use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::{FromPrimitive, ToPrimitive};
-
-use libboard_zynq::{
-    self as zynq,
-    smoltcp::{
-        self,
-        wire::IpCidr,
-        iface::{NeighborCache, EthernetInterfaceBuilder},
-        time::Instant,
-    },
-    timer::GlobalTimer,
-};
-use libcortex_a9::{semaphore::Semaphore, mutex::Mutex, sync_channel::{Sender, Receiver}};
-use futures::{select_biased, future::FutureExt};
-use libasync::{smoltcp::{Sockets, TcpStream}, task};
-use libconfig::{Config, net_settings};
+use futures::{future::FutureExt, select_biased};
+use libasync::{smoltcp::{Sockets, TcpStream},
+               task};
 use libboard_artiq::drtio_routing;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
+use libboard_zynq::{self as zynq,
+                    smoltcp::{self,
+                              iface::{EthernetInterfaceBuilder, NeighborCache},
+                              time::Instant,
+                              wire::IpCidr},
+                    timer::GlobalTimer};
+use libconfig::{net_settings, Config};
+use libcortex_a9::{mutex::Mutex,
+                   semaphore::Semaphore,
+                   sync_channel::{Receiver, Sender}};
+use log::{error, info, warn};
+use num_derive::{FromPrimitive, ToPrimitive};
+use num_traits::{FromPrimitive, ToPrimitive};
 
-use crate::proto_async::*;
-use crate::kernel;
-use crate::rpc;
-use crate::moninj;
-use crate::mgmt;
-use crate::analyzer;
-use crate::rtio_mgt::{self, resolve_channel_name};
 #[cfg(has_drtio)]
 use crate::pl;
+use crate::{analyzer, kernel, mgmt, moninj,
+            proto_async::*,
+            rpc,
+            rtio_mgt::{self, resolve_channel_name}};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -49,9 +43,9 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::NetworkError(error) => write!(f, "network error: {}", error),
-            Error::UnexpectedPattern   => write!(f, "unexpected pattern"),
-            Error::UnrecognizedPacket  => write!(f, "unrecognized packet"),
-            Error::BufferExhausted     => write!(f, "buffer exhausted"),
+            Error::UnexpectedPattern => write!(f, "unexpected pattern"),
+            Error::UnrecognizedPacket => write!(f, "unrecognized packet"),
+            Error::BufferExhausted => write!(f, "buffer exhausted"),
         }
     }
 }
@@ -88,15 +82,16 @@ static CACHE_STORE: Mutex<BTreeMap<String, Vec<i32>>> = Mutex::new(BTreeMap::new
 static DMA_RECORD_STORE: Mutex<BTreeMap<String, (Vec<u8>, i64)>> = Mutex::new(BTreeMap::new());
 
 async fn write_header(stream: &TcpStream, reply: Reply) -> Result<()> {
-    stream.send_slice(&[0x5a, 0x5a, 0x5a, 0x5a, reply.to_u8().unwrap()]).await?;
+    stream
+        .send_slice(&[0x5a, 0x5a, 0x5a, 0x5a, reply.to_u8().unwrap()])
+        .await?;
     Ok(())
 }
 
 async fn read_request(stream: &TcpStream, allow_close: bool) -> Result<Option<Request>> {
     match expect(stream, &[0x5a, 0x5a, 0x5a, 0x5a]).await {
         Ok(true) => {}
-        Ok(false) =>
-            return Err(Error::UnexpectedPattern),
+        Ok(false) => return Err(Error::UnexpectedPattern),
         Err(smoltcp::Error::Finished) => {
             if allow_close {
                 info!("peer closed connection");
@@ -105,11 +100,12 @@ async fn read_request(stream: &TcpStream, allow_close: bool) -> Result<Option<Re
                 error!("peer unexpectedly closed connection");
                 return Err(smoltcp::Error::Finished)?;
             }
-        },
-        Err(e) =>
-            return Err(e)?,
+        }
+        Err(e) => return Err(e)?,
     }
-    Ok(Some(FromPrimitive::from_i8(read_i8(&stream).await?).ok_or(Error::UnrecognizedPacket)?))
+    Ok(Some(
+        FromPrimitive::from_i8(read_i8(&stream).await?).ok_or(Error::UnrecognizedPacket)?,
+    ))
 }
 
 async fn read_bytes(stream: &TcpStream, max_length: usize) -> Result<Vec<u8>> {
@@ -128,9 +124,7 @@ async fn fast_send(sender: &mut Sender<'_, kernel::Message>, content: kernel::Me
     let mut content = content;
     for _ in 0..RETRY_LIMIT {
         match sender.try_send(content) {
-            Ok(()) => {
-                return
-            },
+            Ok(()) => return,
             Err(v) => {
                 content = v;
             }
@@ -142,10 +136,8 @@ async fn fast_send(sender: &mut Sender<'_, kernel::Message>, content: kernel::Me
 async fn fast_recv(receiver: &mut Receiver<'_, kernel::Message>) -> kernel::Message {
     for _ in 0..RETRY_LIMIT {
         match receiver.try_recv() {
-            Ok(v) => {
-                return v;
-            },
-            Err(()) => ()
+            Ok(v) => return v,
+            Err(()) => (),
         }
     }
     receiver.async_recv().await
@@ -161,7 +153,11 @@ async fn write_exception_string(stream: &TcpStream, s: CSlice<'static, u8>) -> R
     Ok(())
 }
 
-async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kernel::Control>>, _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>) -> Result<()> {
+async fn handle_run_kernel(
+    stream: Option<&TcpStream>,
+    control: &Rc<RefCell<kernel::Control>>,
+    _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
+) -> Result<()> {
     control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
     loop {
         let reply = control.borrow_mut().rx.async_recv().await;
@@ -169,7 +165,7 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
             kernel::Message::RpcSend { is_async, data } => {
                 if stream.is_none() {
                     error!("Unexpected RPC from startup/idle kernel!");
-                    break
+                    break;
                 }
                 let stream = stream.unwrap();
                 write_header(stream, Reply::RPCRequest).await?;
@@ -196,46 +192,64 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                                         fast_send(&mut control.tx, kernel::Message::RpcRecvReply(Ok(size))).await;
                                         match fast_recv(&mut control.rx).await {
                                             kernel::Message::RpcRecvRequest(slot) => slot,
-                                            other => panic!("expected nested value slot from kernel CPU, not {:?}", other),
+                                            other => {
+                                                panic!("expected nested value slot from kernel CPU, not {:?}", other)
+                                            }
                                         }
                                     }
                                 }
-                            }).await?;
-                            control.borrow_mut().tx.async_send(kernel::Message::RpcRecvReply(Ok(0))).await;
-                        },
+                            })
+                            .await?;
+                            control
+                                .borrow_mut()
+                                .tx
+                                .async_send(kernel::Message::RpcRecvReply(Ok(0)))
+                                .await;
+                        }
                         Request::RPCException => {
                             let mut control = control.borrow_mut();
                             match control.rx.async_recv().await {
                                 kernel::Message::RpcRecvRequest(_) => (),
                                 other => panic!("expected (ignored) root value slot from kernel CPU, not {:?}", other),
                             }
-                            let id =       read_i32(stream).await? as u32;
-                            let message =  read_i32(stream).await? as u32;
-                            let param =    [read_i64(stream).await?,
-                                            read_i64(stream).await?,
-                                            read_i64(stream).await?];
-                            let file =     read_i32(stream).await? as u32;
-                            let line =     read_i32(stream).await?;
-                            let column =   read_i32(stream).await?;
+                            let id = read_i32(stream).await? as u32;
+                            let message = read_i32(stream).await? as u32;
+                            let param = [
+                                read_i64(stream).await?,
+                                read_i64(stream).await?,
+                                read_i64(stream).await?,
+                            ];
+                            let file = read_i32(stream).await? as u32;
+                            let line = read_i32(stream).await?;
+                            let column = read_i32(stream).await?;
                             let function = read_i32(stream).await? as u32;
-                            control.tx.async_send(kernel::Message::RpcRecvReply(Err(kernel::RPCException {
-                                id, message, param, file, line, column, function
-                            }))).await;
-                        },
+                            control
+                                .tx
+                                .async_send(kernel::Message::RpcRecvReply(Err(kernel::RPCException {
+                                    id,
+                                    message,
+                                    param,
+                                    file,
+                                    line,
+                                    column,
+                                    function,
+                                })))
+                                .await;
+                        }
                         _ => {
                             error!("unexpected RPC request from host: {:?}", host_request);
-                            return Err(Error::UnrecognizedPacket)
+                            return Err(Error::UnrecognizedPacket);
                         }
                     }
                 }
-            },
+            }
             kernel::Message::KernelFinished(async_errors) => {
                 if let Some(stream) = stream {
                     write_header(stream, Reply::KernelFinished).await?;
                     write_i8(stream, async_errors as i8).await?;
                 }
                 break;
-            },
+            }
             kernel::Message::KernelException(exceptions, stack_pointers, backtrace, async_errors) => {
                 match stream {
                     Some(stream) => {
@@ -247,12 +261,22 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                             let exception = exception.as_ref().unwrap();
                             write_i32(stream, exception.id as i32).await?;
 
-                            if exception.message.len() == usize::MAX { // exception with host string
+                            if exception.message.len() == usize::MAX {
+                                // exception with host string
                                 write_exception_string(stream, exception.message).await?;
                             } else {
-                                let msg = str::from_utf8(unsafe { slice::from_raw_parts(exception.message.as_ptr(), exception.message.len()) })
-                                    .unwrap()
-                                    .replace("{rtio_channel_info:0}", &format!("0x{:04x}:{}", exception.param[0], resolve_channel_name(exception.param[0] as u32)));
+                                let msg = str::from_utf8(unsafe {
+                                    slice::from_raw_parts(exception.message.as_ptr(), exception.message.len())
+                                })
+                                .unwrap()
+                                .replace(
+                                    "{rtio_channel_info:0}",
+                                    &format!(
+                                        "0x{:04x}:{}",
+                                        exception.param[0],
+                                        resolve_channel_name(exception.param[0] as u32)
+                                    ),
+                                );
                                 write_exception_string(stream, unsafe { CSlice::new(msg.as_ptr(), msg.len()) }).await?;
                             }
 
@@ -275,7 +299,7 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
                             write_i32(stream, sp as i32).await?;
                         }
                         write_i8(stream, async_errors as i8).await?;
-                    },
+                    }
                     None => {
                         error!("Uncaught kernel exceptions: {:?}", exceptions);
                     }
@@ -284,27 +308,41 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
             }
             kernel::Message::CachePutRequest(key, value) => {
                 CACHE_STORE.lock().insert(key, value);
-            },
+            }
             kernel::Message::CacheGetRequest(key) => {
                 const DEFAULT: Vec<i32> = Vec::new();
                 let value = CACHE_STORE.lock().get(&key).unwrap_or(&DEFAULT).clone();
-                control.borrow_mut().tx.async_send(kernel::Message::CacheGetReply(value)).await;
-            },
+                control
+                    .borrow_mut()
+                    .tx
+                    .async_send(kernel::Message::CacheGetReply(value))
+                    .await;
+            }
             kernel::Message::DmaPutRequest(recorder) => {
-                DMA_RECORD_STORE.lock().insert(recorder.name, (recorder.buffer, recorder.duration));
-            },
+                DMA_RECORD_STORE
+                    .lock()
+                    .insert(recorder.name, (recorder.buffer, recorder.duration));
+            }
             kernel::Message::DmaEraseRequest(name) => {
                 // prevent possible OOM when we have large DMA record replacement.
                 DMA_RECORD_STORE.lock().remove(&name);
-            },
+            }
             kernel::Message::DmaGetRequest(name) => {
                 let result = DMA_RECORD_STORE.lock().get(&name).map(|v| v.clone());
-                control.borrow_mut().tx.async_send(kernel::Message::DmaGetReply(result)).await;
-            },
+                control
+                    .borrow_mut()
+                    .tx
+                    .async_send(kernel::Message::DmaGetReply(result))
+                    .await;
+            }
             #[cfg(has_drtio)]
             kernel::Message::UpDestinationsRequest(destination) => {
                 let result = _up_destinations.borrow()[destination as usize];
-                control.borrow_mut().tx.async_send(kernel::Message::UpDestinationsReply(result)).await;
+                control
+                    .borrow_mut()
+                    .tx
+                    .async_send(kernel::Message::UpDestinationsReply(result))
+                    .await;
             }
             _ => {
                 panic!("unexpected message from core1 while kernel was running: {:?}", reply);
@@ -314,11 +352,17 @@ async fn handle_run_kernel(stream: Option<&TcpStream>, control: &Rc<RefCell<kern
     Ok(())
 }
 
-
-async fn load_kernel(buffer: &Vec<u8>, control: &Rc<RefCell<kernel::Control>>, stream: Option<&TcpStream>) -> Result<()> {
+async fn load_kernel(
+    buffer: &Vec<u8>,
+    control: &Rc<RefCell<kernel::Control>>,
+    stream: Option<&TcpStream>,
+) -> Result<()> {
     let mut control = control.borrow_mut();
     control.restart();
-    control.tx.async_send(kernel::Message::LoadRequest(buffer.to_vec())).await;
+    control
+        .tx
+        .async_send(kernel::Message::LoadRequest(buffer.to_vec()))
+        .await;
     let reply = control.rx.async_recv().await;
     match reply {
         kernel::Message::LoadCompleted => {
@@ -326,7 +370,7 @@ async fn load_kernel(buffer: &Vec<u8>, control: &Rc<RefCell<kernel::Control>>, s
                 write_header(stream, Reply::LoadCompleted).await?;
             }
             Ok(())
-        },
+        }
         kernel::Message::LoadFailed => {
             if let Some(stream) = stream {
                 write_header(stream, Reply::LoadFailed).await?;
@@ -335,7 +379,7 @@ async fn load_kernel(buffer: &Vec<u8>, control: &Rc<RefCell<kernel::Control>>, s
                 error!("Kernel load failed");
             }
             Err(Error::UnexpectedPattern)
-        },
+        }
         _ => {
             error!("unexpected message from core1: {:?}", reply);
             if let Some(stream) = stream {
@@ -347,7 +391,11 @@ async fn load_kernel(buffer: &Vec<u8>, control: &Rc<RefCell<kernel::Control>>, s
     }
 }
 
-async fn handle_connection(stream: &mut TcpStream, control: Rc<RefCell<kernel::Control>>, up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>) -> Result<()> {
+async fn handle_connection(
+    stream: &mut TcpStream,
+    control: Rc<RefCell<kernel::Control>>,
+    up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
+) -> Result<()> {
     stream.set_ack_delay(None);
 
     if !expect(stream, b"ARTIQ coredev\n").await? {
@@ -364,17 +412,17 @@ async fn handle_connection(stream: &mut TcpStream, control: Rc<RefCell<kernel::C
             Request::SystemInfo => {
                 write_header(stream, Reply::SystemInfo).await?;
                 stream.send_slice("ARZQ".as_bytes()).await?;
-            },
+            }
             Request::LoadKernel => {
-                let buffer = read_bytes(stream, 1024*1024).await?;
+                let buffer = read_bytes(stream, 1024 * 1024).await?;
                 load_kernel(&buffer, &control, Some(stream)).await?;
-            },
+            }
             Request::RunKernel => {
                 handle_run_kernel(Some(stream), &control, &up_destinations).await?;
-            },
+            }
             _ => {
                 error!("unexpected request from host: {:?}", request);
-                return Err(Error::UnrecognizedPacket)
+                return Err(Error::UnrecognizedPacket);
             }
         }
     }
@@ -398,24 +446,24 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
             let ip_addrs = [
                 IpCidr::new(net_addresses.ipv4_addr, 0),
                 IpCidr::new(net_addresses.ipv6_ll_addr, 0),
-                IpCidr::new(addr, 0)
+                IpCidr::new(addr, 0),
             ];
             EthernetInterfaceBuilder::new(&mut eth)
-                       .ethernet_addr(net_addresses.hardware_addr)
-                       .ip_addrs(ip_addrs)
-                       .neighbor_cache(neighbor_cache)
-                       .finalize()
+                .ethernet_addr(net_addresses.hardware_addr)
+                .ip_addrs(ip_addrs)
+                .neighbor_cache(neighbor_cache)
+                .finalize()
         }
         None => {
             let ip_addrs = [
                 IpCidr::new(net_addresses.ipv4_addr, 0),
-                IpCidr::new(net_addresses.ipv6_ll_addr, 0)
+                IpCidr::new(net_addresses.ipv6_ll_addr, 0),
             ];
             EthernetInterfaceBuilder::new(&mut eth)
-                       .ethernet_addr(net_addresses.hardware_addr)
-                       .ip_addrs(ip_addrs)
-                       .neighbor_cache(neighbor_cache)
-                       .finalize()
+                .ethernet_addr(net_addresses.hardware_addr)
+                .ip_addrs(ip_addrs)
+                .neighbor_cache(neighbor_cache)
+                .finalize()
         }
     };
 
@@ -424,8 +472,10 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
     // before, mutex was on io, but now that io isn't used...?
     let aux_mutex: Rc<Mutex<bool>> = Rc::new(Mutex::new(false));
     #[cfg(has_drtio)]
-    let drtio_routing_table = Rc::new(RefCell::new(
-        drtio_routing::config_routing_table(pl::csr::DRTIO.len(), &cfg)));
+    let drtio_routing_table = Rc::new(RefCell::new(drtio_routing::config_routing_table(
+        pl::csr::DRTIO.len(),
+        &cfg,
+    )));
     #[cfg(not(has_drtio))]
     let drtio_routing_table = Rc::new(RefCell::new(drtio_routing::RoutingTable::default_empty()));
     let up_destinations = Rc::new(RefCell::new([false; drtio_routing::DEST_COUNT]));
@@ -497,14 +547,10 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
         }
     });
 
-    Sockets::run(&mut iface, || {
-        Instant::from_millis(timer.get_time().0 as i32)
-    });
+    Sockets::run(&mut iface, || Instant::from_millis(timer.get_time().0 as i32));
 }
 
-
 pub fn soft_panic_main(timer: GlobalTimer, cfg: Config) -> ! {
-
     let net_addresses = net_settings::get_addresses(&cfg);
     info!("network addresses: {}", net_addresses);
 
@@ -522,24 +568,24 @@ pub fn soft_panic_main(timer: GlobalTimer, cfg: Config) -> ! {
             let ip_addrs = [
                 IpCidr::new(net_addresses.ipv4_addr, 0),
                 IpCidr::new(net_addresses.ipv6_ll_addr, 0),
-                IpCidr::new(addr, 0)
+                IpCidr::new(addr, 0),
             ];
             EthernetInterfaceBuilder::new(&mut eth)
-                       .ethernet_addr(net_addresses.hardware_addr)
-                       .ip_addrs(ip_addrs)
-                       .neighbor_cache(neighbor_cache)
-                       .finalize()
+                .ethernet_addr(net_addresses.hardware_addr)
+                .ip_addrs(ip_addrs)
+                .neighbor_cache(neighbor_cache)
+                .finalize()
         }
         None => {
             let ip_addrs = [
                 IpCidr::new(net_addresses.ipv4_addr, 0),
-                IpCidr::new(net_addresses.ipv6_ll_addr, 0)
+                IpCidr::new(net_addresses.ipv6_ll_addr, 0),
             ];
             EthernetInterfaceBuilder::new(&mut eth)
-                       .ethernet_addr(net_addresses.hardware_addr)
-                       .ip_addrs(ip_addrs)
-                       .neighbor_cache(neighbor_cache)
-                       .finalize()
+                .ethernet_addr(net_addresses.hardware_addr)
+                .ip_addrs(ip_addrs)
+                .neighbor_cache(neighbor_cache)
+                .finalize()
         }
     };
 
@@ -555,7 +601,5 @@ pub fn soft_panic_main(timer: GlobalTimer, cfg: Config) -> ! {
         err_led.toggle(true);
     }
 
-    Sockets::run(&mut iface, || {
-        Instant::from_millis(timer.get_time().0 as i32)
-    });
+    Sockets::run(&mut iface, || Instant::from_millis(timer.get_time().0 as i32));
 }

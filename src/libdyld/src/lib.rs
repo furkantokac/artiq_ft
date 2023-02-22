@@ -1,13 +1,14 @@
 #![no_std]
 
 extern crate alloc;
-extern crate log;
 extern crate libcortex_a9;
+extern crate log;
 
-use core::{convert, fmt, ops::Range, str};
 use alloc::string::String;
-use log::{debug, trace};
+use core::{convert, fmt, ops::Range, str};
+
 use elf::*;
+use log::{debug, trace};
 
 pub mod elf;
 mod file;
@@ -21,11 +22,10 @@ pub enum Arch {
     OpenRisc,
 }
 
-
 #[derive(Debug)]
 pub enum Error {
     Parsing(&'static str),
-    Lookup(String)
+    Lookup(String),
 }
 
 impl convert::From<&'static str> for Error {
@@ -37,10 +37,8 @@ impl convert::From<&'static str> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &Error::Parsing(desc) =>
-                write!(f, "parse error: {}", desc),
-            &Error::Lookup(ref sym) =>
-                write!(f, "symbol lookup error: {}", sym),
+            &Error::Parsing(desc) => write!(f, "parse error: {}", desc),
+            &Error::Lookup(ref sym) => write!(f, "symbol lookup error: {}", sym),
         }
     }
 }
@@ -103,20 +101,22 @@ impl Library {
         let mut index = self.hash_bucket()[hash as usize % self.hash_bucket().len()] as usize;
 
         loop {
-            if index == STN_UNDEF { return None }
+            if index == STN_UNDEF {
+                return None;
+            }
 
             let sym = &self.symtab()[index];
             let sym_name_off = sym.st_name as usize;
             match self.strtab().get(sym_name_off..sym_name_off + name.len()) {
                 Some(sym_name) if sym_name == name => {
                     if ELF32_ST_BIND(sym.st_info) & STB_GLOBAL == 0 {
-                        return None
+                        return None;
                     }
 
                     match sym.st_shndx {
                         SHN_UNDEF => return None,
                         SHN_ABS => return Some(self.image.ptr() as u32 + sym.st_value),
-                        _ => return Some(self.image.ptr() as u32 + sym.st_value)
+                        _ => return Some(self.image.ptr() as u32 + sym.st_value),
                     }
                 }
                 _ => (),
@@ -127,10 +127,16 @@ impl Library {
     }
 
     pub fn name_starting_at(&self, offset: usize) -> Result<&[u8], Error> {
-        let size = self.strtab().iter().skip(offset).position(|&x| x == 0)
-                              .ok_or("symbol in symbol table not null-terminated")?;
-        Ok(self.strtab().get(offset..offset + size)
-           .ok_or("cannot read symbol name")?)
+        let size = self
+            .strtab()
+            .iter()
+            .skip(offset)
+            .position(|&x| x == 0)
+            .ok_or("symbol in symbol table not null-terminated")?;
+        Ok(self
+            .strtab()
+            .get(offset..offset + size)
+            .ok_or("cannot read symbol name")?)
     }
 
     /// Rebind Rela by `name` to a new `addr`
@@ -143,53 +149,59 @@ impl Library {
     }
 }
 
-pub fn load(
-    data: &[u8],
-    resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>
-) -> Result<Library, Error> {
+pub fn load(data: &[u8], resolve: &dyn Fn(&[u8]) -> Option<Elf32_Word>) -> Result<Library, Error> {
     // validate ELF file
-    let file = file::File::new(data)
-        .ok_or("cannot read ELF header")?;
+    let file = file::File::new(data).ok_or("cannot read ELF header")?;
     if file.ehdr.e_type != ET_DYN {
-        return Err("not a shared library")?
+        return Err("not a shared library")?;
     }
-    let arch = file.arch()
-        .ok_or("not for a supported architecture")?;
+    let arch = file.arch().ok_or("not for a supported architecture")?;
 
     // prepare target memory
-    let image_size = file.program_headers()
+    let image_size = file
+        .program_headers()
         .filter_map(|phdr| phdr.map(|phdr| phdr.p_vaddr + phdr.p_memsz))
         .max()
         .unwrap_or(0) as usize;
-    let image_align = file.program_headers()
-        .filter_map(|phdr| phdr.and_then(|phdr| {
-            if phdr.p_type == PT_LOAD {
-                Some(phdr.p_align)
-            } else {
-                None
-            }
-        }))
+    let image_align = file
+        .program_headers()
+        .filter_map(|phdr| {
+            phdr.and_then(|phdr| {
+                if phdr.p_type == PT_LOAD {
+                    Some(phdr.p_align)
+                } else {
+                    None
+                }
+            })
+        })
         .max()
         .unwrap_or(4) as usize;
     // 1 image for all segments
-    let mut image = image::Image::new(image_size, image_align)
-        .map_err(|_| "cannot allocate target image")?;
-    debug!("ELF target: {} bytes, align to {:X}, allocated at {:08X}", image_size, image_align, image.ptr() as usize);
+    let mut image = image::Image::new(image_size, image_align).map_err(|_| "cannot allocate target image")?;
+    debug!(
+        "ELF target: {} bytes, align to {:X}, allocated at {:08X}",
+        image_size,
+        image_align,
+        image.ptr() as usize
+    );
 
     // LOAD
     for phdr in file.program_headers() {
         let phdr = phdr.ok_or("cannot read program header")?;
-        trace!("Program header: {:08X}+{:08X} to {:08X}",
-              phdr.p_offset, phdr.p_filesz,
-              image.ptr() as u32
+        trace!(
+            "Program header: {:08X}+{:08X} to {:08X}",
+            phdr.p_offset,
+            phdr.p_filesz,
+            image.ptr() as u32
         );
         let file_range = phdr.p_offset as usize..(phdr.p_offset + phdr.p_filesz) as usize;
         match phdr.p_type {
             PT_LOAD => {
-                let src = file.get(file_range)
+                let src = file
+                    .get(file_range)
                     .ok_or("program header requests an out of bounds load (in file)")?;
-                let dst = image.get_mut(phdr.p_vaddr as usize..
-                                        (phdr.p_vaddr + phdr.p_filesz) as usize)
+                let dst = image
+                    .get_mut(phdr.p_vaddr as usize..(phdr.p_vaddr + phdr.p_filesz) as usize)
                     .ok_or("program header requests an out of bounds load (in target)")?;
                 dst.copy_from_slice(src);
             }
@@ -203,9 +215,9 @@ pub fn load(
         let shdr = shdr.ok_or("cannot read section header")?;
         match shdr.sh_type as usize {
             SHT_ARM_EXIDX => {
-                let range = shdr.sh_addr as usize..
-                    (shdr.sh_addr + shdr.sh_size) as usize;
-                let _ = image.get(range.clone())
+                let range = shdr.sh_addr as usize..(shdr.sh_addr + shdr.sh_size) as usize;
+                let _ = image
+                    .get(range.clone())
                     .ok_or("section header specifies EXIDX outside of image (in target)")?;
                 exidx = Some(range);
             }
@@ -214,11 +226,14 @@ pub fn load(
     }
 
     // relocate DYNAMIC
-    let dyn_range = file.dyn_header_vaddr()
-        .ok_or("cannot find a dynamic header")?;
+    let dyn_range = file.dyn_header_vaddr().ok_or("cannot find a dynamic header")?;
     let dyn_section = image.dyn_section(dyn_range.clone())?;
-    debug!("Relocating {} rela, {} rel, {} pltrel",
-           dyn_section.rela.len(), dyn_section.rel.len(), dyn_section.pltrel.len());
+    debug!(
+        "Relocating {} rela, {} rel, {} pltrel",
+        dyn_section.rela.len(),
+        dyn_section.rel.len(),
+        dyn_section.pltrel.len()
+    );
     let lib = Library {
         arch,
         image,

@@ -1451,8 +1451,7 @@ pub const R_AARCH64_TLSDESC_CALL: usize = 569;
 pub const R_AARCH64_TLSLE_LDST128_TPREL_LO12: usize = 570;
 pub const R_AARCH64_TLSLE_LDST128_TPREL_LO12_NC: usize = 571;
 pub const R_AARCH64_TLSLD_LDST128_DTPREL_LO12: usize = 572;
-pub const R_AARCH64_TLSLD_LDST128_DTPREL_LO12_NC: usize =
-    573;
+pub const R_AARCH64_TLSLD_LDST128_DTPREL_LO12_NC: usize = 573;
 pub const R_AARCH64_COPY: usize = 1024;
 pub const R_AARCH64_GLOB_DAT: usize = 1025;
 pub const R_AARCH64_JUMP_SLOT: usize = 1026;
@@ -2267,7 +2266,9 @@ pub struct Elf32_Ehdr {
     pub e_shstrndx: Elf32_Half,
 }
 impl Clone for Elf32_Ehdr {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2288,7 +2289,9 @@ pub struct Elf64_Ehdr {
     pub e_shstrndx: Elf64_Half,
 }
 impl Clone for Elf64_Ehdr {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2305,7 +2308,9 @@ pub struct Elf32_Shdr {
     pub sh_entsize: Elf32_Word,
 }
 impl Clone for Elf32_Shdr {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2322,7 +2327,9 @@ pub struct Elf64_Shdr {
     pub sh_entsize: Elf64_Xword,
 }
 impl Clone for Elf64_Shdr {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2335,7 +2342,9 @@ pub struct Elf32_Sym {
     pub st_shndx: Elf32_Section,
 }
 impl Clone for Elf32_Sym {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2348,7 +2357,9 @@ pub struct Elf64_Sym {
     pub st_size: Elf64_Xword,
 }
 impl Clone for Elf64_Sym {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2357,7 +2368,9 @@ pub struct Elf32_Syminfo {
     pub si_flags: Elf32_Half,
 }
 impl Clone for Elf32_Syminfo {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2366,7 +2379,9 @@ pub struct Elf64_Syminfo {
     pub si_flags: Elf64_Half,
 }
 impl Clone for Elf64_Syminfo {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2375,7 +2390,9 @@ pub struct Elf32_Rel {
     pub r_info: Elf32_Word,
 }
 impl Clone for Elf32_Rel {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2384,7 +2401,9 @@ pub struct Elf64_Rel {
     pub r_info: Elf64_Xword,
 }
 impl Clone for Elf64_Rel {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2394,7 +2413,9 @@ pub struct Elf32_Rela {
     pub r_addend: Elf32_Sword,
 }
 impl Clone for Elf32_Rela {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2404,7 +2425,9 @@ pub struct Elf64_Rela {
     pub r_addend: Elf64_Sxword,
 }
 impl Clone for Elf64_Rela {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2419,7 +2442,9 @@ pub struct Elf32_Phdr {
     pub p_align: Elf32_Word,
 }
 impl Clone for Elf32_Phdr {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2434,7 +2459,9 @@ pub struct Elf64_Phdr {
     pub p_align: Elf64_Xword,
 }
 impl Clone for Elf64_Phdr {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Copy)]
@@ -2449,10 +2476,14 @@ pub union Elf32_Dyn__bindgen_ty_1 {
     pub d_ptr: Elf32_Addr,
 }
 impl Clone for Elf32_Dyn__bindgen_ty_1 {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 impl Clone for Elf32_Dyn {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Copy)]
@@ -2467,10 +2498,14 @@ pub union Elf64_Dyn__bindgen_ty_1 {
     pub d_ptr: Elf64_Addr,
 }
 impl Clone for Elf64_Dyn__bindgen_ty_1 {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 impl Clone for Elf64_Dyn {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2484,7 +2519,9 @@ pub struct Elf32_Verdef {
     pub vd_next: Elf32_Word,
 }
 impl Clone for Elf32_Verdef {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2498,7 +2535,9 @@ pub struct Elf64_Verdef {
     pub vd_next: Elf64_Word,
 }
 impl Clone for Elf64_Verdef {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2507,7 +2546,9 @@ pub struct Elf32_Verdaux {
     pub vda_next: Elf32_Word,
 }
 impl Clone for Elf32_Verdaux {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2516,7 +2557,9 @@ pub struct Elf64_Verdaux {
     pub vda_next: Elf64_Word,
 }
 impl Clone for Elf64_Verdaux {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2528,7 +2571,9 @@ pub struct Elf32_Verneed {
     pub vn_next: Elf32_Word,
 }
 impl Clone for Elf32_Verneed {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2540,7 +2585,9 @@ pub struct Elf64_Verneed {
     pub vn_next: Elf64_Word,
 }
 impl Clone for Elf64_Verneed {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2552,7 +2599,9 @@ pub struct Elf32_Vernaux {
     pub vna_next: Elf32_Word,
 }
 impl Clone for Elf32_Vernaux {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2564,7 +2613,9 @@ pub struct Elf64_Vernaux {
     pub vna_next: Elf64_Word,
 }
 impl Clone for Elf64_Vernaux {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Copy)]
@@ -2578,10 +2629,14 @@ pub union Elf32_auxv_t__bindgen_ty_1 {
     pub a_val: u32,
 }
 impl Clone for Elf32_auxv_t__bindgen_ty_1 {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 impl Clone for Elf32_auxv_t {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Copy)]
@@ -2595,10 +2650,14 @@ pub union Elf64_auxv_t__bindgen_ty_1 {
     pub a_val: u64,
 }
 impl Clone for Elf64_auxv_t__bindgen_ty_1 {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 impl Clone for Elf64_auxv_t {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2608,7 +2667,9 @@ pub struct Elf32_Nhdr {
     pub n_type: Elf32_Word,
 }
 impl Clone for Elf32_Nhdr {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2618,7 +2679,9 @@ pub struct Elf64_Nhdr {
     pub n_type: Elf64_Word,
 }
 impl Clone for Elf64_Nhdr {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2630,7 +2693,9 @@ pub struct Elf32_Move {
     pub m_stride: Elf32_Half,
 }
 impl Clone for Elf32_Move {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2642,7 +2707,9 @@ pub struct Elf64_Move {
     pub m_stride: Elf64_Half,
 }
 impl Clone for Elf64_Move {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Copy)]
@@ -2657,7 +2724,9 @@ pub struct Elf32_gptab__bindgen_ty_1 {
     pub gt_unused: Elf32_Word,
 }
 impl Clone for Elf32_gptab__bindgen_ty_1 {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2666,10 +2735,14 @@ pub struct Elf32_gptab__bindgen_ty_2 {
     pub gt_bytes: Elf32_Word,
 }
 impl Clone for Elf32_gptab__bindgen_ty_2 {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 impl Clone for Elf32_gptab {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2679,7 +2752,9 @@ pub struct Elf32_RegInfo {
     pub ri_gp_value: Elf32_Sword,
 }
 impl Clone for Elf32_RegInfo {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2690,7 +2765,9 @@ pub struct Elf_Options {
     pub info: Elf32_Word,
 }
 impl Clone for Elf_Options {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2699,7 +2776,9 @@ pub struct Elf_Options_Hw {
     pub hwp_flags2: Elf32_Word,
 }
 impl Clone for Elf_Options_Hw {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2711,7 +2790,9 @@ pub struct Elf32_Lib {
     pub l_flags: Elf32_Word,
 }
 impl Clone for Elf32_Lib {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 #[repr(C)]
 #[derive(Debug, Copy)]
@@ -2723,17 +2804,31 @@ pub struct Elf64_Lib {
     pub l_flags: Elf64_Word,
 }
 impl Clone for Elf64_Lib {
-    fn clone(&self) -> Self { *self }
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 pub type Elf32_Conflict = Elf32_Addr;
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct EXIDX_Entry(u32, u32);
 
-pub fn ELF32_R_SYM(info: Elf32_Word) -> Elf32_Word { info >> 8 }
-pub fn ELF32_R_TYPE(info: Elf32_Word) -> u8 { info as u8 }
-pub fn ELF32_R_INFO(sym: Elf32_Word, ty: u8) -> Elf32_Word { sym << 8 | ty as Elf32_Word }
+pub fn ELF32_R_SYM(info: Elf32_Word) -> Elf32_Word {
+    info >> 8
+}
+pub fn ELF32_R_TYPE(info: Elf32_Word) -> u8 {
+    info as u8
+}
+pub fn ELF32_R_INFO(sym: Elf32_Word, ty: u8) -> Elf32_Word {
+    sym << 8 | ty as Elf32_Word
+}
 
-pub fn ELF32_ST_BIND(info: u8) -> u8 { info >> 4 }
-pub fn ELF32_ST_TYPE(info: u8) -> u8 { info & 0xf }
-pub fn ELF32_ST_INFO(bind: u8, ty: u8) -> u8 { (bind << 4) | (ty & 0xf) }
+pub fn ELF32_ST_BIND(info: u8) -> u8 {
+    info >> 4
+}
+pub fn ELF32_ST_TYPE(info: u8) -> u8 {
+    info & 0xf
+}
+pub fn ELF32_ST_INFO(bind: u8, ty: u8) -> u8 {
+    (bind << 4) | (ty & 0xf)
+}

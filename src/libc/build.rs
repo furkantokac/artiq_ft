@@ -4,8 +4,7 @@ fn main() {
 }
 
 mod libc {
-    use std::path::Path;
-    use std::env;
+    use std::{env, path::Path};
 
     pub fn compile() {
         let cfg = &mut cc::Build::new();
@@ -32,9 +31,7 @@ mod libc {
         cfg.flag("-U_FORTIFY_SOURCE");
         cfg.define("_FORTIFY_SOURCE", Some("0"));
 
-        let sources = vec![
-            "printf.c"
-        ];
+        let sources = vec!["printf.c"];
 
         let root = Path::new("./");
         for src in sources {

@@ -16,7 +16,7 @@ pub mod cursor;
 pub mod proto;
 
 pub use cursor::Cursor;
-#[cfg(feature = "byteorder")]
-pub use proto::{ProtoRead, ProtoWrite};
 #[cfg(all(feature = "byteorder", feature = "alloc"))]
 pub use proto::ReadStringError;
+#[cfg(feature = "byteorder")]
+pub use proto::{ProtoRead, ProtoWrite};

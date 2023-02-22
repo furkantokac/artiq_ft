@@ -19,10 +19,8 @@ pub struct IoExpander<'a> {
     registers: Registers,
 }
 
-
 impl<'a> IoExpander<'a> {
     pub fn new(i2c: &'a mut i2c::I2c, index: u8) -> Result<Self, &'static str> {
-
         // Both expanders on SHARED I2C bus
         let mut io_expander = match index {
             0 => IoExpander {
@@ -54,10 +52,7 @@ impl<'a> IoExpander<'a> {
             _ => return Err("incorrect I/O expander index"),
         };
         if !io_expander.check_ack()? {
-            info!(
-                "MCP23017 io expander {} not found. Checking for PCA9539.",
-                index
-            );
+            info!("MCP23017 io expander {} not found. Checking for PCA9539.", index);
             io_expander.address += 0xa8; // translate to PCA9539 addresses (see schematic)
             io_expander.registers = Registers {
                 iodira: 0x06,

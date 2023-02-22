@@ -5,8 +5,7 @@ fn main() {
 }
 
 mod llvm_libunwind {
-    use std::path::Path;
-    use std::env;
+    use std::{env, path::Path};
 
     fn setup_options(cfg: &mut cc::Build) {
         cfg.no_default_flags(true);
@@ -82,11 +81,7 @@ mod llvm_libunwind {
         cfg.flag("-fvisibility=hidden");
         cfg.flag_if_supported("-fvisibility-global-new-delete-hidden");
 
-        let unwind_sources = vec![
-            "Unwind-EHABI.cpp",
-            "Unwind-seh.cpp",
-            "libunwind.cpp"
-        ];
+        let unwind_sources = vec!["Unwind-EHABI.cpp", "Unwind-seh.cpp", "libunwind.cpp"];
 
         let root = Path::new("../llvm_libunwind");
         cfg.include(root.join("include"));

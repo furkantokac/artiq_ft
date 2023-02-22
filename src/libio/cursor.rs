@@ -1,9 +1,9 @@
-use core_io::{Read, Write, Error as IoError};
+use core_io::{Error as IoError, Read, Write};
 
 #[derive(Debug, Clone)]
 pub struct Cursor<T> {
     inner: T,
-    pos:   usize
+    pos: usize,
 }
 
 impl<T> Cursor<T> {
@@ -39,7 +39,6 @@ impl<T> Cursor<T> {
 }
 
 impl<T: AsRef<[u8]>> Read for Cursor<T> {
-
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
         let data = &self.inner.as_ref()[self.pos..];
         let len = buf.len().min(data.len());
@@ -50,10 +49,9 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
 }
 
 impl Write for Cursor<&mut [u8]> {
-
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         let data = &mut self.inner[self.pos..];
-        let len  = buf.len().min(data.len());
+        let len = buf.len().min(data.len());
         data[..len].copy_from_slice(&buf[..len]);
         self.pos += len;
         Ok(len)
@@ -67,7 +65,6 @@ impl Write for Cursor<&mut [u8]> {
 
 #[cfg(feature = "alloc")]
 impl Write for Cursor<::alloc::Vec<u8>> {
-
     #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         self.inner.extend_from_slice(buf);

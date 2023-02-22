@@ -1,8 +1,7 @@
-use std::env;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
-
+use std::{env,
+          fs::File,
+          io::{BufRead, BufReader, Write},
+          path::PathBuf};
 
 pub fn add_linker_script() {
     // Put the linker script somewhere the linker can find it

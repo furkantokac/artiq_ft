@@ -1,29 +1,25 @@
-use core::ffi::VaList;
-use core::ptr;
-use core::str;
+use alloc::vec;
+use core::{ffi::VaList, ptr, str};
+
 use libc::{c_char, c_int, size_t};
 use libm;
 use log::{info, warn};
 
-use alloc::vec;
-
-use crate::eh_artiq;
-use crate::rtio;
-use crate::i2c;
-use super::rpc::{rpc_send, rpc_send_async, rpc_recv};
-use super::dma;
-use super::cache;
-use super::core1::rtio_get_destination_status;
+use super::{cache,
+            core1::rtio_get_destination_status,
+            dma,
+            rpc::{rpc_recv, rpc_send, rpc_send_async}};
+use crate::{eh_artiq, i2c, rtio};
 
 extern "C" {
     fn vsnprintf_(buffer: *mut c_char, count: size_t, format: *const c_char, va: VaList) -> c_int;
 }
 
-unsafe extern fn core_log(fmt: *const c_char, mut args: ...) {
+unsafe extern "C" fn core_log(fmt: *const c_char, mut args: ...) {
     let size = vsnprintf_(ptr::null_mut(), 0, fmt, args.as_va_list()) as usize;
     let mut buf = vec![0; size + 1];
     vsnprintf_(buf.as_mut_ptr() as *mut i8, size + 1, fmt, args.as_va_list());
-    let buf: &[u8] = &buf.as_slice()[..size-1]; // strip \n and NUL
+    let buf: &[u8] = &buf.as_slice()[..size - 1]; // strip \n and NUL
     match str::from_utf8(buf) {
         Ok(s) => info!("kernel: {}", s),
         Err(e) => {
@@ -33,13 +29,12 @@ unsafe extern fn core_log(fmt: *const c_char, mut args: ...) {
     }
 }
 
-unsafe extern fn rtio_log(fmt: *const c_char, mut args: ...) {
+unsafe extern "C" fn rtio_log(fmt: *const c_char, mut args: ...) {
     let size = vsnprintf_(ptr::null_mut(), 0, fmt, args.as_va_list()) as usize;
     let mut buf = vec![0; size + 1];
     vsnprintf_(buf.as_mut_ptr(), size + 1, fmt, args.as_va_list());
     rtio::write_log(buf.as_slice());
 }
-
 
 macro_rules! api {
     ($i:ident) => ({
@@ -56,24 +51,25 @@ macro_rules! api {
 }
 
 macro_rules! api_libm_f64f64 {
-    ($i:ident) => ({
-        extern fn $i(x: f64) -> f64 {
+    ($i:ident) => {{
+        extern "C" fn $i(x: f64) -> f64 {
             libm::$i(x)
         }
         api!($i = $i)
-    })
+    }};
 }
 
 macro_rules! api_libm_f64f64f64 {
-    ($i:ident) => ({
-        extern fn $i(x: f64, y: f64) -> f64 {
+    ($i:ident) => {{
+        extern "C" fn $i(x: f64, y: f64) -> f64 {
             libm::$i(x, y)
         }
         api!($i = $i)
-    })
+    }};
 }
 
 pub fn resolve(required: &[u8]) -> Option<u32> {
+    #[rustfmt::skip]
     let api = &[
         // timing
         api!(now_mu = rtio::now_mu),
@@ -124,6 +120,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__aeabi_ddiv),
         api!(__aeabi_dmul),
         api!(__aeabi_dsub),
+
         // Double-precision floating-point comparison helper functions
         // RTABI chapter 4.1.2, Table 3
         api!(__aeabi_dcmpeq),
@@ -133,12 +130,14 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__aeabi_dcmpge),
         api!(__aeabi_dcmpgt),
         api!(__aeabi_dcmpun),
+
         // Single-precision floating-point arithmetic helper functions
         // RTABI chapter 4.1.2, Table 4
         api!(__aeabi_fadd),
         api!(__aeabi_fdiv),
         api!(__aeabi_fmul),
         api!(__aeabi_fsub),
+
         // Single-precision floating-point comparison helper functions
         // RTABI chapter 4.1.2, Table 5
         api!(__aeabi_fcmpeq),
@@ -148,6 +147,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__aeabi_fcmpge),
         api!(__aeabi_fcmpgt),
         api!(__aeabi_fcmpun),
+
         // Floating-point to integer conversions.
         // RTABI chapter 4.1.2, Table 6
         api!(__aeabi_d2iz),
@@ -158,9 +158,11 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__aeabi_f2uiz),
         api!(__aeabi_f2lz),
         api!(__aeabi_f2ulz),
+
         // Conversions between floating types.
         // RTABI chapter 4.1.2, Table 7
         api!(__aeabi_f2d),
+
         // Integer to floating-point conversions.
         // RTABI chapter 4.1.2, Table 8
         api!(__aeabi_i2d),
@@ -171,12 +173,14 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__aeabi_ui2f),
         api!(__aeabi_l2f),
         api!(__aeabi_ul2f),
+
         // Long long helper functions
         // RTABI chapter 4.2, Table 9
         api!(__aeabi_lmul),
         api!(__aeabi_llsl),
         api!(__aeabi_llsr),
         api!(__aeabi_lasr),
+
         // Integer division functions
         // RTABI chapter 4.3.1
         api!(__aeabi_idiv),
@@ -184,6 +188,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__aeabi_idivmod),
         api!(__aeabi_uidiv),
         api!(__aeabi_uldivmod),
+
         // 4.3.4 Memory copying, clearing, and setting
         api!(__aeabi_memcpy8),
         api!(__aeabi_memcpy4),
@@ -199,10 +204,30 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__aeabi_memclr),
 
         // libc
-        api!(memcpy, extern { fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8; }),
-        api!(memmove, extern { fn memmove(dest: *mut u8, src: *const u8, n: usize) -> *mut u8; }),
-        api!(memset, extern { fn memset(s: *mut u8, c: i32, n: usize) -> *mut u8; }),
-        api!(memcmp, extern { fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32; }),
+        api!(
+            memcpy,
+            extern "C" {
+                fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8;
+            }
+        ),
+        api!(
+            memmove,
+            extern "C" {
+                fn memmove(dest: *mut u8, src: *const u8, n: usize) -> *mut u8;
+            }
+        ),
+        api!(
+            memset,
+            extern "C" {
+                fn memset(s: *mut u8, c: i32, n: usize) -> *mut u8;
+            }
+        ),
+        api!(
+            memcmp,
+            extern "C" {
+                fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32;
+            }
+        ),
 
         // exceptions
         api!(_Unwind_Resume = unwind::_Unwind_Resume),
@@ -210,6 +235,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(__nac3_raise = eh_artiq::raise),
         api!(__nac3_resume = eh_artiq::resume),
         api!(__nac3_end_catch = eh_artiq::end_catch),
+
         // legacy exception symbols
         api!(__artiq_personality = eh_artiq::artiq_personality),
         api!(__artiq_raise = eh_artiq::raise),
@@ -241,7 +267,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api_libm_f64f64!(fabs),
         api_libm_f64f64!(floor),
         {
-            extern fn fma(x: f64, y: f64, z: f64) -> f64 {
+            extern "C" fn fma(x: f64, y: f64, z: f64) -> f64 {
                 libm::fma(x, y, z)
             }
             api!(fma = fma)
@@ -253,7 +279,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api_libm_f64f64!(j0),
         api_libm_f64f64!(j1),
         {
-            extern fn jn(n: i32, x: f64) -> f64 {
+            extern "C" fn jn(n: i32, x: f64) -> f64 {
                 libm::jn(n, x)
             }
             api!(jn = jn)
@@ -275,13 +301,13 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api_libm_f64f64!(y0),
         api_libm_f64f64!(y1),
         {
-            extern fn yn(n: i32, x: f64) -> f64 {
+            extern "C" fn yn(n: i32, x: f64) -> f64 {
                 libm::yn(n, x)
             }
             api!(yn = yn)
         },
     ];
     api.iter()
-       .find(|&&(exported, _)| exported.as_bytes() == required)
-       .map(|&(_, ptr)| ptr as u32)
+        .find(|&&(exported, _)| exported.as_bytes() == required)
+        .map(|&(_, ptr)| ptr as u32)
 }

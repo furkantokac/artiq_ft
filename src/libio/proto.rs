@@ -1,15 +1,14 @@
+use alloc::{string::String, vec};
 use core::str::Utf8Error;
-use byteorder::{ByteOrder, NativeEndian};
-use alloc::vec;
-use alloc::string::String;
 
-use core_io::{Read, Write, Error as IoError};
+use byteorder::{ByteOrder, NativeEndian};
+use core_io::{Error as IoError, Read, Write};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReadStringError<T> {
     Utf8(Utf8Error),
-    Other(T)
+    Other(T),
 }
 
 pub trait ProtoRead {
@@ -141,7 +140,9 @@ pub trait ProtoWrite {
     }
 }
 
-impl<T> ProtoRead for T where T: Read + ?Sized {
+impl<T> ProtoRead for T
+where T: Read + ?Sized
+{
     type ReadError = IoError;
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::ReadError> {
@@ -149,7 +150,9 @@ impl<T> ProtoRead for T where T: Read + ?Sized {
     }
 }
 
-impl<T> ProtoWrite for T where T: Write + ?Sized {
+impl<T> ProtoWrite for T
+where T: Write + ?Sized
+{
     type WriteError = IoError;
 
     fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::WriteError> {

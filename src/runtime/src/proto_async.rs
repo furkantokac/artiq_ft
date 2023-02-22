@@ -1,8 +1,7 @@
-use core::cmp::min;
-use core::cell::RefCell;
+use core::{cell::RefCell, cmp::min};
 
-use libboard_zynq::smoltcp;
 use libasync::smoltcp::TcpStream;
+use libboard_zynq::smoltcp;
 
 type Result<T> = core::result::Result<T, smoltcp::Error>;
 
@@ -14,25 +13,27 @@ enum RecvState<T> {
 pub async fn expect(stream: &TcpStream, pattern: &[u8]) -> Result<bool> {
     let mut state = RecvState::NeedsMore(0, true);
     loop {
-        state = stream.recv(|buf| {
-            let mut consumed = 0;
-            if let RecvState::NeedsMore(mut cur_index, _) = state {
-                for b in buf.iter() {
-                    consumed += 1;
-                    if *b == pattern[cur_index] {
-                        if cur_index + 1 == pattern.len() {
-                            return (consumed, RecvState::Completed(true));
+        state = stream
+            .recv(|buf| {
+                let mut consumed = 0;
+                if let RecvState::NeedsMore(mut cur_index, _) = state {
+                    for b in buf.iter() {
+                        consumed += 1;
+                        if *b == pattern[cur_index] {
+                            if cur_index + 1 == pattern.len() {
+                                return (consumed, RecvState::Completed(true));
+                            }
+                        } else {
+                            return (consumed, RecvState::Completed(false));
                         }
-                    } else {
-                        return (consumed, RecvState::Completed(false));
+                        cur_index += 1;
                     }
-                    cur_index += 1;
+                    (consumed, RecvState::NeedsMore(cur_index, true))
+                } else {
+                    unreachable!();
                 }
-                (consumed, RecvState::NeedsMore(cur_index, true))
-            } else {
-                unreachable!();
-            }
-        }).await?;
+            })
+            .await?;
         if let RecvState::Completed(result) = state {
             return Ok(result);
         }
@@ -40,15 +41,11 @@ pub async fn expect(stream: &TcpStream, pattern: &[u8]) -> Result<bool> {
 }
 
 pub async fn read_bool(stream: &TcpStream) -> Result<bool> {
-    Ok(stream.recv(|buf| {
-        (1, buf[0] != 0)
-    }).await?)
+    Ok(stream.recv(|buf| (1, buf[0] != 0)).await?)
 }
 
 pub async fn read_i8(stream: &TcpStream) -> Result<i8> {
-    Ok(stream.recv(|buf| {
-        (1, buf[0] as i8)
-    }).await?)
+    Ok(stream.recv(|buf| (1, buf[0] as i8)).await?)
 }
 
 pub async fn read_i32(stream: &TcpStream) -> Result<i32> {
@@ -68,12 +65,14 @@ pub async fn read_chunk(stream: &TcpStream, destination: &mut [u8]) -> Result<()
     let destination = RefCell::new(destination);
     let mut done = 0;
     while done < total {
-        let count = stream.recv(|buf| {
-            let mut destination = destination.borrow_mut();
-            let count = min(total - done, buf.len());
-            destination[done..done + count].copy_from_slice(&buf[..count]);
-            (count, count)
-        }).await?;
+        let count = stream
+            .recv(|buf| {
+                let mut destination = destination.borrow_mut();
+                let count = min(total - done, buf.len());
+                destination[done..done + count].copy_from_slice(&buf[..count]);
+                (count, count)
+            })
+            .await?;
         done += count;
     }
     Ok(())

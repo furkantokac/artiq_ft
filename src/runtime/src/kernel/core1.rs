@@ -1,31 +1,20 @@
 //! Kernel prologue/epilogue that runs on the 2nd CPU core
 
-use core::{mem, ptr, cell::UnsafeCell};
 use alloc::borrow::ToOwned;
-use log::{debug, info, error};
-use cslice::CSlice;
+use core::{cell::UnsafeCell, mem, ptr};
 
-use libcortex_a9::{
-    enable_fpu,
-    cache::{dcci_slice, iciallu, bpiall},
-    asm::{dsb, isb},
-    sync_channel,
-};
-use libboard_zynq::{mpcore, gic};
+use cslice::CSlice;
+use dyld::{self, elf::EXIDX_Entry, Library};
+use libboard_zynq::{gic, mpcore};
+use libcortex_a9::{asm::{dsb, isb},
+                   cache::{bpiall, dcci_slice, iciallu},
+                   enable_fpu, sync_channel};
 use libsupport_zynq::ram;
-use dyld::{self, Library, elf::EXIDX_Entry};
+use log::{debug, error, info};
+
+use super::{api::resolve, dma, rpc::rpc_send_async, Message, CHANNEL_0TO1, CHANNEL_1TO0, CHANNEL_SEM, INIT_LOCK,
+            KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, KERNEL_IMAGE};
 use crate::{eh_artiq, get_async_errors, rtio};
-use super::{
-    api::resolve,
-    rpc::rpc_send_async,
-    INIT_LOCK,
-    CHANNEL_0TO1, CHANNEL_1TO0,
-    CHANNEL_SEM,
-    KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0,
-    KERNEL_IMAGE,
-    Message,
-    dma,
-};
 
 // linker symbols
 extern "C" {
@@ -38,13 +27,13 @@ extern "C" {
 unsafe fn attribute_writeback(typeinfo: *const ()) {
     struct Attr {
         offset: usize,
-        tag:    CSlice<'static, u8>,
-        name:   CSlice<'static, u8>
+        tag: CSlice<'static, u8>,
+        name: CSlice<'static, u8>,
     }
 
     struct Type {
         attributes: *const *const Attr,
-        objects:    *const *const ()
+        objects: *const *const (),
     }
 
     let mut tys = typeinfo as *const *const Type;
@@ -63,11 +52,16 @@ unsafe fn attribute_writeback(typeinfo: *const ()) {
                 attributes = attributes.offset(1);
 
                 if (*attribute).tag.len() > 0 {
-                    rpc_send_async(0, &(*attribute).tag, [
-                        &object as *const _ as *const (),
-                        &(*attribute).name as *const _ as *const (),
-                        (object as usize + (*attribute).offset) as *const ()
-                    ].as_ptr());
+                    rpc_send_async(
+                        0,
+                        &(*attribute).tag,
+                        [
+                            &object as *const _ as *const (),
+                            &(*attribute).name as *const _ as *const (),
+                            (object as usize + (*attribute).offset) as *const (),
+                        ]
+                        .as_ptr(),
+                    );
                 }
             }
         }
@@ -82,7 +76,8 @@ pub struct KernelImage {
 
 impl KernelImage {
     pub fn new(library: Library) -> Result<Self, dyld::Error> {
-        let __modinit__ = library.lookup(b"__modinit__")
+        let __modinit__ = library
+            .lookup(b"__modinit__")
             .ok_or(dyld::Error::Lookup("__modinit__".to_owned()))?;
         let typeinfo = library.lookup(b"typeinfo");
 
@@ -90,8 +85,7 @@ impl KernelImage {
         let bss_start = library.lookup(b"__bss_start");
         let end = library.lookup(b"_end");
         if let Some(bss_start) = bss_start {
-            let end = end
-                .ok_or(dyld::Error::Lookup("_end".to_owned()))?;
+            let end = end.ok_or(dyld::Error::Lookup("_end".to_owned()))?;
             unsafe {
                 ptr::write_bytes(bss_start as *mut u8, 0, (end - bss_start) as usize);
             }
@@ -126,9 +120,7 @@ impl KernelImage {
     }
 
     pub fn get_load_addr(&self) -> usize {
-        unsafe {
-            self.library.get().as_ref().unwrap().image.as_ptr() as usize
-        }
+        unsafe { self.library.get().as_ref().unwrap().image.as_ptr() as usize }
     }
 }
 
@@ -164,20 +156,19 @@ pub extern "C" fn main_core1() {
         let message = core1_rx.recv();
         match message {
             Message::LoadRequest(data) => {
-                let result = dyld::load(&data, &resolve)
-                    .and_then(KernelImage::new);
+                let result = dyld::load(&data, &resolve).and_then(KernelImage::new);
                 match result {
                     Ok(kernel) => {
                         loaded_kernel = Some(kernel);
                         debug!("kernel loaded");
                         core1_tx.send(Message::LoadCompleted);
-                    },
+                    }
                     Err(error) => {
                         error!("failed to load shared library: {}", error);
                         core1_tx.send(Message::LoadFailed);
                     }
                 }
-            },
+            }
             Message::StartRequest => {
                 info!("kernel starting");
                 if let Some(kernel) = loaded_kernel.take() {
@@ -202,9 +193,11 @@ pub extern "C" fn main_core1() {
 }
 
 /// Called by eh_artiq
-pub fn terminate(exceptions: &'static [Option<eh_artiq::Exception<'static>>],
-                 stack_pointers: &'static [eh_artiq::StackPointerBacktrace],
-                 backtrace: &'static mut [(usize, usize)]) -> ! {
+pub fn terminate(
+    exceptions: &'static [Option<eh_artiq::Exception<'static>>],
+    stack_pointers: &'static [eh_artiq::StackPointerBacktrace],
+    backtrace: &'static mut [(usize, usize)],
+) -> ! {
     {
         let core1_tx = unsafe { KERNEL_CHANNEL_1TO0.as_mut().unwrap() };
         let errors = unsafe { get_async_errors() };
@@ -215,7 +208,7 @@ pub fn terminate(exceptions: &'static [Option<eh_artiq::Exception<'static>>],
 
 /// Called by llvm_libunwind
 #[no_mangle]
-extern fn dl_unwind_find_exidx(pc: *const u32, len_ptr: *mut u32) -> *const u32 {
+extern "C" fn dl_unwind_find_exidx(pc: *const u32, len_ptr: *mut u32) -> *const u32 {
     let length;
     let start: *const EXIDX_Entry;
     unsafe {
@@ -223,9 +216,14 @@ extern fn dl_unwind_find_exidx(pc: *const u32, len_ptr: *mut u32) -> *const u32 
             length = (&__exidx_end as *const EXIDX_Entry).offset_from(&__exidx_start) as u32;
             start = &__exidx_start;
         } else if KERNEL_IMAGE != ptr::null() {
-            let exidx = KERNEL_IMAGE.as_ref()
+            let exidx = KERNEL_IMAGE
+                .as_ref()
                 .expect("dl_unwind_find_exidx kernel image")
-                .library.get().as_ref().unwrap().exidx();
+                .library
+                .get()
+                .as_ref()
+                .unwrap()
+                .exidx();
             length = exidx.len() as u32;
             start = exidx.as_ptr();
         } else {
@@ -237,7 +235,7 @@ extern fn dl_unwind_find_exidx(pc: *const u32, len_ptr: *mut u32) -> *const u32 
     start as *const u32
 }
 
-pub extern fn rtio_get_destination_status(destination: i32) -> bool {
+pub extern "C" fn rtio_get_destination_status(destination: i32) -> bool {
     #[cfg(has_drtio)]
     if destination > 0 && destination < 255 {
         let reply = unsafe {
@@ -248,9 +246,9 @@ pub extern fn rtio_get_destination_status(destination: i32) -> bool {
         };
         return match reply {
             Message::UpDestinationsReply(x) => x,
-            _ => panic!("received unexpected reply to UpDestinationsRequest: {:?}", reply)
+            _ => panic!("received unexpected reply to UpDestinationsRequest: {:?}", reply),
         };
-    }    
+    }
 
     destination == 0
 }

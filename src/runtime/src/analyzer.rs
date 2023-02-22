@@ -3,8 +3,7 @@ use libboard_zynq::smoltcp::Error;
 use libcortex_a9::cache;
 use log::{debug, info, warn};
 
-use crate::proto_async::*;
-use crate::pl;
+use crate::{pl, proto_async::*};
 
 const BUFFER_SIZE: usize = 512 * 1024;
 
@@ -13,9 +12,7 @@ struct Buffer {
     data: [u8; BUFFER_SIZE],
 }
 
-static mut BUFFER: Buffer = Buffer {
-    data: [0; BUFFER_SIZE]
-};
+static mut BUFFER: Buffer = Buffer { data: [0; BUFFER_SIZE] };
 
 fn arm() {
     debug!("arming RTIO analyzer");
@@ -46,7 +43,7 @@ struct Header {
     total_byte_count: u64,
     error_occurred: bool,
     log_channel: u8,
-    dds_onehot_sel: bool
+    dds_onehot_sel: bool,
 }
 
 async fn write_header(stream: &mut TcpStream, header: &Header) -> Result<(), Error> {
@@ -78,10 +75,14 @@ async fn handle_connection(stream: &mut TcpStream) -> Result<(), Error> {
 
     let header = Header {
         total_byte_count: total_byte_count,
-        sent_bytes: if wraparound { BUFFER_SIZE as u32 } else { total_byte_count as u32 },
+        sent_bytes: if wraparound {
+            BUFFER_SIZE as u32
+        } else {
+            total_byte_count as u32
+        },
         error_occurred: overflow_occurred | bus_error_occurred,
         log_channel: pl::csr::CONFIG_RTIO_LOG_CHANNEL as u8,
-        dds_onehot_sel: true  // kept for backward compatibility of analyzer dumps
+        dds_onehot_sel: true, // kept for backward compatibility of analyzer dumps
     };
     debug!("{:?}", header);
 
