@@ -427,7 +427,7 @@ class GenericSatellite(SoCCore):
         self.comb += self.drtiosat.async_errors.eq(self.local_io.async_errors)
 
         self.submodules.cri_con = rtio.CRIInterconnectShared(
-            [self.drtiosat.cri],
+            [self.drtiosat.cri, self.rtio_dma.cri],
             [self.local_io.cri] + self.drtio_cri,
             enable_routing=True)
         self.csr_devices.append("cri_con")

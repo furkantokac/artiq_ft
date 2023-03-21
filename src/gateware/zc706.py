@@ -476,9 +476,12 @@ class _SatelliteBase(SoCCore):
             self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
             self.csr_devices.append("rtio")
 
+        self.submodules.rtio_dma = dma.DMA(self.ps7.s_axi_hp0)
+        self.csr_devices.append("rtio_dma")
+
         self.submodules.local_io = SyncRTIO(self.rtio_tsc, rtio_channels)
         self.submodules.cri_con = rtio.CRIInterconnectShared(
-            [self.drtiosat.cri],
+            [self.drtiosat.cri, self.rtio_dma.cri],
             [self.local_io.cri] + self.drtio_cri,
             enable_routing=True)
         self.csr_devices.append("cri_con")
