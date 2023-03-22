@@ -36,8 +36,10 @@ use libcortex_a9::{asm, interrupt_handler,
                    spin_lock_yield};
 use libregister::{RegisterR, RegisterW};
 use libsupport_zynq::ram;
+use dma::Manager as DmaManager;
 
 mod repeater;
+mod dma;
 
 fn drtiosat_reset(reset: bool) {
     unsafe {
@@ -92,6 +94,7 @@ fn process_aux_packet(
     packet: drtioaux::Packet,
     timer: &mut GlobalTimer,
     i2c: &mut I2c,
+    dma_manager: &mut DmaManager
 ) -> Result<(), drtioaux::Error> {
     // In the code below, *_chan_sel_write takes an u8 if there are fewer than 256 channels,
     // and u16 otherwise; hence the `as _` conversion.
@@ -409,6 +412,38 @@ fn process_aux_packet(
             )
         }
 
+        drtioaux::Packet::DmaAddTraceRequest { 
+            destination: _destination, 
+            id, 
+            last, 
+            length, 
+            trace 
+        } => {
+            forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
+            let succeeded = dma_manager.add(id, last, &trace, length as usize).is_ok();
+            drtioaux::send(0,
+                &drtioaux::Packet::DmaAddTraceReply { succeeded: succeeded })
+        }
+        drtioaux::Packet::DmaRemoveTraceRequest { 
+            destination: _destination, 
+            id 
+        } => {
+            forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
+            let succeeded = dma_manager.erase(id).is_ok();
+            drtioaux::send(0,
+                &drtioaux::Packet::DmaRemoveTraceReply { succeeded: succeeded })
+        }
+        drtioaux::Packet::DmaPlaybackRequest { 
+            destination: _destination, 
+            id, 
+            timestamp 
+        } => {
+            forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
+            let succeeded = dma_manager.playback(id, timestamp).is_ok();
+            drtioaux::send(0,
+                &drtioaux::Packet::DmaPlaybackReply { succeeded: succeeded })
+        }
+
         _ => {
             warn!("received unexpected aux packet");
             Ok(())
@@ -422,10 +457,11 @@ fn process_aux_packets(
     rank: &mut u8,
     timer: &mut GlobalTimer,
     i2c: &mut I2c,
+    dma_manager: &mut DmaManager
 ) {
     let result = drtioaux::recv(0).and_then(|packet| {
         if let Some(packet) = packet {
-            process_aux_packet(repeaters, routing_table, rank, packet, timer, i2c)
+            process_aux_packet(repeaters, routing_table, rank, packet, timer, i2c, dma_manager)
         } else {
             Ok(())
         }
@@ -598,13 +634,18 @@ pub extern "C" fn main_core0() -> i32 {
             si5324::siphaser::calibrate_skew(&mut timer).expect("failed to calibrate skew");
         }
 
+        // DMA manager created here, so when link is dropped, all DMA traces
+        // are cleared out for a clean slate on subsequent connections,
+        // without a manual intervention.
+        let mut dma_manager = DmaManager::new();
+
         drtioaux::reset(0);
         drtiosat_reset(false);
         drtiosat_reset_phy(false);
 
         while drtiosat_link_rx_up() {
             drtiosat_process_errors();
-            process_aux_packets(&mut repeaters, &mut routing_table, &mut rank, &mut timer, &mut i2c);
+            process_aux_packets(&mut repeaters, &mut routing_table, &mut rank, &mut timer, &mut i2c, &mut dma_manager);
             #[allow(unused_mut)]
             for mut rep in repeaters.iter_mut() {
                 rep.service(&routing_table, rank, &mut timer);
@@ -619,6 +660,18 @@ pub extern "C" fn main_core0() -> i32 {
                 }
                 if let Err(e) = drtioaux::send(0, &drtioaux::Packet::TSCAck) {
                     error!("aux packet error: {:?}", e);
+                }
+            }
+            if let Some(status) = dma_manager.check_state() {
+                info!("playback done, error: {}, channel: {}, timestamp: {}", status.error, status.channel, status.timestamp);
+                if let Err(e) = drtioaux::send(0, &drtioaux::Packet::DmaPlaybackStatus { 
+                    destination: rank, 
+                    id: status.id, 
+                    error: status.error, 
+                    channel: status.channel, 
+                    timestamp: status.timestamp 
+                }) {
+                    error!("error sending DMA playback status: {:?}", e);
                 }
             }
         }
