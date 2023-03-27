@@ -1,12 +1,13 @@
-
-use alloc::{collections::BTreeMap, string::String, vec::Vec, rc::Rc};
-use libcortex_a9::{mutex::Mutex, cache::dcci_slice};
-use libboard_zynq::timer::GlobalTimer;
-use libboard_artiq::drtio_routing::RoutingTable;
-#[cfg(has_drtio)]
-use libasync::task;
+use alloc::{collections::BTreeMap, rc::Rc, string::String, vec::Vec};
 #[cfg(has_drtio)]
 use core::mem;
+
+#[cfg(has_drtio)]
+use libasync::task;
+use libboard_artiq::drtio_routing::RoutingTable;
+use libboard_zynq::timer::GlobalTimer;
+use libcortex_a9::{cache::dcci_slice, mutex::Mutex};
+
 use crate::kernel::DmaRecorder;
 
 const ALIGNMENT: usize = 16 * 8;
@@ -15,32 +16,33 @@ static DMA_RECORD_STORE: Mutex<BTreeMap<String, (u32, Vec<u8>, i64)>> = Mutex::n
 
 #[cfg(has_drtio)]
 pub mod remote_dma {
-    use super::*;
     use libboard_zynq::time::Milliseconds;
     use log::error;
+
+    use super::*;
     use crate::rtio_mgt::drtio;
 
     #[derive(Debug, PartialEq, Clone)]
     pub enum RemoteState {
         NotLoaded,
         Loaded,
-        PlaybackEnded { error: u8, channel: u32, timestamp: u64 }
+        PlaybackEnded { error: u8, channel: u32, timestamp: u64 },
     }
     #[derive(Debug, Clone)]
     struct RemoteTrace {
         trace: Vec<u8>,
-        pub state: RemoteState
+        pub state: RemoteState,
     }
 
     impl From<Vec<u8>> for RemoteTrace {
         fn from(trace: Vec<u8>) -> Self {
             RemoteTrace {
                 trace: trace,
-                state: RemoteState::NotLoaded
+                state: RemoteState::NotLoaded,
             }
         }
     }
-    
+
     impl RemoteTrace {
         pub fn get_trace(&self) -> &Vec<u8> {
             &self.trace
@@ -51,7 +53,7 @@ pub mod remote_dma {
     struct TraceSet {
         id: u32,
         done_count: Mutex<usize>,
-        traces: Mutex<BTreeMap<u8, RemoteTrace>>
+        traces: Mutex<BTreeMap<u8, RemoteTrace>>,
     }
 
     impl TraceSet {
@@ -63,35 +65,40 @@ pub mod remote_dma {
             TraceSet {
                 id: id,
                 done_count: Mutex::new(0),
-                traces: Mutex::new(trace_map)
+                traces: Mutex::new(trace_map),
             }
         }
 
-        pub async fn await_done(
-            &self, 
-            timeout: Option<u64>, 
-            timer: GlobalTimer
-        ) -> Result<RemoteState, &'static str> {
+        pub async fn await_done(&self, timeout: Option<u64>, timer: GlobalTimer) -> Result<RemoteState, &'static str> {
             let timeout_ms = Milliseconds(timeout.unwrap_or(10_000));
             let limit = timer.get_time() + timeout_ms;
-            while (timer.get_time() < limit) & 
-                (*(self.done_count.async_lock().await) < self.traces.async_lock().await.len()) {
+            while (timer.get_time() < limit)
+                & (*(self.done_count.async_lock().await) < self.traces.async_lock().await.len())
+            {
                 task::r#yield().await;
             }
             if timer.get_time() >= limit {
                 error!("Remote DMA await done timed out");
                 return Err("Timed out waiting for results.");
             }
-            let mut playback_state: RemoteState = RemoteState::PlaybackEnded { error: 0, channel: 0, timestamp: 0 };
+            let mut playback_state: RemoteState = RemoteState::PlaybackEnded {
+                error: 0,
+                channel: 0,
+                timestamp: 0,
+            };
             let mut lock = self.traces.async_lock().await;
             let trace_iter = lock.iter_mut();
             for (_dest, trace) in trace_iter {
                 match trace.state {
-                    RemoteState::PlaybackEnded { 
-                        error: e, 
-                        channel: _c, 
-                        timestamp: _ts 
-                    } => if e != 0 { playback_state = trace.state.clone(); },
+                    RemoteState::PlaybackEnded {
+                        error: e,
+                        channel: _c,
+                        timestamp: _ts,
+                    } => {
+                        if e != 0 {
+                            playback_state = trace.state.clone();
+                        }
+                    }
                     _ => (),
                 }
                 trace.state = RemoteState::Loaded;
@@ -100,47 +107,38 @@ pub mod remote_dma {
         }
 
         pub async fn upload_traces(
-            &mut self, 
+            &mut self,
             aux_mutex: &Rc<Mutex<bool>>,
             routing_table: &RoutingTable,
-            timer: GlobalTimer
+            timer: GlobalTimer,
         ) {
             let mut lock = self.traces.async_lock().await;
             let trace_iter = lock.iter_mut();
             for (destination, trace) in trace_iter {
                 match drtio::ddma_upload_trace(
-                        aux_mutex, 
-                        routing_table,
-                        timer,
-                        self.id, 
-                        *destination, 
-                        trace.get_trace()
-                ).await {
+                    aux_mutex,
+                    routing_table,
+                    timer,
+                    self.id,
+                    *destination,
+                    trace.get_trace(),
+                )
+                .await
+                {
                     Ok(_) => trace.state = RemoteState::Loaded,
-                    Err(e) => error!("Error adding DMA trace on destination {}: {}", destination, e)
+                    Err(e) => error!("Error adding DMA trace on destination {}: {}", destination, e),
                 }
             }
             *(self.done_count.async_lock().await) = 0;
         }
 
-        pub async fn erase(
-            &mut self, 
-            aux_mutex: &Rc<Mutex<bool>>, 
-            routing_table: &RoutingTable, 
-            timer: GlobalTimer
-        ) {
+        pub async fn erase(&mut self, aux_mutex: &Rc<Mutex<bool>>, routing_table: &RoutingTable, timer: GlobalTimer) {
             let lock = self.traces.async_lock().await;
             let trace_iter = lock.keys();
             for destination in trace_iter {
-                match drtio::ddma_send_erase(
-                        aux_mutex, 
-                        routing_table,
-                        timer,
-                        self.id,
-                        *destination
-                ).await {
+                match drtio::ddma_send_erase(aux_mutex, routing_table, timer, self.id, *destination).await {
                     Ok(_) => (),
-                    Err(e) => error!("Error adding DMA trace on destination {}: {}", destination, e)
+                    Err(e) => error!("Error adding DMA trace on destination {}: {}", destination, e),
                 }
             }
         }
@@ -149,19 +147,19 @@ pub mod remote_dma {
             let mut traces_locked = self.traces.async_lock().await;
             let mut trace = traces_locked.get_mut(&destination).unwrap();
             trace.state = RemoteState::PlaybackEnded {
-                error: error, 
-                channel: channel, 
-                timestamp: timestamp 
+                error: error,
+                channel: channel,
+                timestamp: timestamp,
             };
             *(self.done_count.async_lock().await) += 1;
         }
 
         pub async fn playback(
-            &self, 
-            aux_mutex: &Rc<Mutex<bool>>, 
-            routing_table: &RoutingTable, 
-            timer: GlobalTimer, 
-            timestamp: u64
+            &self,
+            aux_mutex: &Rc<Mutex<bool>>,
+            routing_table: &RoutingTable,
+            timer: GlobalTimer,
+            timestamp: u64,
         ) {
             let mut dest_list: Vec<u8> = Vec::new();
             {
@@ -178,40 +176,37 @@ pub mod remote_dma {
             // mutex lock must be dropped before sending a playback request to avoid a deadlock,
             // if PlaybackStatus is sent from another satellite and the state must be updated.
             for destination in dest_list {
-                match drtio::ddma_send_playback(
-                    aux_mutex, 
-                    routing_table,
-                    timer,
-                    self.id, 
-                    destination, 
-                    timestamp
-                ).await {
+                match drtio::ddma_send_playback(aux_mutex, routing_table, timer, self.id, destination, timestamp).await
+                {
                     Ok(_) => (),
-                    Err(e) => error!("Error during remote DMA playback: {}", e)
+                    Err(e) => error!("Error during remote DMA playback: {}", e),
                 }
             }
         }
 
         pub async fn destination_changed(
-            &mut self, 
-            aux_mutex: &Rc<Mutex<bool>>, 
+            &mut self,
+            aux_mutex: &Rc<Mutex<bool>>,
             routing_table: &RoutingTable,
             timer: GlobalTimer,
-            destination: u8, up: bool
+            destination: u8,
+            up: bool,
         ) {
             // update state of the destination, resend traces if it's up
             if let Some(trace) = self.traces.lock().get_mut(&destination) {
                 if up {
                     match drtio::ddma_upload_trace(
-                        aux_mutex, 
+                        aux_mutex,
                         routing_table,
                         timer,
                         self.id,
-                        destination, 
-                        trace.get_trace()
-                    ).await {
+                        destination,
+                        trace.get_trace(),
+                    )
+                    .await
+                    {
                         Ok(_) => trace.state = RemoteState::Loaded,
-                        Err(e) => error!("Error adding DMA trace on destination {}: {}", destination, e)
+                        Err(e) => error!("Error adding DMA trace on destination {}: {}", destination, e),
                     }
                 } else {
                     trace.state = RemoteState::NotLoaded;
@@ -226,81 +221,65 @@ pub mod remote_dma {
         unsafe { TRACES.insert(id, TraceSet::new(id, traces)) };
     }
 
-    pub async fn await_done(
-        id: u32,
-        timeout: Option<u64>,
-        timer: GlobalTimer
-    ) -> Result<RemoteState, &'static str> {
+    pub async fn await_done(id: u32, timeout: Option<u64>, timer: GlobalTimer) -> Result<RemoteState, &'static str> {
         let trace_set = unsafe { TRACES.get_mut(&id).unwrap() };
         trace_set.await_done(timeout, timer).await
     }
 
-    pub async fn erase(
-        aux_mutex: &Rc<Mutex<bool>>, 
-        routing_table: &RoutingTable, 
-        timer: GlobalTimer,
-        id: u32
-    ) {
+    pub async fn erase(aux_mutex: &Rc<Mutex<bool>>, routing_table: &RoutingTable, timer: GlobalTimer, id: u32) {
         let trace_set = unsafe { TRACES.get_mut(&id).unwrap() };
         trace_set.erase(aux_mutex, routing_table, timer).await;
-        unsafe { TRACES.remove(&id); }
+        unsafe {
+            TRACES.remove(&id);
+        }
     }
 
-    pub async fn upload_traces(
-        aux_mutex: &Rc<Mutex<bool>>, 
-        routing_table: &RoutingTable,
-        timer: GlobalTimer,
-        id: u32
-    ) {
+    pub async fn upload_traces(aux_mutex: &Rc<Mutex<bool>>, routing_table: &RoutingTable, timer: GlobalTimer, id: u32) {
         let trace_set = unsafe { TRACES.get_mut(&id).unwrap() };
         trace_set.upload_traces(aux_mutex, routing_table, timer).await;
     }
 
     pub async fn playback(
-        aux_mutex: &Rc<Mutex<bool>>, 
+        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         timer: GlobalTimer,
-        id: u32, 
-        timestamp: u64
+        id: u32,
+        timestamp: u64,
     ) {
         let trace_set = unsafe { TRACES.get_mut(&id).unwrap() };
         trace_set.playback(aux_mutex, routing_table, timer, timestamp).await;
     }
 
-    pub async fn playback_done(
-        id: u32, 
-        destination: u8, 
-        error: u8, 
-        channel: u32, 
-        timestamp: u64
-    ) {
+    pub async fn playback_done(id: u32, destination: u8, error: u8, channel: u32, timestamp: u64) {
         let trace_set = unsafe { TRACES.get_mut(&id).unwrap() };
         trace_set.playback_done(destination, error, channel, timestamp).await;
     }
 
-    pub async fn destination_changed( 
-        aux_mutex: &Rc<Mutex<bool>>, 
-        routing_table: &RoutingTable, 
-        timer: GlobalTimer, 
-        destination: u8, 
-        up: bool
+    pub async fn destination_changed(
+        aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &RoutingTable,
+        timer: GlobalTimer,
+        destination: u8,
+        up: bool,
     ) {
         let trace_iter = unsafe { TRACES.values_mut() };
         for trace_set in trace_iter {
-            trace_set.destination_changed(aux_mutex, routing_table, timer, destination, up).await;
+            trace_set
+                .destination_changed(aux_mutex, routing_table, timer, destination, up)
+                .await;
         }
     }
 }
 
-
-pub async fn put_record(_aux_mutex: &Rc<Mutex<bool>>, 
-    _routing_table: &RoutingTable, 
+pub async fn put_record(
+    _aux_mutex: &Rc<Mutex<bool>>,
+    _routing_table: &RoutingTable,
     _timer: GlobalTimer,
     mut recorder: DmaRecorder,
 ) -> u32 {
     #[cfg(has_drtio)]
     let mut remote_traces: BTreeMap<u8, Vec<u8>> = BTreeMap::new();
-    
+
     #[cfg(has_drtio)]
     if recorder.enable_ddma {
         let mut local_trace: Vec<u8> = Vec::new();
@@ -312,15 +291,14 @@ pub async fn put_record(_aux_mutex: &Rc<Mutex<bool>>,
         while recorder.buffer[ptr] != 0 {
             // ptr + 3 = tgt >> 24 (destination)
             let len = recorder.buffer[ptr] as usize;
-            let destination = recorder.buffer[ptr+3];
+            let destination = recorder.buffer[ptr + 3];
             if destination == 0 {
-                local_trace.extend(&recorder.buffer[ptr..ptr+len]);
-            }
-            else {
+                local_trace.extend(&recorder.buffer[ptr..ptr + len]);
+            } else {
                 if let Some(remote_trace) = remote_traces.get_mut(&destination) {
-                    remote_trace.extend(&recorder.buffer[ptr..ptr+len]);
+                    remote_trace.extend(&recorder.buffer[ptr..ptr + len]);
                 } else {
-                    remote_traces.insert(destination, recorder.buffer[ptr..ptr+len].to_vec());
+                    remote_traces.insert(destination, recorder.buffer[ptr..ptr + len].to_vec());
                 }
             }
             // and jump to the next event
@@ -343,8 +321,8 @@ pub async fn put_record(_aux_mutex: &Rc<Mutex<bool>>,
     let ptr = recorder.buffer[padding..].as_ptr() as u32;
 
     let _old_record = DMA_RECORD_STORE
-    .lock()
-    .insert(recorder.name, (ptr, recorder.buffer, recorder.duration));
+        .lock()
+        .insert(recorder.name, (ptr, recorder.buffer, recorder.duration));
 
     #[cfg(has_drtio)]
     {
@@ -357,9 +335,7 @@ pub async fn put_record(_aux_mutex: &Rc<Mutex<bool>>,
     ptr
 }
 
-pub async fn erase(name: String, _aux_mutex: &Rc<Mutex<bool>>, 
-    _routing_table: &RoutingTable, _timer: GlobalTimer
-) {
+pub async fn erase(name: String, _aux_mutex: &Rc<Mutex<bool>>, _routing_table: &RoutingTable, _timer: GlobalTimer) {
     let _entry = DMA_RECORD_STORE.lock().remove(&name);
     #[cfg(has_drtio)]
     if let Some((id, _v, _d)) = _entry {

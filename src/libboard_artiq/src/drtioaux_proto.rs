@@ -136,37 +136,37 @@ pub enum Packet {
         succeeded: bool,
     },
 
-    DmaAddTraceRequest { 
-        destination: u8, 
-        id: u32, 
-        last: bool, 
-        length: u16, 
-        trace: [u8; DMA_TRACE_MAX_SIZE] 
+    DmaAddTraceRequest {
+        destination: u8,
+        id: u32,
+        last: bool,
+        length: u16,
+        trace: [u8; DMA_TRACE_MAX_SIZE],
     },
-    DmaAddTraceReply { 
-        succeeded: bool 
+    DmaAddTraceReply {
+        succeeded: bool,
     },
-    DmaRemoveTraceRequest { 
-        destination: u8, 
-        id: u32 
+    DmaRemoveTraceRequest {
+        destination: u8,
+        id: u32,
     },
-    DmaRemoveTraceReply { 
-        succeeded: bool 
+    DmaRemoveTraceReply {
+        succeeded: bool,
     },
-    DmaPlaybackRequest { 
-        destination: u8, 
-        id: u32, 
-        timestamp: u64 
+    DmaPlaybackRequest {
+        destination: u8,
+        id: u32,
+        timestamp: u64,
     },
-    DmaPlaybackReply { 
-        succeeded: bool 
+    DmaPlaybackReply {
+        succeeded: bool,
     },
-    DmaPlaybackStatus { 
-        destination: u8, 
-        id: u32, 
-        error: u8, 
-        channel: u32, 
-        timestamp: u64 
+    DmaPlaybackStatus {
+        destination: u8,
+        id: u32,
+        error: u8,
+        channel: u32,
+        timestamp: u64,
     },
 }
 
@@ -298,7 +298,7 @@ impl Packet {
                 succeeded: reader.read_bool()?,
             },
 
-            0xb0 => { 
+            0xb0 => {
                 let destination = reader.read_u8()?;
                 let id = reader.read_u32()?;
                 let last = reader.read_bool()?;
@@ -312,31 +312,31 @@ impl Packet {
                     length: length as u16,
                     trace: trace,
                 }
-            },
+            }
             0xb1 => Packet::DmaAddTraceReply {
-                succeeded: reader.read_bool()?
+                succeeded: reader.read_bool()?,
             },
             0xb2 => Packet::DmaRemoveTraceRequest {
                 destination: reader.read_u8()?,
-                id: reader.read_u32()?
+                id: reader.read_u32()?,
             },
             0xb3 => Packet::DmaRemoveTraceReply {
-                succeeded: reader.read_bool()?
+                succeeded: reader.read_bool()?,
             },
             0xb4 => Packet::DmaPlaybackRequest {
                 destination: reader.read_u8()?,
                 id: reader.read_u32()?,
-                timestamp: reader.read_u64()?
+                timestamp: reader.read_u64()?,
             },
             0xb5 => Packet::DmaPlaybackReply {
-                succeeded: reader.read_bool()?
+                succeeded: reader.read_bool()?,
             },
             0xb6 => Packet::DmaPlaybackStatus {
                 destination: reader.read_u8()?,
                 id: reader.read_u32()?,
                 error: reader.read_u8()?,
                 channel: reader.read_u32()?,
-                timestamp: reader.read_u64()?
+                timestamp: reader.read_u64()?,
             },
 
             ty => return Err(Error::UnknownPacket(ty)),
@@ -526,12 +526,12 @@ impl Packet {
                 writer.write_bool(succeeded)?;
             }
 
-            Packet::DmaAddTraceRequest { 
-                destination, 
-                id, 
-                last, 
-                trace, 
-                length 
+            Packet::DmaAddTraceRequest {
+                destination,
+                id,
+                last,
+                trace,
+                length,
             } => {
                 writer.write_u8(0xb0)?;
                 writer.write_u8(destination)?;
@@ -555,10 +555,10 @@ impl Packet {
                 writer.write_u8(0xb3)?;
                 writer.write_bool(succeeded)?;
             }
-            Packet::DmaPlaybackRequest { 
-                destination, 
-                id, 
-                timestamp 
+            Packet::DmaPlaybackRequest {
+                destination,
+                id,
+                timestamp,
             } => {
                 writer.write_u8(0xb4)?;
                 writer.write_u8(destination)?;
@@ -569,12 +569,12 @@ impl Packet {
                 writer.write_u8(0xb5)?;
                 writer.write_bool(succeeded)?;
             }
-            Packet::DmaPlaybackStatus { 
-                destination, 
-                id, 
-                error, 
-                channel, 
-                timestamp 
+            Packet::DmaPlaybackStatus {
+                destination,
+                id,
+                error,
+                channel,
+                timestamp,
             } => {
                 writer.write_u8(0xb6)?;
                 writer.write_u8(destination)?;

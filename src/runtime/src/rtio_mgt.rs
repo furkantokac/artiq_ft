@@ -12,17 +12,17 @@ static mut RTIO_DEVICE_MAP: BTreeMap<u32, String> = BTreeMap::new();
 
 #[cfg(has_drtio)]
 pub mod drtio {
-    use embedded_hal::blocking::delay::DelayMs;
     use alloc::vec::Vec;
+
+    use embedded_hal::blocking::delay::DelayMs;
     use libasync::{delay, task};
-    use libboard_artiq::{drtioaux::Error, drtioaux_async, drtioaux_async::Packet};
-    use libboard_artiq::drtioaux_proto::DMA_TRACE_MAX_SIZE;
+    use libboard_artiq::{drtioaux::Error, drtioaux_async, drtioaux_async::Packet, drtioaux_proto::DMA_TRACE_MAX_SIZE};
     use libboard_zynq::time::Milliseconds;
     use log::{error, info, warn};
 
     use super::*;
-    use crate::{ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR, SEEN_ASYNC_ERRORS};
-    use crate::rtio_dma::remote_dma;
+    use crate::{rtio_dma::remote_dma, ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR,
+                SEEN_ASYNC_ERRORS};
 
     pub fn startup(
         aux_mutex: &Rc<Mutex<bool>>,
@@ -69,11 +69,17 @@ pub mod drtio {
         loop {
             let reply = recv_aux_timeout(linkno, 200, timer).await;
             match reply {
-                Ok(Packet::DmaPlaybackStatus { id, destination, error, channel, timestamp }) => {
+                Ok(Packet::DmaPlaybackStatus {
+                    id,
+                    destination,
+                    error,
+                    channel,
+                    timestamp,
+                }) => {
                     remote_dma::playback_done(id, destination, error, channel, timestamp).await;
-                },
+                }
                 Ok(packet) => return Ok(packet),
-                Err(e) => return Err(e)
+                Err(e) => return Err(e),
             }
         }
     }
@@ -184,8 +190,13 @@ pub mod drtio {
     async fn process_unsolicited_aux(aux_mutex: &Rc<Mutex<bool>>, linkno: u8) {
         let _lock = aux_mutex.async_lock().await;
         match drtioaux_async::recv(linkno).await {
-            Ok(Some(Packet::DmaPlaybackStatus { id, destination, error, channel, timestamp })
-            ) => remote_dma::playback_done(id, destination, error, channel, timestamp).await,
+            Ok(Some(Packet::DmaPlaybackStatus {
+                id,
+                destination,
+                error,
+                channel,
+                timestamp,
+            })) => remote_dma::playback_done(id, destination, error, channel, timestamp).await,
             Ok(Some(packet)) => warn!("[LINK#{}] unsolicited aux packet: {:?}", linkno, packet),
             Ok(None) => (),
             Err(_) => warn!("[LINK#{}] aux packet error", linkno),
@@ -267,7 +278,8 @@ pub mod drtio {
                         match reply {
                             Ok(Packet::DestinationDownReply) => {
                                 destination_set_up(routing_table, up_destinations, destination, false).await;
-                                remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, false).await;
+                                remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, false)
+                                    .await;
                             }
                             Ok(Packet::DestinationOkReply) => (),
                             Ok(Packet::DestinationSequenceErrorReply { channel }) => {
@@ -320,7 +332,8 @@ pub mod drtio {
                             Ok(Packet::DestinationOkReply) => {
                                 destination_set_up(routing_table, up_destinations, destination, true).await;
                                 init_buffer_space(destination as u8, linkno).await;
-                                remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, true).await;
+                                remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, true)
+                                    .await;
                             }
                             Ok(packet) => error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet),
                             Err(e) => error!("[DEST#{}] communication failed ({})", destination, e),
@@ -408,75 +421,107 @@ pub mod drtio {
     }
 
     pub async fn ddma_upload_trace(
-        aux_mutex: &Rc<Mutex<bool>>, 
-        routing_table: &drtio_routing::RoutingTable, 
-        timer: GlobalTimer, 
-        id: u32, 
-        destination: u8, 
-        trace: &Vec<u8>
+        aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &drtio_routing::RoutingTable,
+        timer: GlobalTimer,
+        id: u32,
+        destination: u8,
+        trace: &Vec<u8>,
     ) -> Result<(), &'static str> {
         let linkno = routing_table.0[destination as usize][0] - 1;
         let mut i = 0;
         while i < trace.len() {
             let mut trace_slice: [u8; DMA_TRACE_MAX_SIZE] = [0; DMA_TRACE_MAX_SIZE];
-            let len: usize = if i + DMA_TRACE_MAX_SIZE < trace.len() { DMA_TRACE_MAX_SIZE } else { trace.len() - i } as usize;
+            let len: usize = if i + DMA_TRACE_MAX_SIZE < trace.len() {
+                DMA_TRACE_MAX_SIZE
+            } else {
+                trace.len() - i
+            } as usize;
             let last = i + len == trace.len();
-            trace_slice[..len].clone_from_slice(&trace[i..i+len]);
+            trace_slice[..len].clone_from_slice(&trace[i..i + len]);
             i += len;
-            let reply = aux_transact(aux_mutex, linkno, 
+            let reply = aux_transact(
+                aux_mutex,
+                linkno,
                 &Packet::DmaAddTraceRequest {
-                    id: id, destination: destination, last: last, length: len as u16, trace: trace_slice},
-                timer).await;
+                    id: id,
+                    destination: destination,
+                    last: last,
+                    length: len as u16,
+                    trace: trace_slice,
+                },
+                timer,
+            )
+            .await;
             match reply {
                 Ok(Packet::DmaAddTraceReply { succeeded: true }) => (),
-                Ok(Packet::DmaAddTraceReply { succeeded: false }) => { 
-                    return Err("error adding trace on satellite"); },
-                Ok(_) => { return Err("adding DMA trace failed, unexpected aux packet"); },
-                Err(_) => { return Err("adding DMA trace failed, aux error"); }
+                Ok(Packet::DmaAddTraceReply { succeeded: false }) => {
+                    return Err("error adding trace on satellite");
+                }
+                Ok(_) => {
+                    return Err("adding DMA trace failed, unexpected aux packet");
+                }
+                Err(_) => {
+                    return Err("adding DMA trace failed, aux error");
+                }
             }
         }
         Ok(())
     }
-
 
     pub async fn ddma_send_erase(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &drtio_routing::RoutingTable,
         timer: GlobalTimer,
         id: u32,
-        destination: u8
+        destination: u8,
     ) -> Result<(), &'static str> {
         let linkno = routing_table.0[destination as usize][0] - 1;
-        let reply = aux_transact(aux_mutex, linkno, 
-            &Packet::DmaRemoveTraceRequest { id: id, destination: destination },
-            timer).await;
+        let reply = aux_transact(
+            aux_mutex,
+            linkno,
+            &Packet::DmaRemoveTraceRequest {
+                id: id,
+                destination: destination,
+            },
+            timer,
+        )
+        .await;
         match reply {
             Ok(Packet::DmaRemoveTraceReply { succeeded: true }) => Ok(()),
             Ok(Packet::DmaRemoveTraceReply { succeeded: false }) => Err("satellite DMA erase error"),
             Ok(_) => Err("adding trace failed, unexpected aux packet"),
-            Err(_) => Err("erasing trace failed, aux error")
+            Err(_) => Err("erasing trace failed, aux error"),
         }
     }
 
     pub async fn ddma_send_playback(
-        aux_mutex: &Rc<Mutex<bool>>, 
+        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &drtio_routing::RoutingTable,
-        timer: GlobalTimer, 
-        id: u32, 
-        destination: u8, 
-        timestamp: u64
+        timer: GlobalTimer,
+        id: u32,
+        destination: u8,
+        timestamp: u64,
     ) -> Result<(), &'static str> {
         let linkno = routing_table.0[destination as usize][0] - 1;
-        let reply = aux_transact(aux_mutex, linkno, &Packet::DmaPlaybackRequest{
-            id: id, destination: destination, timestamp: timestamp }, timer).await;
+        let reply = aux_transact(
+            aux_mutex,
+            linkno,
+            &Packet::DmaPlaybackRequest {
+                id: id,
+                destination: destination,
+                timestamp: timestamp,
+            },
+            timer,
+        )
+        .await;
         match reply {
             Ok(Packet::DmaPlaybackReply { succeeded: true }) => Ok(()),
             Ok(Packet::DmaPlaybackReply { succeeded: false }) => Err("error on DMA playback request"),
             Ok(_) => Err("received unexpected aux packet during DMA playback"),
-            Err(_) => Err("aux error on DMA playback")
+            Err(_) => Err("aux error on DMA playback"),
         }
     }
-
 }
 
 fn read_device_map(cfg: &Config) -> BTreeMap<u32, String> {

@@ -17,7 +17,7 @@ pub struct DmaRecorder {
     pub name: String,
     pub buffer: Vec<u8>,
     pub duration: i64,
-    pub enable_ddma: bool
+    pub enable_ddma: bool,
 }
 
 static mut RECORDER: Option<DmaRecorder> = None;
@@ -51,7 +51,7 @@ pub extern "C" fn dma_record_start(name: CSlice<u8>) {
             name,
             buffer: Vec::new(),
             duration: 0,
-            enable_ddma: false
+            enable_ddma: false,
         });
     }
 }
@@ -168,8 +168,13 @@ pub extern "C" fn dma_playback(timestamp: i64, ptr: i32) {
         csr::cri_con::selected_write(1);
         csr::rtio_dma::enable_write(1);
         #[cfg(has_drtio)]
-        KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(
-            Message::DmaStartRemoteRequest{ id: ptr, timestamp: timestamp });
+        KERNEL_CHANNEL_1TO0
+            .as_mut()
+            .unwrap()
+            .send(Message::DmaStartRemoteRequest {
+                id: ptr,
+                timestamp: timestamp,
+            });
         while csr::rtio_dma::enable_read() != 0 {}
         csr::cri_con::selected_write(0);
 
@@ -199,10 +204,17 @@ pub extern "C" fn dma_playback(timestamp: i64, ptr: i32) {
         }
         #[cfg(has_drtio)]
         {
-            KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(
-                Message::DmaAwaitRemoteRequest(ptr));
+            KERNEL_CHANNEL_1TO0
+                .as_mut()
+                .unwrap()
+                .send(Message::DmaAwaitRemoteRequest(ptr));
             match KERNEL_CHANNEL_0TO1.as_mut().unwrap().recv() {
-                Message::DmaAwaitRemoteReply { timeout, error, channel, timestamp } => {
+                Message::DmaAwaitRemoteReply {
+                    timeout,
+                    error,
+                    channel,
+                    timestamp,
+                } => {
                     if timeout {
                         artiq_raise!(
                             "DMAError",
@@ -229,7 +241,7 @@ pub extern "C" fn dma_playback(timestamp: i64, ptr: i32) {
                     }
                 }
                 _ => panic!("Expected DmaAwaitRemoteReply after DmaAwaitRemoteRequest!"),
-            } 
+            }
         }
     }
 }

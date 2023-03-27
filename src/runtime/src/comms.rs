@@ -26,9 +26,8 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use crate::pl;
 use crate::{analyzer, kernel, mgmt, moninj,
             proto_async::*,
-            rpc,
-            rtio_mgt::{self, resolve_channel_name},
-            rtio_dma};
+            rpc, rtio_dma,
+            rtio_mgt::{self, resolve_channel_name}};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -80,7 +79,6 @@ enum Reply {
 }
 
 static CACHE_STORE: Mutex<BTreeMap<String, Vec<i32>>> = Mutex::new(BTreeMap::new());
-
 
 async fn write_header(stream: &TcpStream, reply: Reply) -> Result<()> {
     stream
@@ -160,7 +158,7 @@ async fn handle_run_kernel(
     _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
     aux_mutex: &Rc<Mutex<bool>>,
     routing_table: &drtio_routing::RoutingTable,
-    timer: GlobalTimer
+    timer: GlobalTimer,
 ) -> Result<()> {
     control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
     loop {
@@ -347,22 +345,22 @@ async fn handle_run_kernel(
             kernel::Message::DmaAwaitRemoteRequest(id) => {
                 let result = rtio_dma::remote_dma::await_done(id as u32, Some(10_000), timer).await;
                 let reply = match result {
-                    Ok(rtio_dma::remote_dma::RemoteState::PlaybackEnded { 
-                        error, 
-                        channel, 
-                        timestamp
-                    }) => kernel::Message::DmaAwaitRemoteReply { 
-                        timeout: false, 
-                        error: error, 
-                        channel: channel, 
-                        timestamp: timestamp 
+                    Ok(rtio_dma::remote_dma::RemoteState::PlaybackEnded {
+                        error,
+                        channel,
+                        timestamp,
+                    }) => kernel::Message::DmaAwaitRemoteReply {
+                        timeout: false,
+                        error: error,
+                        channel: channel,
+                        timestamp: timestamp,
                     },
-                    _ => kernel::Message::DmaAwaitRemoteReply { 
-                        timeout: true, 
-                        error: 0, 
-                        channel: 0, 
-                        timestamp: 0 
-                    }
+                    _ => kernel::Message::DmaAwaitRemoteReply {
+                        timeout: true,
+                        error: 0,
+                        channel: 0,
+                        timestamp: 0,
+                    },
                 };
                 control.borrow_mut().tx.async_send(reply).await;
             }
@@ -428,7 +426,7 @@ async fn handle_connection(
     up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
     aux_mutex: &Rc<Mutex<bool>>,
     routing_table: &drtio_routing::RoutingTable,
-    timer: GlobalTimer
+    timer: GlobalTimer,
 ) -> Result<()> {
     stream.set_ack_delay(None);
 
@@ -452,7 +450,15 @@ async fn handle_connection(
                 load_kernel(&buffer, &control, Some(stream)).await?;
             }
             Request::RunKernel => {
-                handle_run_kernel(Some(stream), &control, &up_destinations, aux_mutex, routing_table, timer).await?;
+                handle_run_kernel(
+                    Some(stream),
+                    &control,
+                    &up_destinations,
+                    aux_mutex,
+                    routing_table,
+                    timer,
+                )
+                .await?;
             }
             _ => {
                 error!("unexpected request from host: {:?}", request);
@@ -528,7 +534,14 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
         if let Ok(()) = task::block_on(load_kernel(&buffer, &control, None)) {
             info!("Starting startup kernel...");
             let routing_table = drtio_routing_table.borrow();
-            let _ = task::block_on(handle_run_kernel(None, &control, &up_destinations, &aux_mutex, &routing_table, timer));
+            let _ = task::block_on(handle_run_kernel(
+                None,
+                &control,
+                &up_destinations,
+                &aux_mutex,
+                &routing_table,
+                timer,
+            ));
             info!("Startup kernel finished!");
         } else {
             error!("Error loading startup kernel!");

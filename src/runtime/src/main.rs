@@ -46,8 +46,8 @@ mod rtio;
 #[path = "rtio_acp.rs"]
 mod rtio;
 mod rtio_clocking;
-mod rtio_mgt;
 mod rtio_dma;
+mod rtio_mgt;
 
 static mut SEEN_ASYNC_ERRORS: u8 = 0;
 

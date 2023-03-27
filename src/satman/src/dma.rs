@@ -1,49 +1,48 @@
-use libcortex_a9::cache::dcci_slice;
+use alloc::{collections::btree_map::BTreeMap, vec::Vec};
+
 use libboard_artiq::pl::csr;
-use alloc::{vec::Vec, collections::btree_map::BTreeMap};
+use libcortex_a9::cache::dcci_slice;
 
 const ALIGNMENT: usize = 64;
 
 #[derive(Debug, PartialEq)]
 enum ManagerState {
     Idle,
-    Playback
+    Playback,
 }
 
 pub struct RtioStatus {
-    pub id: u32, 
-    pub error: u8, 
-    pub channel: u32, 
-    pub timestamp: u64
+    pub id: u32,
+    pub error: u8,
+    pub channel: u32,
+    pub timestamp: u64,
 }
 
 pub enum Error {
     IdNotFound,
     PlaybackInProgress,
-    EntryNotComplete
+    EntryNotComplete,
 }
 
 #[derive(Debug)]
 struct Entry {
     trace: Vec<u8>,
     padding_len: usize,
-    complete: bool
+    complete: bool,
 }
 
 #[derive(Debug)]
 pub struct Manager {
     entries: BTreeMap<u32, Entry>,
     state: ManagerState,
-    currentid: u32
+    currentid: u32,
 }
 
 impl Manager {
     pub fn new() -> Manager {
         // in case Manager is created during a DMA in progress
         // wait for it to end
-        unsafe {
-            while csr::rtio_dma::enable_read() != 0 {} 
-        }
+        unsafe { while csr::rtio_dma::enable_read() != 0 {} }
         Manager {
             entries: BTreeMap::new(),
             currentid: 0,
@@ -57,29 +56,37 @@ impl Manager {
                 if entry.complete {
                     // replace entry
                     self.entries.remove(&id);
-                    self.entries.insert(id, Entry {
-                        trace: Vec::new(),
-                        padding_len: 0,
-                        complete: false });
+                    self.entries.insert(
+                        id,
+                        Entry {
+                            trace: Vec::new(),
+                            padding_len: 0,
+                            complete: false,
+                        },
+                    );
                     self.entries.get_mut(&id).unwrap()
                 } else {
                     entry
                 }
-            },
+            }
             None => {
-                self.entries.insert(id, Entry {
-                    trace: Vec::new(),
-                    padding_len: 0,
-                    complete: false });
+                self.entries.insert(
+                    id,
+                    Entry {
+                        trace: Vec::new(),
+                        padding_len: 0,
+                        complete: false,
+                    },
+                );
                 self.entries.get_mut(&id).unwrap()
-            },
+            }
         };
         entry.trace.extend(&trace[0..trace_len]);
 
         if last {
             entry.trace.push(0);
             let data_len = entry.trace.len();
-    
+
             // Realign.
             entry.trace.reserve(ALIGNMENT - 1);
             let padding = ALIGNMENT - entry.trace.as_ptr() as usize % ALIGNMENT;
@@ -101,7 +108,7 @@ impl Manager {
     pub fn erase(&mut self, id: u32) -> Result<(), Error> {
         match self.entries.remove(&id) {
             Some(_) => Ok(()),
-            None => Err(Error::IdNotFound)
+            None => Err(Error::IdNotFound),
         }
     }
 
@@ -110,9 +117,11 @@ impl Manager {
             return Err(Error::PlaybackInProgress);
         }
 
-        let entry = match self.entries.get(&id){
+        let entry = match self.entries.get(&id) {
             Some(entry) => entry,
-            None => { return Err(Error::IdNotFound); }
+            None => {
+                return Err(Error::IdNotFound);
+            }
         };
         if !entry.complete {
             return Err(Error::EntryNotComplete);
@@ -126,7 +135,7 @@ impl Manager {
         unsafe {
             csr::rtio_dma::base_address_write(ptr as u32);
             csr::rtio_dma::time_offset_write(timestamp as u64);
-    
+
             csr::cri_con::selected_write(1);
             csr::rtio_dma::enable_write(1);
             // playback has begun here, for status call check_state
@@ -144,21 +153,21 @@ impl Manager {
             return None;
         } else {
             self.state = ManagerState::Idle;
-            unsafe { 
+            unsafe {
                 csr::cri_con::selected_write(0);
-                let error =  csr::rtio_dma::error_read();
+                let error = csr::rtio_dma::error_read();
                 let channel = csr::rtio_dma::error_channel_read();
                 let timestamp = csr::rtio_dma::error_timestamp_read();
                 if error != 0 {
                     csr::rtio_dma::error_write(1);
                 }
-                return Some(RtioStatus { 
-                    id: self.currentid, 
+                return Some(RtioStatus {
+                    id: self.currentid,
                     error: error,
-                    channel: channel, 
-                    timestamp: timestamp });
+                    channel: channel,
+                    timestamp: timestamp,
+                });
             }
         }
     }
-
 }

@@ -56,7 +56,7 @@ pub enum Message {
     #[cfg(has_drtio)]
     DmaStartRemoteRequest {
         id: i32,
-        timestamp: i64
+        timestamp: i64,
     },
     #[cfg(has_drtio)]
     DmaAwaitRemoteRequest(i32),
@@ -65,7 +65,7 @@ pub enum Message {
         timeout: bool,
         error: u8,
         channel: u32,
-        timestamp: u64
+        timestamp: u64,
     },
 
     #[cfg(has_drtio)]
