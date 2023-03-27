@@ -27,7 +27,8 @@ use crate::pl;
 use crate::{analyzer, kernel, mgmt, moninj,
             proto_async::*,
             rpc,
-            rtio_mgt::{self, resolve_channel_name}};
+            rtio_mgt::{self, resolve_channel_name},
+            rtio_dma};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -79,7 +80,7 @@ enum Reply {
 }
 
 static CACHE_STORE: Mutex<BTreeMap<String, Vec<i32>>> = Mutex::new(BTreeMap::new());
-static DMA_RECORD_STORE: Mutex<BTreeMap<String, (Vec<u8>, i64)>> = Mutex::new(BTreeMap::new());
+
 
 async fn write_header(stream: &TcpStream, reply: Reply) -> Result<()> {
     stream
@@ -157,6 +158,9 @@ async fn handle_run_kernel(
     stream: Option<&TcpStream>,
     control: &Rc<RefCell<kernel::Control>>,
     _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
+    aux_mutex: &Rc<Mutex<bool>>,
+    routing_table: &drtio_routing::RoutingTable,
+    timer: GlobalTimer
 ) -> Result<()> {
     control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
     loop {
@@ -319,21 +323,48 @@ async fn handle_run_kernel(
                     .await;
             }
             kernel::Message::DmaPutRequest(recorder) => {
-                DMA_RECORD_STORE
-                    .lock()
-                    .insert(recorder.name, (recorder.buffer, recorder.duration));
+                let _id = rtio_dma::put_record(aux_mutex, routing_table, timer, recorder).await;
+                #[cfg(has_drtio)]
+                rtio_dma::remote_dma::upload_traces(aux_mutex, routing_table, timer, _id).await;
             }
             kernel::Message::DmaEraseRequest(name) => {
                 // prevent possible OOM when we have large DMA record replacement.
-                DMA_RECORD_STORE.lock().remove(&name);
+                rtio_dma::erase(name, aux_mutex, routing_table, timer).await;
             }
             kernel::Message::DmaGetRequest(name) => {
-                let result = DMA_RECORD_STORE.lock().get(&name).map(|v| v.clone());
+                let result = rtio_dma::retrieve(name);
                 control
                     .borrow_mut()
                     .tx
                     .async_send(kernel::Message::DmaGetReply(result))
                     .await;
+            }
+            #[cfg(has_drtio)]
+            kernel::Message::DmaStartRemoteRequest { id, timestamp } => {
+                rtio_dma::remote_dma::playback(aux_mutex, routing_table, timer, id as u32, timestamp as u64).await;
+            }
+            #[cfg(has_drtio)]
+            kernel::Message::DmaAwaitRemoteRequest(id) => {
+                let result = rtio_dma::remote_dma::await_done(id as u32, Some(10_000), timer).await;
+                let reply = match result {
+                    Ok(rtio_dma::remote_dma::RemoteState::PlaybackEnded { 
+                        error, 
+                        channel, 
+                        timestamp
+                    }) => kernel::Message::DmaAwaitRemoteReply { 
+                        timeout: false, 
+                        error: error, 
+                        channel: channel, 
+                        timestamp: timestamp 
+                    },
+                    _ => kernel::Message::DmaAwaitRemoteReply { 
+                        timeout: true, 
+                        error: 0, 
+                        channel: 0, 
+                        timestamp: 0 
+                    }
+                };
+                control.borrow_mut().tx.async_send(reply).await;
             }
             #[cfg(has_drtio)]
             kernel::Message::UpDestinationsRequest(destination) => {
@@ -395,6 +426,9 @@ async fn handle_connection(
     stream: &mut TcpStream,
     control: Rc<RefCell<kernel::Control>>,
     up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
+    aux_mutex: &Rc<Mutex<bool>>,
+    routing_table: &drtio_routing::RoutingTable,
+    timer: GlobalTimer
 ) -> Result<()> {
     stream.set_ack_delay(None);
 
@@ -418,7 +452,7 @@ async fn handle_connection(
                 load_kernel(&buffer, &control, Some(stream)).await?;
             }
             Request::RunKernel => {
-                handle_run_kernel(Some(stream), &control, &up_destinations).await?;
+                handle_run_kernel(Some(stream), &control, &up_destinations, aux_mutex, routing_table, timer).await?;
             }
             _ => {
                 error!("unexpected request from host: {:?}", request);
@@ -485,7 +519,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
     rtio_mgt::startup(&aux_mutex, &drtio_routing_table, &up_destinations, timer, &cfg);
 
     analyzer::start();
-    moninj::start(timer, aux_mutex, drtio_routing_table);
+    moninj::start(timer, &aux_mutex, &drtio_routing_table);
 
     let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start()));
     let idle_kernel = Rc::new(cfg.read("idle_kernel").ok());
@@ -493,7 +527,8 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
         info!("Loading startup kernel...");
         if let Ok(()) = task::block_on(load_kernel(&buffer, &control, None)) {
             info!("Starting startup kernel...");
-            let _ = task::block_on(handle_run_kernel(None, &control, &up_destinations));
+            let routing_table = drtio_routing_table.borrow();
+            let _ = task::block_on(handle_run_kernel(None, &control, &up_destinations, &aux_mutex, &routing_table, timer));
             info!("Startup kernel finished!");
         } else {
             error!("Error loading startup kernel!");
@@ -519,13 +554,16 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
             let connection = connection.clone();
             let terminate = terminate.clone();
             let up_destinations = up_destinations.clone();
+            let aux_mutex = aux_mutex.clone();
+            let routing_table = drtio_routing_table.clone();
 
             // we make sure the value of terminate is 0 before we start
             let _ = terminate.try_wait();
             task::spawn(async move {
+                let routing_table = routing_table.borrow();
                 select_biased! {
                     _ = (async {
-                        let _ = handle_connection(&mut stream, control.clone(), &up_destinations)
+                        let _ = handle_connection(&mut stream, control.clone(), &up_destinations, &aux_mutex, &routing_table, timer)
                             .await
                             .map_err(|e| warn!("connection terminated: {}", e));
                         if let Some(buffer) = &*idle_kernel {
@@ -533,7 +571,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
                             let _ = load_kernel(&buffer, &control, None)
                                 .await.map_err(|_| warn!("error loading idle kernel"));
                             info!("Running idle kernel");
-                            let _ = handle_run_kernel(None, &control, &up_destinations)
+                            let _ = handle_run_kernel(None, &control, &up_destinations, &aux_mutex, &routing_table, timer)
                                 .await.map_err(|_| warn!("error running idle kernel"));
                             info!("Idle kernel terminated");
                         }

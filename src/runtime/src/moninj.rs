@@ -298,7 +298,9 @@ async fn handle_connection(
     }
 }
 
-pub fn start(timer: GlobalTimer, aux_mutex: Rc<Mutex<bool>>, routing_table: Rc<RefCell<drtio_routing::RoutingTable>>) {
+pub fn start(timer: GlobalTimer, aux_mutex: &Rc<Mutex<bool>>, routing_table: &Rc<RefCell<drtio_routing::RoutingTable>>) {
+    let aux_mutex = aux_mutex.clone();
+    let routing_table = routing_table.clone();
     task::spawn(async move {
         loop {
             let aux_mutex = aux_mutex.clone();

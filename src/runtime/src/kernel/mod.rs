@@ -52,7 +52,21 @@ pub enum Message {
     DmaPutRequest(DmaRecorder),
     DmaEraseRequest(String),
     DmaGetRequest(String),
-    DmaGetReply(Option<(Vec<u8>, i64)>),
+    DmaGetReply(Option<(i32, i64)>),
+    #[cfg(has_drtio)]
+    DmaStartRemoteRequest {
+        id: i32,
+        timestamp: i64
+    },
+    #[cfg(has_drtio)]
+    DmaAwaitRemoteRequest(i32),
+    #[cfg(has_drtio)]
+    DmaAwaitRemoteReply {
+        timeout: bool,
+        error: u8,
+        channel: u32,
+        timestamp: u64
+    },
 
     #[cfg(has_drtio)]
     UpDestinationsRequest(i32),

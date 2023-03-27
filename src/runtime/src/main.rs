@@ -47,6 +47,7 @@ mod rtio;
 mod rtio;
 mod rtio_clocking;
 mod rtio_mgt;
+mod rtio_dma;
 
 static mut SEEN_ASYNC_ERRORS: u8 = 0;
 

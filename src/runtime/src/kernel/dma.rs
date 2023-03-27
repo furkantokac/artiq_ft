@@ -1,13 +1,10 @@
-use alloc::{boxed::Box, string::String, vec::Vec};
+use alloc::{string::String, vec::Vec};
 use core::mem;
 
 use cslice::CSlice;
-use libcortex_a9::cache::dcci_slice;
 
 use super::{Message, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, KERNEL_IMAGE};
 use crate::{artiq_raise, pl::csr, rtio};
-
-const ALIGNMENT: usize = 16 * 8;
 
 #[repr(C)]
 pub struct DmaTrace {
@@ -20,6 +17,7 @@ pub struct DmaRecorder {
     pub name: String,
     pub buffer: Vec<u8>,
     pub duration: i64,
+    pub enable_ddma: bool
 }
 
 static mut RECORDER: Option<DmaRecorder> = None;
@@ -53,11 +51,12 @@ pub extern "C" fn dma_record_start(name: CSlice<u8>) {
             name,
             buffer: Vec::new(),
             duration: 0,
+            enable_ddma: false
         });
     }
 }
 
-pub extern "C" fn dma_record_stop(duration: i64) {
+pub extern "C" fn dma_record_stop(duration: i64, enable_ddma: bool) {
     unsafe {
         if RECORDER.is_none() {
             artiq_raise!("DMAError", "DMA is not recording")
@@ -71,6 +70,7 @@ pub extern "C" fn dma_record_stop(duration: i64) {
 
         let mut recorder = RECORDER.take().unwrap();
         recorder.duration = duration;
+        recorder.enable_ddma = enable_ddma;
         KERNEL_CHANNEL_1TO0
             .as_mut()
             .unwrap()
@@ -151,20 +151,7 @@ pub extern "C" fn dma_retrieve(name: CSlice<u8>) -> DmaTrace {
     }
     match unsafe { KERNEL_CHANNEL_0TO1.as_mut().unwrap() }.recv() {
         Message::DmaGetReply(None) => (),
-        Message::DmaGetReply(Some((mut v, duration))) => {
-            v.reserve(ALIGNMENT - 1);
-            let original_length = v.len();
-            let padding = ALIGNMENT - v.as_ptr() as usize % ALIGNMENT;
-            let padding = if padding == ALIGNMENT { 0 } else { padding };
-            for _ in 0..padding {
-                v.push(0);
-            }
-            // trailing zero to indicate end of buffer
-            v.push(0);
-            v.copy_within(0..original_length, padding);
-            dcci_slice(&v);
-            let v = Box::new(v);
-            let address = Box::into_raw(v) as *mut Vec<u8> as i32;
+        Message::DmaGetReply(Some((address, duration))) => {
             return DmaTrace { address, duration };
         }
         _ => panic!("Expected DmaGetReply after DmaGetRequest!"),
@@ -175,21 +162,16 @@ pub extern "C" fn dma_retrieve(name: CSlice<u8>) -> DmaTrace {
 
 pub extern "C" fn dma_playback(timestamp: i64, ptr: i32) {
     unsafe {
-        let v = Box::from_raw(ptr as *mut Vec<u8>);
-        let padding = ALIGNMENT - v.as_ptr() as usize % ALIGNMENT;
-        let padding = if padding == ALIGNMENT { 0 } else { padding };
-        let ptr = v.as_ptr().add(padding) as i32;
-
         csr::rtio_dma::base_address_write(ptr as u32);
         csr::rtio_dma::time_offset_write(timestamp as u64);
 
         csr::cri_con::selected_write(1);
         csr::rtio_dma::enable_write(1);
+        #[cfg(has_drtio)]
+        KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(
+            Message::DmaStartRemoteRequest{ id: ptr, timestamp: timestamp });
         while csr::rtio_dma::enable_read() != 0 {}
         csr::cri_con::selected_write(0);
-
-        // leave the handle as we may try to do playback for another time.
-        mem::forget(v);
 
         let error = csr::rtio_dma::error_read();
         if error != 0 {
@@ -214,6 +196,40 @@ pub extern "C" fn dma_playback(timestamp: i64, ptr: i32) {
                     0
                 );
             }
+        }
+        #[cfg(has_drtio)]
+        {
+            KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(
+                Message::DmaAwaitRemoteRequest(ptr));
+            match KERNEL_CHANNEL_0TO1.as_mut().unwrap().recv() {
+                Message::DmaAwaitRemoteReply { timeout, error, channel, timestamp } => {
+                    if timeout {
+                        artiq_raise!(
+                            "DMAError",
+                            "Error running DMA on satellite device, timed out waiting for results"
+                        );
+                    }
+                    if error & 1 != 0 {
+                        artiq_raise!(
+                            "RTIOUnderflow",
+                            "RTIO underflow at {1} mu, channel {rtio_channel_info:0}",
+                            channel as i64,
+                            timestamp as i64,
+                            0
+                        );
+                    }
+                    if error & 2 != 0 {
+                        artiq_raise!(
+                            "RTIODestinationUnreachable",
+                            "RTIO destination unreachable, output, at {1} mu, channel {rtio_channel_info:0}",
+                            channel as i64,
+                            timestamp as i64,
+                            0
+                        );
+                    }
+                }
+                _ => panic!("Expected DmaAwaitRemoteReply after DmaAwaitRemoteRequest!"),
+            } 
         }
     }
 }
