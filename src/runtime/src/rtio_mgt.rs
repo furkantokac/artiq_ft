@@ -6,7 +6,7 @@ use libboard_artiq::{drtio_routing, pl::csr};
 use libboard_zynq::timer::GlobalTimer;
 use libconfig::Config;
 use libcortex_a9::mutex::Mutex;
-use log::error;
+use log::warn;
 
 static mut RTIO_DEVICE_MAP: BTreeMap<u32, String> = BTreeMap::new();
 
