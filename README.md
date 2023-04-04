@@ -4,8 +4,8 @@ ARTIQ on Zynq
 How to use
 ----------
 
-1. Install ARTIQ-7 or newer.
-2. Select the latest successful build on Hydra: https://nixbld.m-labs.hk/jobset/artiq/zynq
+1. Install the ARTIQ version that corresponds to the artiq-zynq version are targeting.
+2. Select the latest successful build on [Hydra](https://nixbld.m-labs.hk/) for the targeted artiq-zynq version, or use AFWS to obtain firmware binaries.
 3. Search for the job named ``<board>-<variant>-sd`` (for example: ``zc706-nist_clock-sd`` or ``zc706-nist_qc2-sd``).
 4. Download the ``boot.bin`` "binary distribution" and place it at the root of a FAT-formatted SD card.
 5. Optionally, create a ``config.txt`` configuration file at the root of the SD card containing ``key=value`` pairs on each line. Use the ``ip``, ``ip6`` and ``mac`` keys to respectively set the IPv4, IPv6 and MAC address of the board. Configuring an IPv6 address is entirely optional. If these keys are not found, the firmware will use default values that may or may not be compatible with your network.
