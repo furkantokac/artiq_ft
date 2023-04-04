@@ -535,8 +535,8 @@ fn read_device_map(cfg: &Config) -> BTreeMap<u32, String> {
                 let channel = bytes_cr.read_u32().unwrap();
                 let device_name = bytes_cr.read_string().unwrap();
                 if let Some(old_entry) = device_map.insert(channel, device_name.clone()) {
-                    error!(
-                        "read_device_map: conflicting entries for channel {}: `{}` and `{}`",
+                    warn!(
+                        "conflicting device map entries for RTIO channel {}: '{}' and '{}'",
                         channel, old_entry, device_name
                     );
                 }
@@ -544,7 +544,7 @@ fn read_device_map(cfg: &Config) -> BTreeMap<u32, String> {
             Ok(())
         })
         .or_else(|err| {
-            error!("read_device_map: error reading `device_map` from config: {}", err);
+            warn!("error reading device map ({}), device names will not be available in RTIO error messages", err);
             Err(err)
         });
     device_map
