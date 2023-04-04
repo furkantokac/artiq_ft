@@ -544,7 +544,10 @@ fn read_device_map(cfg: &Config) -> BTreeMap<u32, String> {
             Ok(())
         })
         .or_else(|err| {
-            warn!("error reading device map ({}), device names will not be available in RTIO error messages", err);
+            warn!(
+                "error reading device map ({}), device names will not be available in RTIO error messages",
+                err
+            );
             Err(err)
         });
     device_map
