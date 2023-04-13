@@ -20,6 +20,7 @@ pub enum RtioClock {
     Int_150,
     Ext0_Bypass,
     Ext0_Synth0_10to125,
+    Ext0_Synth0_80to125,
     Ext0_Synth0_100to125,
     Ext0_Synth0_125to125,
 }
@@ -36,6 +37,7 @@ fn get_rtio_clock_cfg(cfg: &Config) -> RtioClock {
             "ext0_bypass_125" => RtioClock::Ext0_Bypass,
             "ext0_bypass_100" => RtioClock::Ext0_Bypass,
             "ext0_synth0_10to125" => RtioClock::Ext0_Synth0_10to125,
+            "ext0_synth0_80to125" => RtioClock::Ext0_Synth0_80to125,
             "ext0_synth0_100to125" => RtioClock::Ext0_Synth0_100to125,
             "ext0_synth0_125to125" => RtioClock::Ext0_Synth0_125to125,
             _ => {
@@ -124,6 +126,23 @@ fn setup_si5324(i2c: &mut I2c, timer: &mut GlobalTimer, clk: RtioClock) {
                     n2_ls: 300,
                     n31: 6,
                     n32: 6,
+                    bwsel: 4,
+                    crystal_as_ckin2: false,
+                },
+                SI5324_EXT_INPUT,
+            )
+        }
+        RtioClock::Ext0_Synth0_80to125 => {
+            // 125 MHz output from 80 MHz CLKINx reference, 611 Hz BW
+            info!("using 80MHz reference to make 125MHz RTIO clock with PLL");
+            (
+                si5324::FrequencySettings {
+                    n1_hs: 4,
+                    nc1_ls: 10,
+                    n2_hs: 10,
+                    n2_ls: 250,
+                    n31: 40,
+                    n32: 40,
                     bwsel: 4,
                     crystal_as_ckin2: false,
                 },
