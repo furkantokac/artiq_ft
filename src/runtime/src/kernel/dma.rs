@@ -10,6 +10,7 @@ use crate::{artiq_raise, pl::csr, rtio};
 pub struct DmaTrace {
     duration: i64,
     address: i32,
+    uses_ddma: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -151,8 +152,12 @@ pub extern "C" fn dma_retrieve(name: CSlice<u8>) -> DmaTrace {
     }
     match unsafe { KERNEL_CHANNEL_0TO1.as_mut().unwrap() }.recv() {
         Message::DmaGetReply(None) => (),
-        Message::DmaGetReply(Some((address, duration))) => {
-            return DmaTrace { address, duration };
+        Message::DmaGetReply(Some((address, duration, uses_ddma))) => {
+            return DmaTrace {
+                address,
+                duration,
+                uses_ddma,
+            };
         }
         _ => panic!("Expected DmaGetReply after DmaGetRequest!"),
     }
@@ -160,7 +165,7 @@ pub extern "C" fn dma_retrieve(name: CSlice<u8>) -> DmaTrace {
     artiq_raise!("DMAError", "DMA trace not found");
 }
 
-pub extern "C" fn dma_playback(timestamp: i64, ptr: i32) {
+pub extern "C" fn dma_playback(timestamp: i64, ptr: i32, _uses_ddma: bool) {
     unsafe {
         csr::rtio_dma::base_address_write(ptr as u32);
         csr::rtio_dma::time_offset_write(timestamp as u64);
@@ -168,13 +173,15 @@ pub extern "C" fn dma_playback(timestamp: i64, ptr: i32) {
         csr::cri_con::selected_write(1);
         csr::rtio_dma::enable_write(1);
         #[cfg(has_drtio)]
-        KERNEL_CHANNEL_1TO0
-            .as_mut()
-            .unwrap()
-            .send(Message::DmaStartRemoteRequest {
-                id: ptr,
-                timestamp: timestamp,
-            });
+        if _uses_ddma {
+            KERNEL_CHANNEL_1TO0
+                .as_mut()
+                .unwrap()
+                .send(Message::DmaStartRemoteRequest {
+                    id: ptr,
+                    timestamp: timestamp,
+                });
+        }
         while csr::rtio_dma::enable_read() != 0 {}
         csr::cri_con::selected_write(0);
 
@@ -203,7 +210,7 @@ pub extern "C" fn dma_playback(timestamp: i64, ptr: i32) {
             }
         }
         #[cfg(has_drtio)]
-        {
+        if _uses_ddma {
             KERNEL_CHANNEL_1TO0
                 .as_mut()
                 .unwrap()

@@ -330,7 +330,7 @@ async fn handle_run_kernel(
                 rtio_dma::erase(name, aux_mutex, routing_table, timer).await;
             }
             kernel::Message::DmaGetRequest(name) => {
-                let result = rtio_dma::retrieve(name);
+                let result = rtio_dma::retrieve(name).await;
                 control
                     .borrow_mut()
                     .tx

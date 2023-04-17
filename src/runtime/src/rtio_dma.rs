@@ -193,7 +193,7 @@ pub mod remote_dma {
             up: bool,
         ) {
             // update state of the destination, resend traces if it's up
-            if let Some(trace) = self.traces.lock().get_mut(&destination) {
+            if let Some(trace) = self.traces.async_lock().await.get_mut(&destination) {
                 if up {
                     match drtio::ddma_upload_trace(
                         aux_mutex,
@@ -212,6 +212,10 @@ pub mod remote_dma {
                     trace.state = RemoteState::NotLoaded;
                 }
             }
+        }
+
+        pub async fn is_empty(&self) -> bool {
+            self.traces.async_lock().await.is_empty()
         }
     }
 
@@ -268,6 +272,11 @@ pub mod remote_dma {
                 .destination_changed(aux_mutex, routing_table, timer, destination, up)
                 .await;
         }
+    }
+
+    pub async fn has_remote_traces(id: u32) -> bool {
+        let trace_set = unsafe { TRACES.get_mut(&id).unwrap() };
+        !(trace_set.is_empty().await)
     }
 }
 
@@ -343,7 +352,11 @@ pub async fn erase(name: String, _aux_mutex: &Rc<Mutex<bool>>, _routing_table: &
     }
 }
 
-pub fn retrieve(name: String) -> Option<(i32, i64)> {
+pub async fn retrieve(name: String) -> Option<(i32, i64, bool)> {
     let (ptr, _v, duration) = DMA_RECORD_STORE.lock().get(&name)?.clone();
-    Some((ptr as i32, duration))
+    #[cfg(has_drtio)]
+    let uses_ddma = remote_dma::has_remote_traces(ptr).await;
+    #[cfg(not(has_drtio))]
+    let uses_ddma = false;
+    Some((ptr as i32, duration, uses_ddma))
 }

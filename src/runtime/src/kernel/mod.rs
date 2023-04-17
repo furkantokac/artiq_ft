@@ -52,7 +52,7 @@ pub enum Message {
     DmaPutRequest(DmaRecorder),
     DmaEraseRequest(String),
     DmaGetRequest(String),
-    DmaGetReply(Option<(i32, i64)>),
+    DmaGetReply(Option<(i32, i64, bool)>),
     #[cfg(has_drtio)]
     DmaStartRemoteRequest {
         id: i32,
