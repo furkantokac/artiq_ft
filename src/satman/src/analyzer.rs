@@ -73,7 +73,14 @@ impl Analyzer {
         let wraparound = total_byte_count >= BUFFER_SIZE as u64;
         self.sent_bytes = if wraparound { BUFFER_SIZE } else { total_byte_count as usize };
         self.data_iter = if wraparound { (total_byte_count % BUFFER_SIZE as u64) as usize } else { 0 };
-    
+        
+        if overflow {
+            warn!("overflow occured");
+        }
+        if bus_err {
+            warn!("bus error occured");
+        }
+        
         Header {
             total_byte_count: total_byte_count,
             sent_bytes: self.sent_bytes as u32,

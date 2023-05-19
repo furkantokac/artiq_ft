@@ -1,7 +1,10 @@
 use libasync::{smoltcp::TcpStream, task};
-use libboard_zynq::smoltcp::Error;
-use libcortex_a9::cache;
-use log::{debug, info, warn};
+use libboard_zynq::{smoltcp::Error, timer::GlobalTimer};
+use libcortex_a9::{cache, mutex::Mutex};
+use log::{debug, info, warn, error};
+use core::cell::RefCell;
+use alloc::{rc::Rc, vec::Vec};
+use libboard_artiq::drtio_routing;
 
 use crate::{pl, proto_async::*};
 
@@ -37,6 +40,48 @@ fn disarm() {
     debug!("RTIO analyzer disarmed");
 }
 
+#[cfg(has_drtio)]
+pub mod remote_analyzer {
+    use super::*;
+    use crate::rtio_mgt::drtio;
+    
+    pub struct RemoteBuffer {
+        pub total_byte_count: u64,
+        pub sent_bytes: u32,
+        pub error: bool,
+        pub data: Vec<u8>
+    }
+
+    pub async fn get_data(aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &drtio_routing::RoutingTable,
+        up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
+        timer: GlobalTimer) -> Result<RemoteBuffer, &'static str> {
+            // gets data from satellites and returns consolidated data
+            let mut remote_data: Vec<u8> = Vec::new();
+            let mut remote_error = false;
+            let mut remote_sent_bytes = 0;
+            let mut remote_total_bytes = 0;
+
+            let data_vec = match drtio::analyzer_query(aux_mutex, routing_table, up_destinations, timer).await {
+                Ok(data_vec) => data_vec,
+                Err(e) => return Err(e)
+            };
+            for data in data_vec {
+                remote_total_bytes += data.total_byte_count;
+                remote_sent_bytes += data.sent_bytes;
+                remote_error |= data.error;
+                remote_data.extend(data.data);
+            }
+
+            Ok(RemoteBuffer {
+                total_byte_count: remote_total_bytes,
+                sent_bytes: remote_sent_bytes,
+                error: remote_error,
+                data: remote_data
+            })
+        }
+}   
+
 #[derive(Debug)]
 struct Header {
     sent_bytes: u32,
@@ -56,7 +101,10 @@ async fn write_header(stream: &mut TcpStream, header: &Header) -> Result<(), Err
     Ok(())
 }
 
-async fn handle_connection(stream: &mut TcpStream) -> Result<(), Error> {
+async fn handle_connection(stream: &mut TcpStream, _aux_mutex: &Rc<Mutex<bool>>,
+    _routing_table: &drtio_routing::RoutingTable,
+    _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
+    _timer: GlobalTimer) -> Result<(), Error> {
     info!("received connection");
 
     let data = unsafe { &BUFFER.data[..] };
@@ -65,6 +113,7 @@ async fn handle_connection(stream: &mut TcpStream) -> Result<(), Error> {
     let total_byte_count = unsafe { pl::csr::rtio_analyzer::dma_byte_count_read() as u64 };
     let pointer = (total_byte_count % BUFFER_SIZE as u64) as usize;
     let wraparound = total_byte_count >= BUFFER_SIZE as u64;
+    let sent_bytes = if wraparound { BUFFER_SIZE as u32 } else { total_byte_count as u32 };
 
     if overflow_occurred {
         warn!("overflow occured");
@@ -73,13 +122,34 @@ async fn handle_connection(stream: &mut TcpStream) -> Result<(), Error> {
         warn!("bus error occured");
     }
 
+    #[cfg(has_drtio)]
+    let remote = remote_analyzer::get_data(_aux_mutex, _routing_table, _up_destinations, _timer).await;
+    #[cfg(has_drtio)]
+    let (header, remote_data) = match remote {
+        Ok(remote) => (Header {
+            total_byte_count: total_byte_count + remote.total_byte_count,
+            sent_bytes: sent_bytes + remote.sent_bytes,
+            error_occurred: overflow_occurred | bus_error_occurred | remote.error,
+            log_channel: pl::csr::CONFIG_RTIO_LOG_CHANNEL as u8,
+            dds_onehot_sel: true 
+        }, remote.data),
+        Err(e) => {
+            error!("Error getting remote analyzer data: {}", e);
+            (Header {
+                total_byte_count: total_byte_count,
+                sent_bytes: sent_bytes,
+                error_occurred: true,
+                log_channel: pl::csr::CONFIG_RTIO_LOG_CHANNEL as u8,
+                dds_onehot_sel: true 
+            },
+            Vec::new())
+        }
+    };
+
+    #[cfg(not(has_drtio))]
     let header = Header {
         total_byte_count: total_byte_count,
-        sent_bytes: if wraparound {
-            BUFFER_SIZE as u32
-        } else {
-            total_byte_count as u32
-        },
+        sent_bytes: sent_bytes,
         error_occurred: overflow_occurred | bus_error_occurred,
         log_channel: pl::csr::CONFIG_RTIO_LOG_CHANNEL as u8,
         dds_onehot_sel: true, // kept for backward compatibility of analyzer dumps
@@ -93,17 +163,26 @@ async fn handle_connection(stream: &mut TcpStream) -> Result<(), Error> {
     } else {
         stream.send(data[..pointer].iter().copied()).await?;
     }
+    #[cfg(has_drtio)]
+    stream.send(remote_data.iter().copied()).await?;
 
     Ok(())
 }
 
-pub fn start() {
+pub fn start(aux_mutex: &Rc<Mutex<bool>>,
+    routing_table: &Rc<RefCell<drtio_routing::RoutingTable>>,
+    up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
+    timer: GlobalTimer,) {
+    let aux_mutex = aux_mutex.clone();
+    let routing_table = routing_table.clone();
+    let up_destinations = up_destinations.clone();
     task::spawn(async move {
         loop {
             arm();
             let mut stream = TcpStream::accept(1382, 2048, 2048).await.unwrap();
             disarm();
-            let _ = handle_connection(&mut stream)
+            let routing_table = routing_table.borrow();
+            let _ = handle_connection(&mut stream, &aux_mutex, &routing_table, &up_destinations, timer)
                 .await
                 .map_err(|e| warn!("connection terminated: {:?}", e));
             let _ = stream.flush().await;

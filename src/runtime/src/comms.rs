@@ -524,7 +524,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
 
     rtio_mgt::startup(&aux_mutex, &drtio_routing_table, &up_destinations, timer, &cfg);
 
-    analyzer::start();
+    analyzer::start(&aux_mutex, &drtio_routing_table, &up_destinations, timer);
     moninj::start(timer, &aux_mutex, &drtio_routing_table);
 
     let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start()));
