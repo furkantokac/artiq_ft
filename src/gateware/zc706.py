@@ -486,6 +486,10 @@ class _SatelliteBase(SoCCore):
             enable_routing=True)
         self.csr_devices.append("cri_con")
 
+        self.submodules.rtio_analyzer = analyzer.Analyzer(self.rtio_tsc, self.rtio_core.cri,
+                                                          self.ps7.s_axi_hp1)
+        self.csr_devices.append("rtio_analyzer")
+
         self.submodules.routing_table = rtio.RoutingTableAccess(self.cri_con)
         self.csr_devices.append("routing_table")
 

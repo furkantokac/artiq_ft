@@ -28,6 +28,7 @@ use libboard_artiq::io_expander;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
 use libboard_artiq::{drtio_routing, drtioaux, identifier_read, logger, pl::csr};
+use libboard_artiq::{drtioaux_proto::ANALYZER_MAX_SIZE};
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
 use libboard_zynq::{gic, i2c::I2c, mpcore, print, println, stdio, time::Milliseconds, timer::GlobalTimer};
@@ -421,7 +422,7 @@ fn process_aux_packet(
             drtioaux::send(0, &drtioaux::Packet::AnalyzerHeader {
                 total_byte_count: header.total_byte_count,
                 sent_bytes: header.sent_bytes,
-                overflow_occurred: header.overflow,
+                overflow_occurred: header.error,
             })
         }
         drtioaux::Packet::AnalyzerDataRequest { destination: _destination } => {

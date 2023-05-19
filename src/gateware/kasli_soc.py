@@ -438,6 +438,10 @@ class GenericSatellite(SoCCore):
         self.submodules.rtio_moninj = rtio.MonInj(self.rtio_channels)
         self.csr_devices.append("rtio_moninj")
 
+        self.submodules.rtio_analyzer = analyzer.Analyzer(self.rtio_tsc, self.local_io.cri,
+                                                          self.ps7.s_axi_hp1)
+        self.csr_devices.append("rtio_analyzer")
+
         rtio_clk_period = 1e9/clk_freq
         self.rustc_cfg["rtio_frequency"] = str(clk_freq/1e6)
 
