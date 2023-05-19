@@ -20,6 +20,7 @@ extern crate alloc;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
+use analyzer::Analyzer as Analyzer;
 use dma::Manager as DmaManager;
 use embedded_hal::blocking::delay::DelayUs;
 #[cfg(feature = "target_kasli_soc")]
@@ -40,6 +41,7 @@ use libsupport_zynq::ram;
 
 mod dma;
 mod repeater;
+mod analyzer;
 
 fn drtiosat_reset(reset: bool) {
     unsafe {
@@ -95,6 +97,7 @@ fn process_aux_packet(
     timer: &mut GlobalTimer,
     i2c: &mut I2c,
     dma_manager: &mut DmaManager,
+    analyzer: &mut Analyzer,
 ) -> Result<(), drtioaux::Error> {
     // In the code below, *_chan_sel_write takes an u8 if there are fewer than 256 channels,
     // and u16 otherwise; hence the `as _` conversion.
@@ -412,6 +415,26 @@ fn process_aux_packet(
             )
         }
 
+        drtioaux::Packet::AnalyzerHeaderRequest { destination: _destination } => {
+            forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
+            let header = analyzer.get_header();
+            drtioaux::send(0, &drtioaux::Packet::AnalyzerHeader {
+                total_byte_count: header.total_byte_count,
+                sent_bytes: header.sent_bytes,
+                overflow_occurred: header.overflow,
+            })
+        }
+        drtioaux::Packet::AnalyzerDataRequest { destination: _destination } => {
+            forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
+            let mut data_slice: [u8; ANALYZER_MAX_SIZE] = [0; ANALYZER_MAX_SIZE];
+            let meta = analyzer.get_data(&mut data_slice);
+            drtioaux::send(0, &drtioaux::Packet::AnalyzerData {
+                last: meta.last,
+                length: meta.len,
+                data: data_slice,
+            })
+        }
+
         drtioaux::Packet::DmaAddTraceRequest {
             destination: _destination,
             id,
@@ -455,10 +478,11 @@ fn process_aux_packets(
     timer: &mut GlobalTimer,
     i2c: &mut I2c,
     dma_manager: &mut DmaManager,
+    analyzer: &mut Analyzer,
 ) {
     let result = drtioaux::recv(0).and_then(|packet| {
         if let Some(packet) = packet {
-            process_aux_packet(repeaters, routing_table, rank, packet, timer, i2c, dma_manager)
+            process_aux_packet(repeaters, routing_table, rank, packet, timer, i2c, dma_manager, analyzer)
         } else {
             Ok(())
         }
@@ -635,6 +659,8 @@ pub extern "C" fn main_core0() -> i32 {
         // are cleared out for a clean slate on subsequent connections,
         // without a manual intervention.
         let mut dma_manager = DmaManager::new();
+        // same for RTIO Analyzer
+        let mut analyzer = Analyzer::new();
 
         drtioaux::reset(0);
         drtiosat_reset(false);
@@ -649,6 +675,7 @@ pub extern "C" fn main_core0() -> i32 {
                 &mut timer,
                 &mut i2c,
                 &mut dma_manager,
+                &mut analyzer,
             );
             #[allow(unused_mut)]
             for mut rep in repeaters.iter_mut() {
