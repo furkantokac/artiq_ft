@@ -1,6 +1,5 @@
-use libboard_artiq::pl::csr;
+use libboard_artiq::{drtioaux_proto::ANALYZER_MAX_SIZE, pl::csr};
 use libcortex_a9::cache;
-use libboard_artiq::drtioaux_proto::ANALYZER_MAX_SIZE;
 
 const BUFFER_SIZE: usize = 512 * 1024;
 
@@ -9,9 +8,7 @@ struct Buffer {
     data: [u8; BUFFER_SIZE],
 }
 
-static mut BUFFER: Buffer = Buffer {
-    data: [0; BUFFER_SIZE]
-};
+static mut BUFFER: Buffer = Buffer { data: [0; BUFFER_SIZE] };
 
 fn arm() {
     unsafe {
@@ -36,18 +33,18 @@ fn disarm() {
 pub struct Analyzer {
     // necessary for keeping track of sent data
     sent_bytes: usize,
-    data_iter: usize
+    data_iter: usize,
 }
 
 pub struct Header {
     pub total_byte_count: u64,
     pub sent_bytes: u32,
-    pub error: bool
+    pub error: bool,
 }
 
 pub struct AnalyzerSliceMeta {
     pub len: u16,
-    pub last: bool
+    pub last: bool,
 }
 
 impl Analyzer {
@@ -56,7 +53,7 @@ impl Analyzer {
         arm();
         Analyzer {
             sent_bytes: 0,
-            data_iter: 0
+            data_iter: 0,
         }
     }
 
@@ -71,43 +68,55 @@ impl Analyzer {
         let bus_err = unsafe { csr::rtio_analyzer::dma_bus_error_read() != 0 };
         let total_byte_count = unsafe { csr::rtio_analyzer::dma_byte_count_read() as u64 };
         let wraparound = total_byte_count >= BUFFER_SIZE as u64;
-        self.sent_bytes = if wraparound { BUFFER_SIZE } else { total_byte_count as usize };
-        self.data_iter = if wraparound { (total_byte_count % BUFFER_SIZE as u64) as usize } else { 0 };
-        
+        self.sent_bytes = if wraparound {
+            BUFFER_SIZE
+        } else {
+            total_byte_count as usize
+        };
+        self.data_iter = if wraparound {
+            (total_byte_count % BUFFER_SIZE as u64) as usize
+        } else {
+            0
+        };
+
         if overflow {
             warn!("overflow occured");
         }
         if bus_err {
             warn!("bus error occured");
         }
-        
+
         Header {
             total_byte_count: total_byte_count,
             sent_bytes: self.sent_bytes as u32,
-            error: overflow | bus_err
+            error: overflow | bus_err,
         }
     }
 
     pub fn get_data(&mut self, data_slice: &mut [u8; ANALYZER_MAX_SIZE]) -> AnalyzerSliceMeta {
         let data = unsafe { &BUFFER.data[..] };
         let i = self.data_iter;
-        let len = if i + ANALYZER_MAX_SIZE < self.sent_bytes { ANALYZER_MAX_SIZE } else { self.sent_bytes - i };
+        let len = if i + ANALYZER_MAX_SIZE < self.sent_bytes {
+            ANALYZER_MAX_SIZE
+        } else {
+            self.sent_bytes - i
+        };
         let last = i + len == self.sent_bytes;
         if i + len >= BUFFER_SIZE {
             data_slice[..len].clone_from_slice(&data[i..BUFFER_SIZE]);
-            data_slice[..len].clone_from_slice(&data[..(i+len) % BUFFER_SIZE]);
+            data_slice[..len].clone_from_slice(&data[..(i + len) % BUFFER_SIZE]);
         } else {
-            data_slice[..len].clone_from_slice(&data[i..i+len]);
+            data_slice[..len].clone_from_slice(&data[i..i + len]);
         }
         self.data_iter += len;
 
         if last {
             arm();
         }
-        
+
         AnalyzerSliceMeta {
             len: len as u16,
-            last: last
+            last: last,
         }
     }
 }

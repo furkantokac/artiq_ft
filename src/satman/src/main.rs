@@ -20,15 +20,14 @@ extern crate alloc;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use analyzer::Analyzer as Analyzer;
+use analyzer::Analyzer;
 use dma::Manager as DmaManager;
 use embedded_hal::blocking::delay::DelayUs;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_artiq::io_expander;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
-use libboard_artiq::{drtio_routing, drtioaux, identifier_read, logger, pl::csr};
-use libboard_artiq::{drtioaux_proto::ANALYZER_MAX_SIZE};
+use libboard_artiq::{drtio_routing, drtioaux, drtioaux_proto::ANALYZER_MAX_SIZE, identifier_read, logger, pl::csr};
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
 use libboard_zynq::{gic, i2c::I2c, mpcore, print, println, stdio, time::Milliseconds, timer::GlobalTimer};
@@ -40,9 +39,9 @@ use libcortex_a9::{asm, interrupt_handler,
 use libregister::{RegisterR, RegisterW};
 use libsupport_zynq::ram;
 
+mod analyzer;
 mod dma;
 mod repeater;
-mod analyzer;
 
 fn drtiosat_reset(reset: bool) {
     unsafe {
@@ -416,24 +415,34 @@ fn process_aux_packet(
             )
         }
 
-        drtioaux::Packet::AnalyzerHeaderRequest { destination: _destination } => {
+        drtioaux::Packet::AnalyzerHeaderRequest {
+            destination: _destination,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             let header = analyzer.get_header();
-            drtioaux::send(0, &drtioaux::Packet::AnalyzerHeader {
-                total_byte_count: header.total_byte_count,
-                sent_bytes: header.sent_bytes,
-                overflow_occurred: header.error,
-            })
+            drtioaux::send(
+                0,
+                &drtioaux::Packet::AnalyzerHeader {
+                    total_byte_count: header.total_byte_count,
+                    sent_bytes: header.sent_bytes,
+                    overflow_occurred: header.error,
+                },
+            )
         }
-        drtioaux::Packet::AnalyzerDataRequest { destination: _destination } => {
+        drtioaux::Packet::AnalyzerDataRequest {
+            destination: _destination,
+        } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             let mut data_slice: [u8; ANALYZER_MAX_SIZE] = [0; ANALYZER_MAX_SIZE];
             let meta = analyzer.get_data(&mut data_slice);
-            drtioaux::send(0, &drtioaux::Packet::AnalyzerData {
-                last: meta.last,
-                length: meta.len,
-                data: data_slice,
-            })
+            drtioaux::send(
+                0,
+                &drtioaux::Packet::AnalyzerData {
+                    last: meta.last,
+                    length: meta.len,
+                    data: data_slice,
+                },
+            )
         }
 
         drtioaux::Packet::DmaAddTraceRequest {
@@ -483,7 +492,16 @@ fn process_aux_packets(
 ) {
     let result = drtioaux::recv(0).and_then(|packet| {
         if let Some(packet) = packet {
-            process_aux_packet(repeaters, routing_table, rank, packet, timer, i2c, dma_manager, analyzer)
+            process_aux_packet(
+                repeaters,
+                routing_table,
+                rank,
+                packet,
+                timer,
+                i2c,
+                dma_manager,
+                analyzer,
+            )
         } else {
             Ok(())
         }

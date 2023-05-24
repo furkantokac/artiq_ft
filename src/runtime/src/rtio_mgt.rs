@@ -21,8 +21,8 @@ pub mod drtio {
     use log::{error, info, warn};
 
     use super::*;
-    use crate::{rtio_dma::remote_dma, ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR,
-                SEEN_ASYNC_ERRORS, analyzer::remote_analyzer::RemoteBuffer};
+    use crate::{analyzer::remote_analyzer::RemoteBuffer, rtio_dma::remote_dma, ASYNC_ERROR_BUSY,
+                ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR, SEEN_ASYNC_ERRORS};
 
     pub fn startup(
         aux_mutex: &Rc<Mutex<bool>>,
@@ -527,37 +527,48 @@ pub mod drtio {
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &drtio_routing::RoutingTable,
         timer: GlobalTimer,
-        destination: u8
+        destination: u8,
     ) -> Result<RemoteBuffer, &'static str> {
         let linkno = routing_table.0[destination as usize][0] - 1;
         let reply = aux_transact(
-            aux_mutex, 
-            linkno, 
-            &Packet::AnalyzerHeaderRequest { destination: destination },
+            aux_mutex,
+            linkno,
+            &Packet::AnalyzerHeaderRequest {
+                destination: destination,
+            },
             timer,
         )
         .await;
         let (sent, total, overflow) = match reply {
-            Ok(Packet::AnalyzerHeader { 
-                sent_bytes, total_byte_count, overflow_occurred }
-            ) => (sent_bytes, total_byte_count, overflow_occurred),
+            Ok(Packet::AnalyzerHeader {
+                sent_bytes,
+                total_byte_count,
+                overflow_occurred,
+            }) => (sent_bytes, total_byte_count, overflow_occurred),
             Ok(_) => return Err("received unexpected aux packet during remote analyzer header request"),
-            Err(e) => return Err(e)
+            Err(e) => return Err(e),
         };
 
         let mut remote_data: Vec<u8> = Vec::new();
         if sent > 0 {
             let mut last_packet = false;
             while !last_packet {
-                let reply = aux_transact(aux_mutex, linkno, 
-                    &Packet::AnalyzerDataRequest { destination: destination }, timer,).await;
+                let reply = aux_transact(
+                    aux_mutex,
+                    linkno,
+                    &Packet::AnalyzerDataRequest {
+                        destination: destination,
+                    },
+                    timer,
+                )
+                .await;
                 match reply {
-                    Ok(Packet::AnalyzerData { last, length, data }) => { 
+                    Ok(Packet::AnalyzerData { last, length, data }) => {
                         last_packet = last;
                         remote_data.extend(&data[0..length as usize]);
-                    },
+                    }
                     Ok(_) => return Err("received unexpected aux packet during remote analyzer data request"),
-                    Err(e) => return Err(e)
+                    Err(e) => return Err(e),
                 }
             }
         }
@@ -566,12 +577,13 @@ pub mod drtio {
             sent_bytes: sent,
             total_byte_count: total,
             error: overflow,
-            data: remote_data
+            data: remote_data,
         })
     }
 
-    pub async fn analyzer_query(aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,        
+    pub async fn analyzer_query(
+        aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &drtio_routing::RoutingTable,
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
         timer: GlobalTimer,
     ) -> Result<Vec<RemoteBuffer>, &'static str> {

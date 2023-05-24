@@ -136,20 +136,20 @@ pub enum Packet {
         succeeded: bool,
     },
 
-    AnalyzerHeaderRequest { 
-        destination: u8 
-    },
-    AnalyzerHeader { 
-        sent_bytes: u32, 
-        total_byte_count: u64, 
-        overflow_occurred: bool,
-    },
-    AnalyzerDataRequest { 
+    AnalyzerHeaderRequest {
         destination: u8,
     },
-    AnalyzerData { 
-        last: bool, 
-        length: u16, 
+    AnalyzerHeader {
+        sent_bytes: u32,
+        total_byte_count: u64,
+        overflow_occurred: bool,
+    },
+    AnalyzerDataRequest {
+        destination: u8,
+    },
+    AnalyzerData {
+        last: bool,
+        length: u16,
         data: [u8; ANALYZER_MAX_SIZE],
     },
 
@@ -316,15 +316,15 @@ impl Packet {
             },
 
             0xa0 => Packet::AnalyzerHeaderRequest {
-                destination: reader.read_u8()?
+                destination: reader.read_u8()?,
             },
             0xa1 => Packet::AnalyzerHeader {
-                sent_bytes: reader.read_u32()?, 
-                total_byte_count: reader.read_u64()?, 
+                sent_bytes: reader.read_u32()?,
+                total_byte_count: reader.read_u64()?,
                 overflow_occurred: reader.read_bool()?,
             },
             0xa2 => Packet::AnalyzerDataRequest {
-                destination: reader.read_u8()?
+                destination: reader.read_u8()?,
             },
             0xa3 => {
                 let last = reader.read_bool()?;
@@ -334,9 +334,9 @@ impl Packet {
                 Packet::AnalyzerData {
                     last: last,
                     length: length,
-                    data: data
+                    data: data,
                 }
-            },
+            }
 
             0xb0 => {
                 let destination = reader.read_u8()?;
@@ -570,11 +570,11 @@ impl Packet {
                 writer.write_u8(0xa0)?;
                 writer.write_u8(destination)?;
             }
-            Packet::AnalyzerHeader { 
-                sent_bytes, 
-                total_byte_count, 
-                overflow_occurred 
-            } => { 
+            Packet::AnalyzerHeader {
+                sent_bytes,
+                total_byte_count,
+                overflow_occurred,
+            } => {
                 writer.write_u8(0xa1)?;
                 writer.write_u32(sent_bytes)?;
                 writer.write_u64(total_byte_count)?;
@@ -584,11 +584,7 @@ impl Packet {
                 writer.write_u8(0xa2)?;
                 writer.write_u8(destination)?;
             }
-            Packet::AnalyzerData { 
-                last, 
-                length, 
-                data 
-            } => {
+            Packet::AnalyzerData { last, length, data } => {
                 writer.write_u8(0xa3)?;
                 writer.write_bool(last)?;
                 writer.write_u16(length)?;
