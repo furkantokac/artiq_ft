@@ -12,6 +12,7 @@
     zynqpkgs = zynq-rs.packages.x86_64-linux;
     artiqpkgs = artiq.packages.x86_64-linux;
 
+    rust = zynq-rs.rust;
     rustPlatform = zynq-rs.rustPlatform;
 
     fastnumbers = pkgs.python3Packages.buildPythonPackage rec {
@@ -49,7 +50,7 @@
       nativeBuildInputs = with pkgs.python3Packages; [ pbr ];
       propagatedBuildInputs = with pkgs.python3Packages; [ future fastnumbers ];
 
-      checkInputs = with pkgs.python3Packages; [ pytest pytest-flake8 ];
+      checkInputs = with pkgs.python3Packages; [ pytest ];
       checkPhase = "pytest";
       doCheck = false;
 
@@ -73,8 +74,7 @@
 
       propagatedBuildInputs = with pkgs.python3Packages; [ setuptools click numpy toolz jinja2 ramda artiqpkgs.migen artiqpkgs.misoc ];
 
-      checkInputs = with pkgs.python3Packages; [ pytest pytest-timeout pytest-flake8 ];
-      checkPhase = "pytest";
+      checkInputs = with pkgs.python3Packages; [ pytest-runner pytestCheckHook pytest-timeout ];
 
       # migen/misoc version checks are broken with pyproject for some reason
       postPatch = ''
@@ -82,6 +82,8 @@
           --replace '"migen@git+https://github.com/m-labs/migen",' ""
         substituteInPlace pyproject.toml \
           --replace '"misoc@git+https://github.com/m-labs/misoc.git",' ""
+        # pytest-flake8 is broken with recent flake8. Re-enable after fix.
+        substituteInPlace setup.cfg --replace '--flake8' ""
       '';
     };
     binutils = { platform, target, zlib }: pkgs.stdenv.mkDerivation rec {
@@ -116,7 +118,6 @@
       fwtype = if builtins.elem variant sat_variants then "satman" else "runtime";
 
       firmware = rustPlatform.buildRustPackage rec {
-
         name = "firmware";
         src = ./src;
         cargoLock = { 
@@ -135,7 +136,7 @@
           pkgs.llvmPackages_9.clang-unwrapped
         ];
         buildPhase = ''
-          export XARGO_RUST_SRC="${rustPlatform.rust.rustc}/lib/rustlib/src/rust/library"
+          export XARGO_RUST_SRC="${rust}/lib/rustlib/src/rust/library"
           export CLANG_EXTRA_INCLUDE_DIR="${pkgs.llvmPackages_9.clang-unwrapped.lib}/lib/clang/9.0.1/include"
           export CARGO_HOME=$(mktemp -d cargo-home.XXX)
           make TARGET=${target} GWARGS="${if json == null then "-V ${variant}" else json}" ${fwtype}
@@ -257,7 +258,7 @@
       name = "fmt-check";
 
       nativeBuildInputs = [
-        rustPlatform.rust.cargo
+        rust
       ];
 
       phases = [ "buildPhase" ];
@@ -363,8 +364,7 @@
     devShell.x86_64-linux = pkgs.mkShell {
       name = "artiq-zynq-dev-shell";
       buildInputs = with pkgs; [
-        rustPlatform.rust.rustc
-        rustPlatform.rust.cargo
+        rust
         llvmPackages_9.llvm
         llvmPackages_9.clang-unwrapped
         gnumake
@@ -378,7 +378,7 @@
         artiqpkgs.vivado
         binutils-arm
       ];
-      XARGO_RUST_SRC = "${rustPlatform.rust.rustc}/lib/rustlib/src/rust/library";
+      XARGO_RUST_SRC = "${rust}/lib/rustlib/src/rust/library";
       CLANG_EXTRA_INCLUDE_DIR = "${pkgs.llvmPackages_9.clang-unwrapped.lib}/lib/clang/9.0.1/include";
       OPENOCD_ZYNQ = "${zynq-rs}/openocd";
       SZL = "${zynqpkgs.szl}";
