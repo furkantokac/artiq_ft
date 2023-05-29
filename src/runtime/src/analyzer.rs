@@ -1,11 +1,13 @@
-use alloc::{rc::Rc, vec::Vec};
+use alloc::rc::Rc;
+#[cfg(has_drtio)]
+use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use libasync::{smoltcp::TcpStream, task};
 use libboard_artiq::drtio_routing;
 use libboard_zynq::{smoltcp::Error, timer::GlobalTimer};
 use libcortex_a9::{cache, mutex::Mutex};
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 
 use crate::{pl, proto_async::*};
 
@@ -147,7 +149,7 @@ async fn handle_connection(
             remote.data,
         ),
         Err(e) => {
-            error!("Error getting remote analyzer data: {}", e);
+            warn!("Error getting remote analyzer data: {}", e);
             (
                 Header {
                     total_byte_count: total_byte_count,
