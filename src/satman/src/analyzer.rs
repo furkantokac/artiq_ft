@@ -1,4 +1,5 @@
 use core::cmp::min;
+
 use libboard_artiq::{drtioaux_proto::ANALYZER_MAX_SIZE, pl::csr};
 use libcortex_a9::cache;
 
@@ -35,7 +36,7 @@ pub struct Analyzer {
     // necessary for keeping track of sent data
     data_len: usize,
     sent_bytes: usize,
-    data_pointer: usize
+    data_pointer: usize,
 }
 
 pub struct Header {
@@ -62,7 +63,7 @@ impl Analyzer {
         Analyzer {
             data_len: 0,
             sent_bytes: 0,
-            data_pointer: 0
+            data_pointer: 0,
         }
     }
 
@@ -106,8 +107,8 @@ impl Analyzer {
         let last = self.sent_bytes + len == self.data_len;
 
         if i + len >= BUFFER_SIZE {
-            data_slice[..(BUFFER_SIZE-i)].clone_from_slice(&data[i..BUFFER_SIZE]);
-            data_slice[(BUFFER_SIZE-i)..len].clone_from_slice(&data[..(i + len) % BUFFER_SIZE]);
+            data_slice[..(BUFFER_SIZE - i)].clone_from_slice(&data[i..BUFFER_SIZE]);
+            data_slice[(BUFFER_SIZE - i)..len].clone_from_slice(&data[..(i + len) % BUFFER_SIZE]);
         } else {
             data_slice[..len].clone_from_slice(&data[i..i + len]);
         }
