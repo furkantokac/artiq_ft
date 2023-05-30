@@ -71,9 +71,12 @@ class GTP125BootstrapClock(Module):
         platform.add_period_constraint(bootstrap_125.p, 8.0)
         self.specials += [
             Instance("IBUFDS_GTE2",
-                p_CLKSWING_CFG="0b11",
                 i_CEB=0,
-                i_I=bootstrap_125.p, i_IB=bootstrap_125.n, o_O=bootstrap_se),
+                i_I=bootstrap_125.p, i_IB=bootstrap_125.n, 
+                o_O=bootstrap_se,
+                p_CLKCM_CFG="TRUE",
+                p_CLKRCV_TRST="TRUE",
+                p_CLKSWING_CFG=3),
             Instance("BUFG", i_I=bootstrap_se, o_O=self.cd_bootstrap.clk)
         ]
 

@@ -149,9 +149,9 @@ class ZC706(SoCCore):
                 i_CEB=0,
                 i_I=si5324_out.p, i_IB=si5324_out.n,
                 o_O=cdr_clk,
-                p_CLKCM_CFG="0b1",
-                p_CLKRCV_TRST="0b1",
-                p_CLKSWING_CFG="0b11"),
+                p_CLKCM_CFG="TRUE",
+                p_CLKRCV_TRST="TRUE",
+                p_CLKSWING_CFG=3),
             Instance("BUFG", i_I=cdr_clk, o_O=cdr_clk_buf)
         ]
         self.rustc_cfg["has_si5324"] = None
