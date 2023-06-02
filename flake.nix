@@ -129,8 +129,7 @@
 
         nativeBuildInputs = [
           pkgs.gnumake
-          (pkgs.python3.withPackages(ps: (with artiqpkgs; [ ps.jsonschema migen migen-axi misoc artiq ])))
-          artiqpkgs.artiq
+          (pkgs.python3.withPackages(ps: [ ps.jsonschema artiqpkgs.migen migen-axi artiqpkgs.misoc artiqpkgs.artiq ]))
           zynqpkgs.cargo-xbuild
           pkgs.llvmPackages_9.llvm
           pkgs.llvmPackages_9.clang-unwrapped
@@ -156,8 +155,7 @@
       gateware = pkgs.runCommand "${target}-${variant}-gateware"
         {
           nativeBuildInputs = [ 
-            (pkgs.python3.withPackages(ps: (with artiqpkgs; [ ps.jsonschema migen migen-axi misoc artiq ])))
-            artiqpkgs.artiq
+            (pkgs.python3.withPackages(ps: [ ps.jsonschema artiqpkgs.migen migen-axi artiqpkgs.misoc artiqpkgs.artiq ]))
             artiqpkgs.vivado
           ];
         }
@@ -241,8 +239,7 @@
       name = "gateware-sim";
       
       nativeBuildInputs = [ 
-        (pkgs.python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi artiq ]))) 
-        artiqpkgs.artiq
+        (pkgs.python3.withPackages(ps: [ artiqpkgs.migen migen-axi artiqpkgs.artiq ]))
       ];
 
       phases = [ "buildPhase" ];
