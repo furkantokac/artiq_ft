@@ -510,14 +510,14 @@ def main():
     if description["target"] != "kasli_soc":
         raise ValueError("Description is for a different target")
 
-    if description["base"] == "standalone":
+    if description["drtio_role"] == "standalone":
         cls = GenericStandalone
-    elif description["base"] == "master":
+    elif description["drtio_role"] == "master":
         cls = GenericMaster
-    elif description["base"] == "satellite":
+    elif description["drtio_role"] == "satellite":
         cls = GenericSatellite
     else:
-        raise ValueError("Invalid base")
+        raise ValueError("Invalid DRTIO role")
 
     soc = cls(description, acpki=args.acpki)
     soc.finalize()
