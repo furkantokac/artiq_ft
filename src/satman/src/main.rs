@@ -591,6 +591,23 @@ const SI5324_SETTINGS: si5324::FrequencySettings = si5324::FrequencySettings {
     crystal_as_ckin2: true,
 };
 
+#[cfg(all(feature = "target_kasli_soc", has_drtio))]
+fn sfp_leds_update(i2c: &mut I2c) {
+    let mut virtual_leds;
+    unsafe {
+        virtual_leds = csr::drtiosat::rx_up_read();
+        let len: usize = csr::DRTIOREP.len();
+        for linkno in 0..len {
+            virtual_leds |= (csr::DRTIOREP[linkno].rx_up_read)() << (linkno + 1);
+        }
+    }
+
+    for expander_i in 0..=1 {
+        let mut io_expander = io_expander::IoExpander::new(i2c, expander_i).unwrap();
+        io_expander.led_update(virtual_leds);
+    }
+}
+
 static mut LOG_BUFFER: [u8; 1 << 17] = [0; 1 << 17];
 
 #[no_mangle]
@@ -617,8 +634,6 @@ pub extern "C" fn main_core0() -> i32 {
             let mut io_expander = io_expander::IoExpander::new(&mut i2c, expander_i).unwrap();
             io_expander.init().expect("I2C I/O expander #0 initialization failed");
             // Actively drive TX_DISABLE to false on SFP0..3
-            io_expander.set_oe(0, 1 << 1).unwrap();
-            io_expander.set_oe(1, 1 << 1).unwrap();
             io_expander.set(0, 1, false);
             io_expander.set(1, 1, false);
             io_expander.service().unwrap();
@@ -664,6 +679,8 @@ pub extern "C" fn main_core0() -> i32 {
             for mut rep in repeaters.iter_mut() {
                 rep.service(&routing_table, rank, &mut timer);
             }
+            #[cfg(all(feature = "target_kasli_soc", has_drtio))]
+            sfp_leds_update(&mut i2c);
             hardware_tick(&mut hardware_tick_ts, &mut timer);
         }
 
@@ -700,6 +717,8 @@ pub extern "C" fn main_core0() -> i32 {
             for mut rep in repeaters.iter_mut() {
                 rep.service(&routing_table, rank, &mut timer);
             }
+            #[cfg(all(feature = "target_kasli_soc", has_drtio))]
+            sfp_leds_update(&mut i2c);
             hardware_tick(&mut hardware_tick_ts, &mut timer);
             if drtiosat_tsc_loaded() {
                 info!("TSC loaded from uplink");
