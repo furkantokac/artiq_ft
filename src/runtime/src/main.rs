@@ -102,42 +102,6 @@ async fn report_async_rtio_errors() {
     }
 }
 
-#[cfg(all(feature = "target_kasli_soc", has_drtio))]
-static mut SEEN_RTIO_LED: u8 = 0;
-#[cfg(all(feature = "target_kasli_soc", has_drtio))]
-static mut READ_RTIO_LED: u8 = 0;
-
-#[cfg(all(feature = "target_kasli_soc", has_drtio))]
-fn wait_for_rtio_led_change() -> nb::Result<(), Void> {
-    unsafe {
-        let len: usize = pl::csr::DRTIO.len();
-        READ_RTIO_LED = 0;
-        for linkno in 0..len {
-            //let linkno = linkno as usize;
-            READ_RTIO_LED |= (pl::csr::DRTIO[linkno].rx_up_read)() << linkno;
-        }
-        if READ_RTIO_LED != SEEN_RTIO_LED {
-            Ok(())
-        } else {
-            Err(nb::Error::WouldBlock)
-        }
-    }
-}
-#[cfg(all(feature = "target_kasli_soc", has_drtio))]
-async fn async_rtio_led() {
-    loop {
-        let _ = block_async!(wait_for_rtio_led_change()).await;
-        unsafe {
-            let i2c = (&mut i2c::I2C_BUS).as_mut().unwrap();
-            for expander_i in 0..=1 {
-                let mut io_expander = io_expander::IoExpander::new(i2c, expander_i).unwrap();
-                io_expander.led_update(READ_RTIO_LED);
-            }
-            SEEN_RTIO_LED = READ_RTIO_LED;
-        };
-    }
-}
-
 static mut LOG_BUFFER: [u8; 1 << 17] = [0; 1 << 17];
 
 #[no_mangle]
@@ -166,6 +130,8 @@ pub fn main_core0() {
             let mut io_expander = io_expander::IoExpander::new(i2c, expander_i).unwrap();
             io_expander.init().expect("I2C I/O expander #0 initialization failed");
             // Actively drive TX_DISABLE to false on SFP0..3
+            io_expander.set_oe(0, 1 << 1).unwrap();
+            io_expander.set_oe(1, 1 << 1).unwrap();
             io_expander.set(0, 1, false);
             io_expander.set(1, 1, false);
             io_expander.service().unwrap();
@@ -183,9 +149,6 @@ pub fn main_core0() {
     rtio_clocking::init(&mut timer, &cfg);
 
     task::spawn(report_async_rtio_errors());
-
-    #[cfg(all(feature = "target_kasli_soc", has_drtio))]
-    task::spawn(async_rtio_led());
 
     comms::main(timer, cfg);
 }

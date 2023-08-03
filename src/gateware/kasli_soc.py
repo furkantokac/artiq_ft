@@ -86,8 +86,6 @@ class GenericStandalone(SoCCore):
         self.acpki = acpki
         self.rustc_cfg = dict()
 
-        self.rustc_cfg["hw_rev"] = description["hw_rev"]
-
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
@@ -179,8 +177,6 @@ class GenericMaster(SoCCore):
 
         self.acpki = acpki
         self.rustc_cfg = dict()
-
-        self.rustc_cfg["hw_rev"] = description["hw_rev"]
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
@@ -315,8 +311,6 @@ class GenericSatellite(SoCCore):
 
         self.acpki = acpki
         self.rustc_cfg = dict()
-
-        self.rustc_cfg["hw_rev"] = description["hw_rev"]
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
