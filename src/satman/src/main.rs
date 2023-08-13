@@ -633,7 +633,7 @@ pub extern "C" fn main_core0() -> i32 {
     unsafe {
         csr::drtio_transceiver::stable_clkin_write(1);
     }
-    timer.delay_us(20_000); // wait for CPLL/QPLL/MMCM lock
+    timer.delay_us(50_000); // wait for CPLL/QPLL/MMCM lock
     let clk = unsafe { csr::sys_crg::current_clock_read() };
     if clk == 1 {
         info!("SYS CLK switched successfully");
