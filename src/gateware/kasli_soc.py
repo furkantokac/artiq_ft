@@ -10,6 +10,7 @@ from migen.genlib.cdc import MultiReg
 from migen_axi.integration.soc_core import SoCCore
 from migen_axi.platforms import kasli_soc
 from misoc.interconnect.csr import *
+from misoc.cores import virtual_leds
 from misoc.integration import cpu_interface
 
 from artiq.coredevice import jsondesc
@@ -85,6 +86,8 @@ class GenericStandalone(SoCCore):
     def __init__(self, description, acpki=False):
         self.acpki = acpki
         self.rustc_cfg = dict()
+
+        self.rustc_cfg["hw_rev"] = description["hw_rev"]
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
@@ -177,6 +180,8 @@ class GenericMaster(SoCCore):
 
         self.acpki = acpki
         self.rustc_cfg = dict()
+
+        self.rustc_cfg["hw_rev"] = description["hw_rev"]
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
@@ -303,6 +308,14 @@ class GenericMaster(SoCCore):
         if has_grabber:
             self.rustc_cfg["has_grabber"] = None
             self.add_csr_group("grabber", self.grabber_csr_group)
+        
+
+        self.submodules.virtual_leds = virtual_leds.VirtualLeds()
+        self.csr_devices.append("virtual_leds")
+
+        self.comb += [self.virtual_leds.get(i).eq(channel.rx_ready)
+                for i, channel in enumerate(self.gt_drtio.channels)]
+
 
 
 class GenericSatellite(SoCCore):
@@ -311,6 +324,8 @@ class GenericSatellite(SoCCore):
 
         self.acpki = acpki
         self.rustc_cfg = dict()
+
+        self.rustc_cfg["hw_rev"] = description["hw_rev"]
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
@@ -466,7 +481,13 @@ class GenericSatellite(SoCCore):
             self.rustc_cfg["has_grabber"] = None
             self.add_csr_group("grabber", self.grabber_csr_group)
             # no RTIO CRG here
-     
+        
+        self.submodules.virtual_leds = virtual_leds.VirtualLeds()
+        self.csr_devices.append("virtual_leds")
+
+        self.comb += [self.virtual_leds.get(i).eq(channel.rx_ready)
+                for i, channel in enumerate(self.gt_drtio.channels)]
+
 
 def write_mem_file(soc, filename):
     with open(filename, "w") as f:
