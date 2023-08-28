@@ -222,15 +222,15 @@ class _MasterBase(SoCCore):
         self.submodules += SMAClkinForward(self.platform)
 
         # 1000BASE_BX10 Ethernet compatible, 125MHz RTIO clock
-        self.submodules.drtio_transceiver = gtx_7series.GTX(
+        self.submodules.gt_drtio = gtx_7series.GTX(
             clock_pads=platform.request("si5324_clkout"),
             pads=data_pads,
             clk_freq=clk_freq)
-        self.csr_devices.append("drtio_transceiver")
+        self.csr_devices.append("gt_drtio")
 
         self.submodules.rtio_tsc = rtio.TSC(glbl_fine_ts_width=3)
         txout_buf = Signal()
-        gtx0 = self.drtio_transceiver.gtxs[0]
+        gtx0 = self.gt_drtio.gtxs[0]
         self.specials += Instance("BUFG", i_I=gtx0.txoutclk, o_O=txout_buf)
         self.submodules.bootstrap = CLK200BootstrapClock(platform, clk_freq)
         self.submodules.sys_crg = zynq_clocking.SYSCRG(
@@ -247,7 +247,7 @@ class _MasterBase(SoCCore):
         drtioaux_csr_group = []
         drtioaux_memory_group = []
         self.drtio_cri = []
-        for i in range(len(self.drtio_transceiver.channels)):
+        for i in range(len(self.gt_drtio.channels)):
             core_name = "drtio" + str(i)
             coreaux_name = "drtioaux" + str(i)
             memory_name = "drtioaux" + str(i) + "_mem"
@@ -258,7 +258,7 @@ class _MasterBase(SoCCore):
             cdr = ClockDomainsRenamer({"rtio_rx": "rtio_rx" + str(i)})
 
             core = cdr(DRTIOMaster(
-                self.rtio_tsc, self.drtio_transceiver.channels[i]))
+                self.rtio_tsc, self.gt_drtio.channels[i]))
             setattr(self.submodules, core_name, core)
             self.drtio_cri.append(core.cri)
             self.csr_devices.append(core_name)
@@ -277,7 +277,7 @@ class _MasterBase(SoCCore):
         self.add_csr_group("drtioaux", drtioaux_csr_group)
         self.add_memory_group("drtioaux_mem", drtioaux_memory_group)
 
-        self.rustc_cfg["rtio_frequency"] = str(self.drtio_transceiver.rtio_clk_freq/1e6)
+        self.rustc_cfg["rtio_frequency"] = str(self.gt_drtio.rtio_clk_freq/1e6)
 
         self.submodules.si5324_rst_n = gpio.GPIOOut(platform.request("si5324_33").rst_n)
         self.csr_devices.append("si5324_rst_n")
@@ -290,7 +290,7 @@ class _MasterBase(SoCCore):
             gtx0.txoutclk, gtx0.rxoutclk)
         # Constrain RX timing for the each transceiver channel
         # (Each channel performs single-lane phase alignment for RX)
-        for gtx in self.drtio_transceiver.gtxs[1:]:
+        for gtx in self.gt_drtio.gtxs[1:]:
             platform.add_false_path_constraints(
                 gtx0.txoutclk, gtx.rxoutclk)
 
@@ -359,15 +359,15 @@ class _SatelliteBase(SoCCore):
         self.submodules.rtio_tsc = rtio.TSC(glbl_fine_ts_width=3)
 
         # 1000BASE_BX10 Ethernet compatible, 125MHz RTIO clock
-        self.submodules.drtio_transceiver = gtx_7series.GTX(
+        self.submodules.gt_drtio = gtx_7series.GTX(
             clock_pads=platform.request("si5324_clkout"),
             pads=data_pads,
             clk_freq=clk_freq)
-        self.csr_devices.append("drtio_transceiver")
+        self.csr_devices.append("gt_drtio")
 
         txout_buf = Signal()
         txout_buf.attr.add("keep")
-        gtx0 = self.drtio_transceiver.gtxs[0]
+        gtx0 = self.gt_drtio.gtxs[0]
         self.specials += Instance(
             "BUFG", 
             i_I=gtx0.txoutclk, 
@@ -387,7 +387,7 @@ class _SatelliteBase(SoCCore):
         drtioaux_memory_group = []
         drtiorep_csr_group = []
         self.drtio_cri = []
-        for i in range(len(self.drtio_transceiver.channels)):
+        for i in range(len(self.gt_drtio.channels)):
             coreaux_name = "drtioaux" + str(i)
             memory_name = "drtioaux" + str(i) + "_mem"
             drtioaux_csr_group.append(coreaux_name)
@@ -399,7 +399,7 @@ class _SatelliteBase(SoCCore):
             if i == 0:
                 self.submodules.rx_synchronizer = cdr(XilinxRXSynchronizer())
                 core = cdr(DRTIOSatellite(
-                    self.rtio_tsc, self.drtio_transceiver.channels[0], self.rx_synchronizer))
+                    self.rtio_tsc, self.gt_drtio.channels[0], self.rx_synchronizer))
                 self.submodules.drtiosat = core
                 self.csr_devices.append("drtiosat")
             # Repeaters
@@ -407,7 +407,7 @@ class _SatelliteBase(SoCCore):
                 corerep_name = "drtiorep" + str(i-1)
                 drtiorep_csr_group.append(corerep_name)
                 core = cdr(DRTIORepeater(
-                    self.rtio_tsc, self.drtio_transceiver.channels[i]))
+                    self.rtio_tsc, self.gt_drtio.channels[i]))
                 setattr(self.submodules, corerep_name, core)
                 self.drtio_cri.append(core.cri)
                 self.csr_devices.append(corerep_name)
@@ -431,14 +431,14 @@ class _SatelliteBase(SoCCore):
         self.add_csr_group("drtiorep", drtiorep_csr_group)
         self.add_memory_group("drtioaux_mem", drtioaux_memory_group)
 
-        self.rustc_cfg["rtio_frequency"] = str(self.drtio_transceiver.rtio_clk_freq/1e6)
+        self.rustc_cfg["rtio_frequency"] = str(self.gt_drtio.rtio_clk_freq/1e6)
 
         # Si5324 Phaser
         self.submodules.siphaser = SiPhaser7Series(
             si5324_clkin=platform.request("si5324_clkin"),
             rx_synchronizer=self.rx_synchronizer,
             ultrascale=False,
-            rtio_clk_freq=self.drtio_transceiver.rtio_clk_freq)
+            rtio_clk_freq=self.gt_drtio.rtio_clk_freq)
         platform.add_false_path_constraints(
             self.sys_crg.cd_sys.clk, self.siphaser.mmcm_freerun_output)
         self.csr_devices.append("siphaser")
@@ -447,14 +447,14 @@ class _SatelliteBase(SoCCore):
         self.rustc_cfg["has_si5324"] = None
         self.rustc_cfg["has_siphaser"] = None
 
-        rtio_clk_period = 1e9/self.drtio_transceiver.rtio_clk_freq
+        rtio_clk_period = 1e9/self.gt_drtio.rtio_clk_freq
         # Constrain TX & RX timing for the first transceiver channel
         # (First channel acts as master for phase alignment for all channels' TX)
         platform.add_false_path_constraints(
             gtx0.txoutclk, gtx0.rxoutclk)
         # Constrain RX timing for the each transceiver channel
         # (Each channel performs single-lane phase alignment for RX)
-        for gtx in self.drtio_transceiver.gtxs[1:]:
+        for gtx in self.gt_drtio.gtxs[1:]:
             platform.add_false_path_constraints(
                 self.sys_crg.cd_sys.clk, gtx.rxoutclk)
 

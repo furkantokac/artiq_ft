@@ -631,7 +631,7 @@ pub extern "C" fn main_core0() -> i32 {
     timer.delay_us(100_000);
     info!("Switching SYS clocks...");
     unsafe {
-        csr::drtio_transceiver::stable_clkin_write(1);
+        csr::gt_drtio::stable_clkin_write(1);
     }
     timer.delay_us(50_000); // wait for CPLL/QPLL/MMCM lock
     let clk = unsafe { csr::sys_crg::current_clock_read() };
@@ -642,7 +642,7 @@ pub extern "C" fn main_core0() -> i32 {
     }
 
     unsafe {
-        csr::drtio_transceiver::txenable_write(0xffffffffu32 as _);
+        csr::gt_drtio::txenable_write(0xffffffffu32 as _);
     }
 
     #[cfg(has_drtio_routing)]

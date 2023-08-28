@@ -191,14 +191,14 @@ class GenericMaster(SoCCore):
 
         data_pads = [platform.request("sfp", i) for i in range(4)]
 
-        self.submodules.drtio_transceiver = gtx_7series.GTX(
+        self.submodules.gt_drtio = gtx_7series.GTX(
             clock_pads=platform.request("clk_gtp"),
             pads=data_pads,
             clk_freq=clk_freq)
-        self.csr_devices.append("drtio_transceiver")
+        self.csr_devices.append("gt_drtio")
 
         txout_buf = Signal()
-        gtx0 = self.drtio_transceiver.gtxs[0]
+        gtx0 = self.gt_drtio.gtxs[0]
         self.specials += Instance("BUFG", i_I=gtx0.txoutclk, o_O=txout_buf)
 
         self.submodules.bootstrap = GTP125BootstrapClock(self.platform)
@@ -237,7 +237,7 @@ class GenericMaster(SoCCore):
         drtioaux_csr_group = []
         drtioaux_memory_group = []
         self.drtio_cri = []
-        for i in range(len(self.drtio_transceiver.channels)):
+        for i in range(len(self.gt_drtio.channels)):
             core_name = "drtio" + str(i)
             coreaux_name = "drtioaux" + str(i)
             memory_name = "drtioaux" + str(i) + "_mem"
@@ -247,7 +247,7 @@ class GenericMaster(SoCCore):
 
             cdr = ClockDomainsRenamer({"rtio_rx": "rtio_rx" + str(i)})
 
-            core = cdr(DRTIOMaster(self.rtio_tsc, self.drtio_transceiver.channels[i]))
+            core = cdr(DRTIOMaster(self.rtio_tsc, self.gt_drtio.channels[i]))
             setattr(self.submodules, core_name, core)
             self.drtio_cri.append(core.cri)
             self.csr_devices.append(core_name)
@@ -323,14 +323,14 @@ class GenericSatellite(SoCCore):
 
         data_pads = [platform.request("sfp", i) for i in range(4)]
         
-        self.submodules.drtio_transceiver = gtx_7series.GTX(
+        self.submodules.gt_drtio = gtx_7series.GTX(
             clock_pads=platform.request("clk_gtp"),  
             pads=data_pads,
             clk_freq=clk_freq)
-        self.csr_devices.append("drtio_transceiver")
+        self.csr_devices.append("gt_drtio")
 
         txout_buf = Signal()
-        gtx0 = self.drtio_transceiver.gtxs[0]
+        gtx0 = self.gt_drtio.gtxs[0]
         self.specials += Instance("BUFG", i_I=gtx0.txoutclk, o_O=txout_buf)
 
         self.submodules.bootstrap = GTP125BootstrapClock(self.platform)
@@ -367,7 +367,7 @@ class GenericSatellite(SoCCore):
         drtioaux_memory_group = []
         drtiorep_csr_group = []
         self.drtio_cri = []
-        for i in range(len(self.drtio_transceiver.channels)):
+        for i in range(len(self.gt_drtio.channels)):
             coreaux_name = "drtioaux" + str(i)
             memory_name = "drtioaux" + str(i) + "_mem"
             drtioaux_csr_group.append(coreaux_name)
@@ -378,7 +378,7 @@ class GenericSatellite(SoCCore):
             if i == 0:
                 self.submodules.rx_synchronizer = cdr(XilinxRXSynchronizer())
                 core = cdr(DRTIOSatellite(
-                    self.rtio_tsc, self.drtio_transceiver.channels[i],
+                    self.rtio_tsc, self.gt_drtio.channels[i],
                     self.rx_synchronizer))
                 self.submodules.drtiosat = core
                 self.csr_devices.append("drtiosat")
@@ -387,7 +387,7 @@ class GenericSatellite(SoCCore):
                 drtiorep_csr_group.append(corerep_name)
 
                 core = cdr(DRTIORepeater(
-                    self.rtio_tsc, self.drtio_transceiver.channels[i]))
+                    self.rtio_tsc, self.gt_drtio.channels[i]))
                 setattr(self.submodules, corerep_name, core)
                 self.drtio_cri.append(core.cri)
                 self.csr_devices.append(corerep_name)
@@ -452,13 +452,13 @@ class GenericSatellite(SoCCore):
             si5324_clkin=platform.request("cdr_clk"),
             rx_synchronizer=self.rx_synchronizer,
             ultrascale=False,
-            rtio_clk_freq=self.drtio_transceiver.rtio_clk_freq)
+            rtio_clk_freq=self.gt_drtio.rtio_clk_freq)
         self.csr_devices.append("siphaser")
         self.rustc_cfg["has_si5324"] = None
         self.rustc_cfg["has_siphaser"] = None
         self.rustc_cfg["si5324_soft_reset"] = None
 
-        gtx0 = self.drtio_transceiver.gtxs[0]
+        gtx0 = self.gt_drtio.gtxs[0]
         platform.add_false_path_constraints(
             gtx0.txoutclk, gtx0.rxoutclk)
 

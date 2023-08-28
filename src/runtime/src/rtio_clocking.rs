@@ -92,7 +92,7 @@ fn init_rtio(timer: &mut GlobalTimer) {
 #[cfg(has_drtio)]
 fn init_drtio(timer: &mut GlobalTimer) {
     unsafe {
-        pl::csr::drtio_transceiver::stable_clkin_write(1);
+        pl::csr::gt_drtio::stable_clkin_write(1);
     }
 
     timer.delay_ms(20); // wait for CPLL/QPLL/SYS PLL lock
@@ -104,7 +104,7 @@ fn init_drtio(timer: &mut GlobalTimer) {
     }
     unsafe {
         pl::csr::rtio_core::reset_phy_write(1);
-        pl::csr::drtio_transceiver::txenable_write(0xffffffffu32 as _);
+        pl::csr::gt_drtio::txenable_write(0xffffffffu32 as _);
     }
 }
 
