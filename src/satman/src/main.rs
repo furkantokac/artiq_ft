@@ -223,8 +223,8 @@ fn process_aux_packet(
 
         drtioaux::Packet::MonitorRequest {
             destination: _destination,
-            channel: _channel,
-            probe: _probe,
+            channel,
+            probe,
         } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             let value;
@@ -244,9 +244,9 @@ fn process_aux_packet(
         }
         drtioaux::Packet::InjectionRequest {
             destination: _destination,
-            channel: _channel,
-            overrd: _overrd,
-            value: _value,
+            channel,
+            overrd,
+            value,
         } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             #[cfg(has_rtio_moninj)]
@@ -259,8 +259,8 @@ fn process_aux_packet(
         }
         drtioaux::Packet::InjectionStatusRequest {
             destination: _destination,
-            channel: _channel,
-            overrd: _overrd,
+            channel,
+            overrd,
         } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             let value;
