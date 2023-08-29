@@ -612,6 +612,7 @@ pub extern "C" fn main_core0() -> i32 {
     let mut i2c = I2c::i2c0();
     i2c.init().expect("I2C initialization failed");
 
+    #[cfg(feature = "target_kasli_soc")]
     let (mut io_expander0, mut io_expander1);
     #[cfg(feature = "target_kasli_soc")]
     {

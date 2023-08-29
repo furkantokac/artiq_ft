@@ -145,6 +145,7 @@ pub fn main_core0() {
     i2c::init();
     let i2c_bus = unsafe { (i2c::I2C_BUS).as_mut().unwrap() };
 
+    #[cfg(feature = "target_kasli_soc")]
     let (mut io_expander0, mut io_expander1);
     #[cfg(feature = "target_kasli_soc")]
     {
