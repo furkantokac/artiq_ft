@@ -85,9 +85,6 @@ class GTP125BootstrapClock(Module):
 class GenericStandalone(SoCCore):
     def __init__(self, description, acpki=False):
         self.acpki = acpki
-        self.rustc_cfg = dict()
-
-        self.rustc_cfg["hw_rev"] = description["hw_rev"]
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
@@ -98,10 +95,12 @@ class GenericStandalone(SoCCore):
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
 
+        self.config["HW_REV"] = description["hw_rev"]
+
         self.submodules += SMAClkinForward(self.platform)
 
-        self.rustc_cfg["has_si5324"] = None
-        self.rustc_cfg["si5324_soft_reset"] = None
+        self.config["HAS_SI5324"] = None
+        self.config["SI5324_SOFT_RESET"] = None
 
         clk_synth = platform.request("cdr_clk_clean_fabric")
         clk_synth_se = Signal()
@@ -140,14 +139,14 @@ class GenericStandalone(SoCCore):
         self.csr_devices.append("rtio_core")
 
         if self.acpki:
-            self.rustc_cfg["ki_impl"] = "acp"
+            self.config["KI_IMPL"] = "acp"
             self.submodules.rtio = acpki.KernelInitiator(self.rtio_tsc,
                                                          bus=self.ps7.s_axi_acp,
                                                          user=self.ps7.s_axi_acp_user,
                                                          evento=self.ps7.event.o)
             self.csr_devices.append("rtio")
         else:
-            self.rustc_cfg["ki_impl"] = "csr"
+            self.config["KI_IMPL"] = "csr"
             self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
             self.csr_devices.append("rtio")
 
@@ -167,7 +166,7 @@ class GenericStandalone(SoCCore):
         self.csr_devices.append("rtio_analyzer")
 
         if has_grabber:
-            self.rustc_cfg["has_grabber"] = None
+            self.config["HAS_GRABBER"] = None
             self.add_csr_group("grabber", self.grabber_csr_group)
             for grabber in self.grabber_csr_group:
                 self.platform.add_false_path_constraints(
@@ -179,9 +178,6 @@ class GenericMaster(SoCCore):
         clk_freq = description["rtio_frequency"]
 
         self.acpki = acpki
-        self.rustc_cfg = dict()
-
-        self.rustc_cfg["hw_rev"] = description["hw_rev"]
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
@@ -191,6 +187,8 @@ class GenericMaster(SoCCore):
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
+
+        self.config["HW_REV"] = description["hw_rev"]
 
         self.submodules += SMAClkinForward(self.platform)
 
@@ -219,8 +217,8 @@ class GenericMaster(SoCCore):
             self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
         fix_serdes_timing_path(platform)
 
-        self.rustc_cfg["has_si5324"] = None
-        self.rustc_cfg["si5324_soft_reset"] = None
+        self.config["HAS_SI5324"] = None
+        self.config["SI5324_SOFT_RESET"] = None
 
         self.rtio_channels = []
         has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
@@ -265,8 +263,8 @@ class GenericMaster(SoCCore):
             memory_address = self.axi2csr.register_port(coreaux.get_tx_port(), size)
             self.axi2csr.register_port(coreaux.get_rx_port(), size)
             self.add_memory_region(memory_name, self.mem_map["csr"] + memory_address, size * 2)
-        self.rustc_cfg["has_drtio"] = None
-        self.rustc_cfg["has_drtio_routing"] = None
+        self.config["HAS_DRTIO"] = None
+        self.config["HAS_DRTIO_ROUTING"] = None
         self.add_csr_group("drtio", drtio_csr_group)
         self.add_csr_group("drtioaux", drtioaux_csr_group)
         self.add_memory_group("drtioaux_mem", drtioaux_memory_group)
@@ -275,14 +273,14 @@ class GenericMaster(SoCCore):
         self.csr_devices.append("rtio_core")
 
         if self.acpki:
-            self.rustc_cfg["ki_impl"] = "acp"
+            self.config["KI_IMPL"] = "acp"
             self.submodules.rtio = acpki.KernelInitiator(self.rtio_tsc,
                                                          bus=self.ps7.s_axi_acp,
                                                          user=self.ps7.s_axi_acp_user,
                                                          evento=self.ps7.event.o)
             self.csr_devices.append("rtio")
         else:
-            self.rustc_cfg["ki_impl"] = "csr"
+            self.config["KI_IMPL"] = "csr"
             self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
             self.csr_devices.append("rtio")
 
@@ -306,7 +304,7 @@ class GenericMaster(SoCCore):
         self.csr_devices.append("rtio_analyzer")
 
         if has_grabber:
-            self.rustc_cfg["has_grabber"] = None
+            self.config["HAS_GRABBER"] = None
             self.add_csr_group("grabber", self.grabber_csr_group)
         
 
@@ -323,9 +321,6 @@ class GenericSatellite(SoCCore):
         clk_freq = description["rtio_frequency"]
 
         self.acpki = acpki
-        self.rustc_cfg = dict()
-
-        self.rustc_cfg["hw_rev"] = description["hw_rev"]
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
@@ -335,6 +330,8 @@ class GenericSatellite(SoCCore):
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
+
+        self.config["HW_REV"] = description["hw_rev"]
 
         data_pads = [platform.request("sfp", i) for i in range(4)]
         
@@ -420,21 +417,21 @@ class GenericSatellite(SoCCore):
             # and registered in PS interface
             # manually, because software refers to rx/tx by halves of entire memory block, not names
             self.add_memory_region(memory_name, self.mem_map["csr"] + memory_address, mem_size * 2)
-        self.rustc_cfg["has_drtio"] = None
-        self.rustc_cfg["has_drtio_routing"] = None
+        self.config["HAS_DRTIO"] = None
+        self.config["HAS_DRTIO_ROUTING"] = None
         self.add_csr_group("drtioaux", drtioaux_csr_group)
         self.add_memory_group("drtioaux_mem", drtioaux_memory_group)
         self.add_csr_group("drtiorep", drtiorep_csr_group)
 
         if self.acpki:
-            self.rustc_cfg["ki_impl"] = "acp"
+            self.config["KI_IMPL"] = "acp"
             self.submodules.rtio = acpki.KernelInitiator(self.rtio_tsc,
                                                          bus=self.ps7.s_axi_acp,
                                                          user=self.ps7.s_axi_acp_user,
                                                          evento=self.ps7.event.o)
             self.csr_devices.append("rtio")
         else:
-            self.rustc_cfg["ki_impl"] = "csr"
+            self.config["KI_IMPL"] = "csr"
             self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
             self.csr_devices.append("rtio")
 
@@ -461,7 +458,7 @@ class GenericSatellite(SoCCore):
         self.csr_devices.append("rtio_analyzer")
 
         rtio_clk_period = 1e9/clk_freq
-        self.rustc_cfg["rtio_frequency"] = str(clk_freq/1e6)
+        self.config["RTIO_FREQUENCY"] = str(clk_freq/1e6)
 
         self.submodules.siphaser = SiPhaser7Series(
             si5324_clkin=platform.request("cdr_clk"),
@@ -469,16 +466,15 @@ class GenericSatellite(SoCCore):
             ultrascale=False,
             rtio_clk_freq=self.gt_drtio.rtio_clk_freq)
         self.csr_devices.append("siphaser")
-        self.rustc_cfg["has_si5324"] = None
-        self.rustc_cfg["has_siphaser"] = None
-        self.rustc_cfg["si5324_soft_reset"] = None
+        self.config["HAS_SI5324"] = None
+        self.config["SI5324_SOFT_RESET"] = None
 
         gtx0 = self.gt_drtio.gtxs[0]
         platform.add_false_path_constraints(
             gtx0.txoutclk, gtx0.rxoutclk)
 
         if has_grabber:
-            self.rustc_cfg["has_grabber"] = None
+            self.config["HAS_GRABBER"] = None
             self.add_csr_group("grabber", self.grabber_csr_group)
             # no RTIO CRG here
         
@@ -503,11 +499,14 @@ def write_csr_file(soc, filename):
 
 def write_rustc_cfg_file(soc, filename):
     with open(filename, "w") as f:
-        for k, v in sorted(soc.rustc_cfg.items(), key=itemgetter(0)):
-            if v is None:
-                f.write("{}\n".format(k))
-            else:
-                f.write("{}=\"{}\"\n".format(k, v))
+        for name, origin, busword, obj in soc.get_csr_regions():
+            f.write("has_{}\n".format(name.lower()))
+        for name, value in soc.get_constants():
+            if name.upper().startswith("CONFIG_"):
+                if value is None:
+                    f.write("{}\n".format(name.lower()[7:]))
+                else:
+                    f.write("{}=\"{}\"\n".format(name.lower()[7:], str(value)))
 
 
 def main():
