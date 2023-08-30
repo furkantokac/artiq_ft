@@ -152,7 +152,7 @@ impl IoExpander {
     }
 
     pub fn service(&mut self, i2c: &mut i2c::I2c) -> Result<(), &'static str> {
-        #[cfg(has_virtual_leds)]        
+        #[cfg(has_virtual_leds)]
         for (led, port, bit) in self.virtual_led_mapping.iter() {
             let level = unsafe { csr::virtual_leds::status_read() >> led & 1 };
             self.set(*port, *bit, level != 0);
