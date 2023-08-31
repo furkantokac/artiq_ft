@@ -422,7 +422,7 @@ extern "C" fn stop_fn(
 }
 
 // Must be kept in sync with preallocate_runtime_exception_names() in artiq/language/embedding_map.py
-static EXCEPTION_ID_LOOKUP: [(&str, u32); 11] = [
+static EXCEPTION_ID_LOOKUP: [(&str, u32); 12] = [
     ("RuntimeError", 0),
     ("RTIOUnderflow", 1),
     ("RTIOOverflow", 2),
@@ -434,6 +434,7 @@ static EXCEPTION_ID_LOOKUP: [(&str, u32); 11] = [
     ("ZeroDivisionError", 8),
     ("IndexError", 9),
     ("UnwrapNoneError", 10),
+    ("SubkernelError", 11),
 ];
 
 pub fn get_exception_id(name: &str) -> u32 {

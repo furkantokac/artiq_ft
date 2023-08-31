@@ -13,6 +13,8 @@ mod dma;
 mod rpc;
 pub use dma::DmaRecorder;
 mod cache;
+#[cfg(has_drtio)]
+mod subkernel;
 
 #[derive(Debug, Clone)]
 pub struct RPCException {
@@ -23,6 +25,16 @@ pub struct RPCException {
     pub line: i32,
     pub column: i32,
     pub function: u32,
+}
+
+#[cfg(has_drtio)]
+#[derive(Debug, Clone)]
+pub enum SubkernelStatus {
+    NoError,
+    Timeout,
+    IncorrectState,
+    CommLost,
+    OtherError,
 }
 
 #[derive(Debug, Clone)]
@@ -72,6 +84,39 @@ pub enum Message {
     UpDestinationsRequest(i32),
     #[cfg(has_drtio)]
     UpDestinationsReply(bool),
+
+    #[cfg(has_drtio)]
+    SubkernelLoadRunRequest {
+        id: u32,
+        run: bool,
+    },
+    #[cfg(has_drtio)]
+    SubkernelLoadRunReply {
+        succeeded: bool,
+    },
+    #[cfg(has_drtio)]
+    SubkernelAwaitFinishRequest {
+        id: u32,
+        timeout: u64,
+    },
+    #[cfg(has_drtio)]
+    SubkernelAwaitFinishReply {
+        status: SubkernelStatus,
+    },
+    #[cfg(has_drtio)]
+    SubkernelMsgSend {
+        id: u32,
+        data: Vec<u8>,
+    },
+    #[cfg(has_drtio)]
+    SubkernelMsgRecvRequest {
+        id: u32,
+        timeout: u64,
+    },
+    #[cfg(has_drtio)]
+    SubkernelMsgRecvReply {
+        status: SubkernelStatus,
+    },
 }
 
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Sender<'static, Message>>> = Mutex::new(None);

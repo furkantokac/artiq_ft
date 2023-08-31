@@ -1,8 +1,11 @@
 use core_io::{Error as IoError, Read, Write};
 use io::proto::{ProtoRead, ProtoWrite};
 
-pub const DMA_TRACE_MAX_SIZE: usize = /*max size*/512 - /*CRC*/4 - /*packet ID*/1 - /*trace ID*/4 - /*last*/1 -/*length*/2;
-pub const ANALYZER_MAX_SIZE: usize  = /*max size*/512 - /*CRC*/4 - /*packet ID*/1 - /*last*/1 - /*length*/2;
+// maximum size of arbitrary payloads
+// used by satellite -> master analyzer, subkernel exceptions
+pub const SAT_PAYLOAD_MAX_SIZE: usize  = /*max size*/512 - /*CRC*/4 - /*packet ID*/1 - /*last*/1 - /*length*/2;
+// used by DDMA, subkernel program data (need to provide extra ID and destination)
+pub const MASTER_PAYLOAD_MAX_SIZE: usize = SAT_PAYLOAD_MAX_SIZE - /*destination*/1 - /*ID*/4;
 
 #[derive(Debug)]
 pub enum Error {
@@ -150,7 +153,7 @@ pub enum Packet {
     AnalyzerData {
         last: bool,
         length: u16,
-        data: [u8; ANALYZER_MAX_SIZE],
+        data: [u8; SAT_PAYLOAD_MAX_SIZE],
     },
 
     DmaAddTraceRequest {
@@ -158,7 +161,7 @@ pub enum Packet {
         id: u32,
         last: bool,
         length: u16,
-        trace: [u8; DMA_TRACE_MAX_SIZE],
+        trace: [u8; MASTER_PAYLOAD_MAX_SIZE],
     },
     DmaAddTraceReply {
         succeeded: bool,
@@ -184,6 +187,53 @@ pub enum Packet {
         error: u8,
         channel: u32,
         timestamp: u64,
+    },
+
+    SubkernelAddDataRequest {
+        destination: u8,
+        id: u32,
+        last: bool,
+        length: u16,
+        data: [u8; MASTER_PAYLOAD_MAX_SIZE],
+    },
+    SubkernelAddDataReply {
+        succeeded: bool,
+    },
+    SubkernelLoadRunRequest {
+        destination: u8,
+        id: u32,
+        run: bool,
+    },
+    SubkernelLoadRunReply {
+        succeeded: bool,
+    },
+    SubkernelStopRequest {
+        destination: u8,
+    },
+    SubkernelStopReply {
+        succeeded: bool,
+    },
+    SubkernelFinished {
+        id: u32,
+        with_exception: bool,
+    },
+    SubkernelExceptionRequest {
+        destination: u8,
+    },
+    SubkernelException {
+        last: bool,
+        length: u16,
+        data: [u8; SAT_PAYLOAD_MAX_SIZE],
+    },
+    SubkernelMessage {
+        destination: u8,
+        id: u32,
+        last: bool,
+        length: u16,
+        data: [u8; MASTER_PAYLOAD_MAX_SIZE],
+    },
+    SubkernelMessageAck {
+        destination: u8,
     },
 }
 
@@ -329,7 +379,7 @@ impl Packet {
             0xa3 => {
                 let last = reader.read_bool()?;
                 let length = reader.read_u16()?;
-                let mut data: [u8; ANALYZER_MAX_SIZE] = [0; ANALYZER_MAX_SIZE];
+                let mut data: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut data[0..length as usize])?;
                 Packet::AnalyzerData {
                     last: last,
@@ -343,7 +393,7 @@ impl Packet {
                 let id = reader.read_u32()?;
                 let last = reader.read_bool()?;
                 let length = reader.read_u16()?;
-                let mut trace: [u8; DMA_TRACE_MAX_SIZE] = [0; DMA_TRACE_MAX_SIZE];
+                let mut trace: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut trace[0..length as usize])?;
                 Packet::DmaAddTraceRequest {
                     destination: destination,
@@ -377,6 +427,75 @@ impl Packet {
                 error: reader.read_u8()?,
                 channel: reader.read_u32()?,
                 timestamp: reader.read_u64()?,
+            },
+
+            0xc0 => {
+                let destination = reader.read_u8()?;
+                let id = reader.read_u32()?;
+                let last = reader.read_bool()?;
+                let length = reader.read_u16()?;
+                let mut data: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
+                reader.read_exact(&mut data[0..length as usize])?;
+                Packet::SubkernelAddDataRequest {
+                    destination: destination,
+                    id: id,
+                    last: last,
+                    length: length as u16,
+                    data: data,
+                }
+            }
+            0xc1 => Packet::SubkernelAddDataReply {
+                succeeded: reader.read_bool()?,
+            },
+            0xc4 => Packet::SubkernelLoadRunRequest {
+                destination: reader.read_u8()?,
+                id: reader.read_u32()?,
+                run: reader.read_bool()?,
+            },
+            0xc5 => Packet::SubkernelLoadRunReply {
+                succeeded: reader.read_bool()?,
+            },
+            0xc6 => Packet::SubkernelStopRequest {
+                destination: reader.read_u8()?,
+            },
+            0xc7 => Packet::SubkernelStopReply {
+                succeeded: reader.read_bool()?,
+            },
+            0xc8 => Packet::SubkernelFinished {
+                id: reader.read_u32()?,
+                with_exception: reader.read_bool()?,
+            },
+            0xc9 => Packet::SubkernelExceptionRequest {
+                destination: reader.read_u8()?,
+            },
+            0xca => {
+                let last = reader.read_bool()?;
+                let length = reader.read_u16()?;
+                let mut data: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
+                reader.read_exact(&mut data[0..length as usize])?;
+                Packet::SubkernelException {
+                    last: last,
+                    length: length,
+                    data: data,
+                }
+            }
+            0xcb => {
+                let destination = reader.read_u8()?;
+                let id = reader.read_u32()?;
+                let last = reader.read_bool()?;
+                let length = reader.read_u16()?;
+                let mut data: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
+                reader.read_exact(&mut data[0..length as usize])?;
+                Packet::SubkernelMessage {
+                    destination: destination,
+                    id: id,
+                    last: last,
+                    length: length as u16,
+                    data: data,
+                }
+            }
+            0xcc => Packet::SubkernelMessageAck {
+                destination: reader.read_u8()?,
             },
 
             ty => return Err(Error::UnknownPacket(ty)),
@@ -647,6 +766,76 @@ impl Packet {
                 writer.write_u8(error)?;
                 writer.write_u32(channel)?;
                 writer.write_u64(timestamp)?;
+            }
+
+            Packet::SubkernelAddDataRequest {
+                destination,
+                id,
+                last,
+                data,
+                length,
+            } => {
+                writer.write_u8(0xc0)?;
+                writer.write_u8(destination)?;
+                writer.write_u32(id)?;
+                writer.write_bool(last)?;
+                writer.write_u16(length)?;
+                writer.write_all(&data[0..length as usize])?;
+            }
+            Packet::SubkernelAddDataReply { succeeded } => {
+                writer.write_u8(0xc1)?;
+                writer.write_bool(succeeded)?;
+            }
+            Packet::SubkernelLoadRunRequest { destination, id, run } => {
+                writer.write_u8(0xc4)?;
+                writer.write_u8(destination)?;
+                writer.write_u32(id)?;
+                writer.write_bool(run)?;
+            }
+            Packet::SubkernelLoadRunReply { succeeded } => {
+                writer.write_u8(0xc5)?;
+                writer.write_bool(succeeded)?;
+            }
+            Packet::SubkernelStopRequest { destination } => {
+                writer.write_u8(0xc6)?;
+                writer.write_u8(destination)?;
+            }
+            Packet::SubkernelStopReply { succeeded } => {
+                writer.write_u8(0xc7)?;
+                writer.write_bool(succeeded)?;
+            }
+            Packet::SubkernelFinished { id, with_exception } => {
+                writer.write_u8(0xc8)?;
+                writer.write_u32(id)?;
+                writer.write_bool(with_exception)?;
+            }
+            Packet::SubkernelExceptionRequest { destination } => {
+                writer.write_u8(0xc9)?;
+                writer.write_u8(destination)?;
+            }
+            Packet::SubkernelException { last, length, data } => {
+                writer.write_u8(0xca)?;
+                writer.write_bool(last)?;
+                writer.write_u16(length)?;
+                writer.write_all(&data[0..length as usize])?;
+            }
+            Packet::SubkernelMessage {
+                destination,
+                id,
+                last,
+                data,
+                length,
+            } => {
+                writer.write_u8(0xcb)?;
+                writer.write_u8(destination)?;
+                writer.write_u32(id)?;
+                writer.write_bool(last)?;
+                writer.write_u16(length)?;
+                writer.write_all(&data[0..length as usize])?;
+            }
+            Packet::SubkernelMessageAck { destination } => {
+                writer.write_u8(0xcc)?;
+                writer.write_u8(destination)?;
             }
         }
         Ok(())

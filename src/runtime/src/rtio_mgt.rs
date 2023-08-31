@@ -16,12 +16,13 @@ pub mod drtio {
 
     use embedded_hal::blocking::delay::DelayMs;
     use libasync::{delay, task};
-    use libboard_artiq::{drtioaux::Error, drtioaux_async, drtioaux_async::Packet, drtioaux_proto::DMA_TRACE_MAX_SIZE};
+    use libboard_artiq::{drtioaux::Error, drtioaux_async, drtioaux_async::Packet,
+                         drtioaux_proto::MASTER_PAYLOAD_MAX_SIZE};
     use libboard_zynq::time::Milliseconds;
     use log::{error, info, warn};
 
     use super::*;
-    use crate::{analyzer::remote_analyzer::RemoteBuffer, rtio_dma::remote_dma, ASYNC_ERROR_BUSY,
+    use crate::{analyzer::remote_analyzer::RemoteBuffer, rtio_dma::remote_dma, subkernel, ASYNC_ERROR_BUSY,
                 ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR, SEEN_ASYNC_ERRORS};
 
     pub fn startup(
@@ -44,7 +45,7 @@ pub mod drtio {
         unsafe { (csr::DRTIO[linkno].rx_up_read)() == 1 }
     }
 
-    async fn process_async_packets(packet: Packet) -> Option<Packet> {
+    async fn process_async_packets(linkno: u8, packet: Packet) -> Option<Packet> {
         // returns None if an async packet has been consumed
         match packet {
             Packet::DmaPlaybackStatus {
@@ -55,6 +56,24 @@ pub mod drtio {
                 timestamp,
             } => {
                 remote_dma::playback_done(id, destination, error, channel, timestamp).await;
+                None
+            }
+            Packet::SubkernelFinished { id, with_exception } => {
+                subkernel::subkernel_finished(id, with_exception).await;
+                None
+            }
+            Packet::SubkernelMessage {
+                id,
+                destination: from,
+                last,
+                length,
+                data,
+            } => {
+                subkernel::message_handle_incoming(id, last, length as usize, &data).await;
+                // acknowledge receiving part of the message
+                drtioaux_async::send(linkno, &Packet::SubkernelMessageAck { destination: from })
+                    .await
+                    .unwrap();
                 None
             }
             other => Some(other),
@@ -193,7 +212,7 @@ pub mod drtio {
         let _lock = aux_mutex.async_lock().await;
         match drtioaux_async::recv(linkno).await {
             Ok(Some(packet)) => {
-                if let Some(packet) = process_async_packets(packet).await {
+                if let Some(packet) = process_async_packets(linkno, packet).await {
                     warn!("[LINK#{}] unsolicited aux packet: {:?}", linkno, packet);
                 }
             }
@@ -286,6 +305,14 @@ pub mod drtio {
                                         false,
                                     )
                                     .await;
+                                    subkernel::destination_changed(
+                                        aux_mutex,
+                                        routing_table,
+                                        timer,
+                                        destination,
+                                        false,
+                                    )
+                                    .await;
                                 }
                                 Ok(Packet::DestinationOkReply) => (),
                                 Ok(Packet::DestinationSequenceErrorReply { channel }) => {
@@ -328,6 +355,7 @@ pub mod drtio {
                     } else {
                         destination_set_up(routing_table, up_destinations, destination, false).await;
                         remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, false).await;
+                        subkernel::destination_changed(aux_mutex, routing_table, timer, destination, false).await;
                     }
                 } else {
                     if up_links[linkno as usize] {
@@ -346,6 +374,8 @@ pub mod drtio {
                                 destination_set_up(routing_table, up_destinations, destination, true).await;
                                 init_buffer_space(destination as u8, linkno).await;
                                 remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, true)
+                                    .await;
+                                subkernel::destination_changed(aux_mutex, routing_table, timer, destination, true)
                                     .await;
                             }
                             Ok(packet) => error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet),
@@ -433,6 +463,36 @@ pub mod drtio {
         }
     }
 
+    async fn partition_data<PacketF, HandlerF>(
+        linkno: u8,
+        aux_mutex: &Rc<Mutex<bool>>,
+        timer: GlobalTimer,
+        data: &[u8],
+        packet_f: PacketF,
+        reply_handler_f: HandlerF,
+    ) -> Result<(), &'static str>
+    where
+        PacketF: Fn(&[u8; MASTER_PAYLOAD_MAX_SIZE], bool, usize) -> Packet,
+        HandlerF: Fn(&Packet) -> Result<(), &'static str>,
+    {
+        let mut i = 0;
+        while i < data.len() {
+            let mut slice: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
+            let len: usize = if i + MASTER_PAYLOAD_MAX_SIZE < data.len() {
+                MASTER_PAYLOAD_MAX_SIZE
+            } else {
+                data.len() - i
+            } as usize;
+            let last = i + len == data.len();
+            slice[..len].clone_from_slice(&data[i..i + len]);
+            i += len;
+            let packet = packet_f(&slice, last, len);
+            let reply = aux_transact(aux_mutex, linkno, &packet, timer).await?;
+            reply_handler_f(&reply)?;
+        }
+        Ok(())
+    }
+
     pub async fn ddma_upload_trace(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &drtio_routing::RoutingTable,
@@ -442,44 +502,25 @@ pub mod drtio {
         trace: &Vec<u8>,
     ) -> Result<(), &'static str> {
         let linkno = routing_table.0[destination as usize][0] - 1;
-        let mut i = 0;
-        while i < trace.len() {
-            let mut trace_slice: [u8; DMA_TRACE_MAX_SIZE] = [0; DMA_TRACE_MAX_SIZE];
-            let len: usize = if i + DMA_TRACE_MAX_SIZE < trace.len() {
-                DMA_TRACE_MAX_SIZE
-            } else {
-                trace.len() - i
-            } as usize;
-            let last = i + len == trace.len();
-            trace_slice[..len].clone_from_slice(&trace[i..i + len]);
-            i += len;
-            let reply = aux_transact(
-                aux_mutex,
-                linkno,
-                &Packet::DmaAddTraceRequest {
-                    id: id,
-                    destination: destination,
-                    last: last,
-                    length: len as u16,
-                    trace: trace_slice,
-                },
-                timer,
-            )
-            .await;
-            match reply {
-                Ok(Packet::DmaAddTraceReply { succeeded: true }) => (),
-                Ok(Packet::DmaAddTraceReply { succeeded: false }) => {
-                    return Err("error adding trace on satellite");
-                }
-                Ok(_) => {
-                    return Err("adding DMA trace failed, unexpected aux packet");
-                }
-                Err(_) => {
-                    return Err("adding DMA trace failed, aux error");
-                }
-            }
-        }
-        Ok(())
+        partition_data(
+            linkno,
+            aux_mutex,
+            timer,
+            trace,
+            |slice, last, len| Packet::DmaAddTraceRequest {
+                id: id,
+                destination: destination,
+                last: last,
+                length: len as u16,
+                trace: *slice,
+            },
+            |reply| match reply {
+                Packet::DmaAddTraceReply { succeeded: true } => Ok(()),
+                Packet::DmaAddTraceReply { succeeded: false } => Err("error adding trace on satellite"),
+                _ => Err("adding DMA trace failed, unexpected aux packet"),
+            },
+        )
+        .await
     }
 
     pub async fn ddma_send_erase(
@@ -607,6 +648,122 @@ pub mod drtio {
             }
         }
         Ok(remote_buffers)
+    }
+
+    pub async fn subkernel_upload(
+        aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &drtio_routing::RoutingTable,
+        timer: GlobalTimer,
+        id: u32,
+        destination: u8,
+        data: &Vec<u8>,
+    ) -> Result<(), &'static str> {
+        let linkno = routing_table.0[destination as usize][0] - 1;
+        partition_data(
+            linkno,
+            aux_mutex,
+            timer,
+            data,
+            |slice, last, len| Packet::SubkernelAddDataRequest {
+                id: id,
+                destination: destination,
+                last: last,
+                length: len as u16,
+                data: *slice,
+            },
+            |reply| match reply {
+                Packet::SubkernelAddDataReply { succeeded: true } => Ok(()),
+                Packet::SubkernelAddDataReply { succeeded: false } => Err("error adding subkernel on satellite"),
+                _ => Err("adding subkernel failed, unexpected aux packet"),
+            },
+        )
+        .await
+    }
+
+    pub async fn subkernel_load(
+        aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &drtio_routing::RoutingTable,
+        timer: GlobalTimer,
+        id: u32,
+        destination: u8,
+        run: bool,
+    ) -> Result<(), &'static str> {
+        let linkno = routing_table.0[destination as usize][0] - 1;
+        let reply = aux_transact(
+            aux_mutex,
+            linkno,
+            &Packet::SubkernelLoadRunRequest {
+                id: id,
+                destination: destination,
+                run: run,
+            },
+            timer,
+        )
+        .await?;
+        match reply {
+            Packet::SubkernelLoadRunReply { succeeded: true } => return Ok(()),
+            Packet::SubkernelLoadRunReply { succeeded: false } => return Err("error on subkernel run request"),
+            _ => return Err("received unexpected aux packet during subkernel run"),
+        }
+    }
+
+    pub async fn subkernel_retrieve_exception(
+        aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &drtio_routing::RoutingTable,
+        timer: GlobalTimer,
+        destination: u8,
+    ) -> Result<Vec<u8>, &'static str> {
+        let linkno = routing_table.0[destination as usize][0] - 1;
+        let mut remote_data: Vec<u8> = Vec::new();
+        loop {
+            let reply = aux_transact(
+                aux_mutex,
+                linkno,
+                &Packet::SubkernelExceptionRequest {
+                    destination: destination,
+                },
+                timer,
+            )
+            .await?;
+            match reply {
+                Packet::SubkernelException { last, length, data } => {
+                    remote_data.extend(&data[0..length as usize]);
+                    if last {
+                        return Ok(remote_data);
+                    }
+                }
+                _ => return Err("received unexpected aux packet during subkernel exception request"),
+            }
+        }
+    }
+
+    pub async fn subkernel_send_message(
+        aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &drtio_routing::RoutingTable,
+        timer: GlobalTimer,
+        id: u32,
+        destination: u8,
+        message: &[u8],
+    ) -> Result<(), &'static str> {
+        let linkno = routing_table.0[destination as usize][0] - 1;
+        partition_data(
+            linkno,
+            aux_mutex,
+            timer,
+            message,
+            |slice, last, len| Packet::SubkernelMessage {
+                destination: destination,
+                id: id,
+                last: last,
+                length: len as u16,
+                data: *slice,
+            },
+            |reply| match reply {
+                Packet::SubkernelMessageAck { .. } => Ok(()),
+                _ => Err("sending message to subkernel failed, unexpected aux packet"),
+            },
+        )
+        .await
     }
 }
 

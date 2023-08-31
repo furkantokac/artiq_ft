@@ -9,6 +9,8 @@ use super::{cache,
             core1::rtio_get_destination_status,
             dma,
             rpc::{rpc_recv, rpc_send, rpc_send_async}};
+#[cfg(has_drtio)]
+use super::subkernel;
 use crate::{eh_artiq, i2c, rtio};
 
 extern "C" {
@@ -113,6 +115,16 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(i2c_write = i2c::write),
         api!(i2c_read = i2c::read),
         api!(i2c_switch_select = i2c::switch_select),
+
+        // subkernel
+        #[cfg(has_drtio)]
+        api!(subkernel_load_run = subkernel::load_run),
+        #[cfg(has_drtio)]
+        api!(subkernel_await_finish = subkernel::await_finish),
+        #[cfg(has_drtio)]
+        api!(subkernel_send_message = subkernel::send_message),
+        #[cfg(has_drtio)]
+        api!(subkernel_await_message = subkernel::await_message),
 
         // Double-precision floating-point arithmetic helper functions
         // RTABI chapter 4.1.2, Table 2

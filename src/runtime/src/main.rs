@@ -51,6 +51,8 @@ mod rtio;
 mod rtio_clocking;
 mod rtio_dma;
 mod rtio_mgt;
+#[cfg(has_drtio)]
+mod subkernel;
 
 static mut SEEN_ASYNC_ERRORS: u8 = 0;
 

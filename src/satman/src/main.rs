@@ -27,7 +27,7 @@ use embedded_hal::blocking::delay::DelayUs;
 use libboard_artiq::io_expander;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
-use libboard_artiq::{drtio_routing, drtioaux, drtioaux_proto::ANALYZER_MAX_SIZE, identifier_read, logger, pl::csr};
+use libboard_artiq::{drtio_routing, drtioaux, drtioaux_proto::SAT_PAYLOAD_MAX_SIZE, identifier_read, logger, pl::csr};
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
 use libboard_zynq::{gic, i2c::I2c, mpcore, print, println, stdio, time::Milliseconds, timer::GlobalTimer};
@@ -450,7 +450,7 @@ fn process_aux_packet(
             destination: _destination,
         } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
-            let mut data_slice: [u8; ANALYZER_MAX_SIZE] = [0; ANALYZER_MAX_SIZE];
+            let mut data_slice: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
             let meta = analyzer.get_data(&mut data_slice);
             drtioaux::send(
                 0,

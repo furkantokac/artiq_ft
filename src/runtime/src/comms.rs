@@ -1,8 +1,11 @@
 use alloc::{collections::BTreeMap, rc::Rc, string::String, vec, vec::Vec};
 use core::{cell::RefCell, fmt, slice, str};
 
+use core_io::Error as IoError;
 use cslice::CSlice;
 use futures::{future::FutureExt, select_biased};
+#[cfg(has_drtio)]
+use io::{Cursor, ProtoRead};
 use libasync::{smoltcp::{Sockets, TcpStream},
                task};
 use libboard_artiq::drtio_routing;
@@ -28,13 +31,18 @@ use crate::{analyzer, kernel, mgmt, moninj,
             proto_async::*,
             rpc, rtio_dma,
             rtio_mgt::{self, resolve_channel_name}};
+#[cfg(has_drtio)]
+use crate::{subkernel, subkernel::Error as SubkernelError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     NetworkError(smoltcp::Error),
+    IoError,
     UnexpectedPattern,
     UnrecognizedPacket,
     BufferExhausted,
+    #[cfg(has_drtio)]
+    SubkernelError(subkernel::Error),
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -43,9 +51,12 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::NetworkError(error) => write!(f, "network error: {}", error),
+            Error::IoError => write!(f, "io error"),
             Error::UnexpectedPattern => write!(f, "unexpected pattern"),
             Error::UnrecognizedPacket => write!(f, "unrecognized packet"),
             Error::BufferExhausted => write!(f, "buffer exhausted"),
+            #[cfg(has_drtio)]
+            Error::SubkernelError(error) => write!(f, "subkernel error: {:?}", error),
         }
     }
 }
@@ -56,6 +67,19 @@ impl From<smoltcp::Error> for Error {
     }
 }
 
+impl From<IoError> for Error {
+    fn from(_error: IoError) -> Self {
+        Error::IoError
+    }
+}
+
+#[cfg(has_drtio)]
+impl From<subkernel::Error> for Error {
+    fn from(error: subkernel::Error) -> Self {
+        Error::SubkernelError(error)
+    }
+}
+
 #[derive(Debug, FromPrimitive, ToPrimitive)]
 enum Request {
     SystemInfo = 3,
@@ -63,6 +87,7 @@ enum Request {
     RunKernel = 6,
     RPCReply = 7,
     RPCException = 8,
+    UploadSubkernel = 9,
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
@@ -162,6 +187,22 @@ async fn handle_run_kernel(
 ) -> Result<()> {
     control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
     loop {
+        #[cfg(has_drtio)]
+        while let Some(subkernel_finished) =
+            subkernel::get_finished_with_exception(aux_mutex, routing_table, timer).await?
+        {
+            if subkernel_finished.status == subkernel::FinishStatus::CommLost {
+                error!(
+                    "Communication with satellite lost while subkernel {} was running",
+                    subkernel_finished.id
+                );
+            }
+            if let Some(exception) = subkernel_finished.exception {
+                if let Some(stream) = stream {
+                    write_chunk(stream, &exception).await?;
+                }
+            }
+        }
         let reply = control.borrow_mut().rx.async_recv().await;
         match reply {
             kernel::Message::RpcSend { is_async, data } => {
@@ -365,6 +406,117 @@ async fn handle_run_kernel(
                 control.borrow_mut().tx.async_send(reply).await;
             }
             #[cfg(has_drtio)]
+            kernel::Message::SubkernelLoadRunRequest { id, run } => {
+                let succeeded = match subkernel::load(aux_mutex, routing_table, timer, id, run).await {
+                    Ok(()) => true,
+                    Err(e) => {
+                        error!("Error loading subkernel: {:?}", e);
+                        false
+                    }
+                };
+                control
+                    .borrow_mut()
+                    .tx
+                    .async_send(kernel::Message::SubkernelLoadRunReply { succeeded: succeeded })
+                    .await;
+            }
+            #[cfg(has_drtio)]
+            kernel::Message::SubkernelAwaitFinishRequest { id, timeout } => {
+                let res = subkernel::await_finish(aux_mutex, routing_table, timer, id, timeout).await;
+                let status = match res {
+                    Ok(ref res) => {
+                        if res.status == subkernel::FinishStatus::CommLost {
+                            kernel::SubkernelStatus::CommLost
+                        } else if let Some(exception) = &res.exception {
+                            error!("Exception in subkernel");
+                            match stream {
+                                None => (),
+                                Some(stream) => {
+                                    write_chunk(stream, exception).await?;
+                                }
+                            }
+                            // will not be called after exception is served
+                            kernel::SubkernelStatus::OtherError
+                        } else {
+                            kernel::SubkernelStatus::NoError
+                        }
+                    }
+                    Err(SubkernelError::Timeout) => kernel::SubkernelStatus::Timeout,
+                    Err(SubkernelError::IncorrectState) => kernel::SubkernelStatus::IncorrectState,
+                    Err(_) => kernel::SubkernelStatus::OtherError,
+                };
+                control
+                    .borrow_mut()
+                    .tx
+                    .async_send(kernel::Message::SubkernelAwaitFinishReply { status: status })
+                    .await;
+            }
+            #[cfg(has_drtio)]
+            kernel::Message::SubkernelMsgSend { id, data } => {
+                let res = subkernel::message_send(aux_mutex, routing_table, timer, id, data).await;
+                match res {
+                    Ok(_) => (),
+                    Err(e) => {
+                        error!("error sending subkernel message: {:?}", e)
+                    }
+                };
+            }
+            #[cfg(has_drtio)]
+            kernel::Message::SubkernelMsgRecvRequest { id, timeout } => {
+                let message_received = subkernel::message_await(id, timeout, timer).await;
+                let status = match message_received {
+                    Ok(_) => kernel::SubkernelStatus::NoError,
+                    Err(SubkernelError::Timeout) => kernel::SubkernelStatus::Timeout,
+                    Err(SubkernelError::IncorrectState) => kernel::SubkernelStatus::IncorrectState,
+                    Err(SubkernelError::CommLost) => kernel::SubkernelStatus::CommLost,
+                    Err(_) => kernel::SubkernelStatus::OtherError,
+                };
+                control
+                    .borrow_mut()
+                    .tx
+                    .async_send(kernel::Message::SubkernelMsgRecvReply { status: status })
+                    .await;
+                if let Ok((tag, data)) = message_received {
+                    // receive code almost identical to RPC recv, except we are not reading from a stream
+                    let mut reader = Cursor::new(data);
+                    let mut tag: [u8; 1] = [tag];
+                    loop {
+                        // kernel has to consume all arguments in the whole message
+                        let slot = match fast_recv(&mut control.borrow_mut().rx).await {
+                            kernel::Message::RpcRecvRequest(slot) => slot,
+                            other => panic!("expected root value slot from core1, not {:?}", other),
+                        };
+                        rpc::recv_return_cursor(&mut reader, &tag, slot, &|size| {
+                            let control = control.clone();
+                            async move {
+                                if size == 0 {
+                                    0 as *mut ()
+                                } else {
+                                    let mut control = control.borrow_mut();
+                                    fast_send(&mut control.tx, kernel::Message::RpcRecvReply(Ok(size))).await;
+                                    match fast_recv(&mut control.rx).await {
+                                        kernel::Message::RpcRecvRequest(slot) => slot,
+                                        other => {
+                                            panic!("expected nested value slot from kernel CPU, not {:?}", other)
+                                        }
+                                    }
+                                }
+                            }
+                        })
+                        .await?;
+                        control
+                            .borrow_mut()
+                            .tx
+                            .async_send(kernel::Message::RpcRecvReply(Ok(0)))
+                            .await;
+                        match reader.read_u8() {
+                            Ok(0) | Err(_) => break, // reached the end of data, we're done
+                            Ok(t) => tag[0] = t,     // update the tag for next read
+                        };
+                    }
+                }
+            }
+            #[cfg(has_drtio)]
             kernel::Message::UpDestinationsRequest(destination) => {
                 let result = _up_destinations.borrow()[destination as usize];
                 control
@@ -434,9 +586,13 @@ async fn handle_connection(
         return Err(Error::UnexpectedPattern);
     }
     stream.send_slice("e".as_bytes()).await?;
+    #[cfg(has_drtio)]
+    subkernel::clear_subkernels().await;
     loop {
         let request = read_request(stream, true).await?;
         if request.is_none() {
+            #[cfg(has_drtio)]
+            subkernel::clear_subkernels().await;
             return Ok(());
         }
         let request = request.unwrap();
@@ -459,6 +615,29 @@ async fn handle_connection(
                     timer,
                 )
                 .await?;
+            }
+            Request::UploadSubkernel => {
+                #[cfg(has_drtio)]
+                {
+                    let id = read_i32(stream).await? as u32;
+                    let destination = read_i8(stream).await? as u8;
+                    let buffer = read_bytes(stream, 1024 * 1024).await?;
+                    subkernel::add_subkernel(id, destination, buffer).await;
+                    match subkernel::upload(aux_mutex, routing_table, timer, id).await {
+                        Ok(_) => write_header(stream, Reply::LoadCompleted).await?,
+                        Err(_) => {
+                            write_header(stream, Reply::LoadFailed).await?;
+                            write_chunk(stream, b"subkernel failed to load").await?;
+                            return Err(Error::UnexpectedPattern);
+                        }
+                    }
+                }
+                #[cfg(not(has_drtio))] 
+                {
+                    write_header(stream, Reply::LoadFailed).await?;
+                    write_chunk(stream, b"No DRTIO on this system, subkernels are not supported").await?;
+                    return Err(Error::UnexpectedPattern);
+                }
             }
             _ => {
                 error!("unexpected request from host: {:?}", request);
