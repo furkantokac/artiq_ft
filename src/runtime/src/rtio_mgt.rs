@@ -1,20 +1,16 @@
-use alloc::{collections::BTreeMap, rc::Rc, string::String};
+use alloc::rc::Rc;
 use core::cell::RefCell;
 
-use io::{Cursor, ProtoRead};
 use libboard_artiq::{drtio_routing, pl::csr};
 use libboard_zynq::timer::GlobalTimer;
-use libconfig::Config;
 use libcortex_a9::mutex::Mutex;
-use log::warn;
-
-static mut RTIO_DEVICE_MAP: BTreeMap<u32, String> = BTreeMap::new();
 
 #[cfg(has_drtio)]
 pub mod drtio {
     use alloc::vec::Vec;
 
     use embedded_hal::blocking::delay::DelayMs;
+    use kernel::{ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR, SEEN_ASYNC_ERRORS};
     use libasync::{delay, task};
     use libboard_artiq::{drtioaux::Error, drtioaux_async, drtioaux_async::Packet,
                          drtioaux_proto::MASTER_PAYLOAD_MAX_SIZE};
@@ -22,8 +18,7 @@ pub mod drtio {
     use log::{error, info, warn};
 
     use super::*;
-    use crate::{analyzer::remote_analyzer::RemoteBuffer, rtio_dma::remote_dma, subkernel, ASYNC_ERROR_BUSY,
-                ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR, SEEN_ASYNC_ERRORS};
+    use crate::{analyzer::remote_analyzer::RemoteBuffer, rtio_dma::remote_dma, subkernel};
 
     pub fn startup(
         aux_mutex: &Rc<Mutex<bool>>,
@@ -756,46 +751,6 @@ pub mod drtio {
     }
 }
 
-fn read_device_map(cfg: &Config) -> BTreeMap<u32, String> {
-    let mut device_map: BTreeMap<u32, String> = BTreeMap::new();
-    let _ = cfg
-        .read("device_map")
-        .and_then(|raw_bytes| {
-            let mut bytes_cr = Cursor::new(raw_bytes);
-            let size = bytes_cr.read_u32().unwrap();
-            for _ in 0..size {
-                let channel = bytes_cr.read_u32().unwrap();
-                let device_name = bytes_cr.read_string().unwrap();
-                if let Some(old_entry) = device_map.insert(channel, device_name.clone()) {
-                    warn!(
-                        "conflicting device map entries for RTIO channel {}: '{}' and '{}'",
-                        channel, old_entry, device_name
-                    );
-                }
-            }
-            Ok(())
-        })
-        .or_else(|err| {
-            warn!(
-                "error reading device map ({}), device names will not be available in RTIO error messages",
-                err
-            );
-            Err(err)
-        });
-    device_map
-}
-
-fn _resolve_channel_name(channel: u32, device_map: &BTreeMap<u32, String>) -> String {
-    match device_map.get(&channel) {
-        Some(val) => val.clone(),
-        None => String::from("unknown"),
-    }
-}
-
-pub fn resolve_channel_name(channel: u32) -> String {
-    _resolve_channel_name(channel, unsafe { &RTIO_DEVICE_MAP })
-}
-
 #[cfg(not(has_drtio))]
 pub mod drtio {
     use super::*;
@@ -817,11 +772,7 @@ pub fn startup(
     routing_table: &Rc<RefCell<drtio_routing::RoutingTable>>,
     up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
     timer: GlobalTimer,
-    cfg: &Config,
 ) {
-    unsafe {
-        RTIO_DEVICE_MAP = read_device_map(cfg);
-    }
     drtio::startup(aux_mutex, routing_table, up_destinations, timer);
     unsafe {
         csr::rtio_core::reset_phy_write(1);

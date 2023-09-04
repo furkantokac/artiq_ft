@@ -2,8 +2,8 @@ use alloc::vec::Vec;
 
 use cslice::CSlice;
 
-use super::{Message, SubkernelStatus, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0};
-use crate::{artiq_raise, rpc::send_args};
+use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0};
+use crate::{artiq_raise, rpc::send_args, Message, SubkernelStatus};
 
 pub extern "C" fn load_run(id: u32, run: bool) {
     unsafe {

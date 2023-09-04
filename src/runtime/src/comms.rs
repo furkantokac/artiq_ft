@@ -6,6 +6,9 @@ use cslice::CSlice;
 use futures::{future::FutureExt, select_biased};
 #[cfg(has_drtio)]
 use io::{Cursor, ProtoRead};
+use kernel::resolve_channel_name;
+#[cfg(has_drtio)]
+use kernel::rpc;
 use libasync::{smoltcp::{Sockets, TcpStream},
                task};
 use libboard_artiq::drtio_routing;
@@ -27,10 +30,7 @@ use num_traits::{FromPrimitive, ToPrimitive};
 
 #[cfg(has_drtio)]
 use crate::pl;
-use crate::{analyzer, kernel, mgmt, moninj,
-            proto_async::*,
-            rpc, rtio_dma,
-            rtio_mgt::{self, resolve_channel_name}};
+use crate::{analyzer, mgmt, moninj, proto_async::*, rpc_async, rtio_dma, rtio_mgt};
 #[cfg(has_drtio)]
 use crate::{subkernel, subkernel::Error as SubkernelError};
 
@@ -207,7 +207,7 @@ async fn handle_run_kernel(
                                 kernel::Message::RpcRecvRequest(slot) => slot,
                                 other => panic!("expected root value slot from core1, not {:?}", other),
                             };
-                            rpc::recv_return(stream, &tag, slot, &|size| {
+                            rpc_async::recv_return(stream, &tag, slot, &|size| {
                                 let control = control.clone();
                                 async move {
                                     if size == 0 {
@@ -471,24 +471,20 @@ async fn handle_run_kernel(
                             kernel::Message::RpcRecvRequest(slot) => slot,
                             other => panic!("expected root value slot from core1, not {:?}", other),
                         };
-                        rpc::recv_return_cursor(&mut reader, &tag, slot, &|size| {
-                            let control = control.clone();
-                            async move {
-                                if size == 0 {
-                                    0 as *mut ()
-                                } else {
-                                    let mut control = control.borrow_mut();
-                                    fast_send(&mut control.tx, kernel::Message::RpcRecvReply(Ok(size))).await;
-                                    match fast_recv(&mut control.rx).await {
-                                        kernel::Message::RpcRecvRequest(slot) => slot,
-                                        other => {
-                                            panic!("expected nested value slot from kernel CPU, not {:?}", other)
-                                        }
+                        rpc::recv_return(&mut reader, &tag, slot, &|size| {
+                            if size == 0 {
+                                0 as *mut ()
+                            } else {
+                                let mut control = control.borrow_mut();
+                                control.tx.send(kernel::Message::RpcRecvReply(Ok(size)));
+                                match control.rx.recv() {
+                                    kernel::Message::RpcRecvRequest(slot) => slot,
+                                    other => {
+                                        panic!("expected nested value slot from kernel CPU, not {:?}", other)
                                     }
                                 }
                             }
-                        })
-                        .await?;
+                        })?;
                         control
                             .borrow_mut()
                             .tx
@@ -619,7 +615,7 @@ async fn handle_connection(
                         }
                     }
                 }
-                #[cfg(not(has_drtio))] 
+                #[cfg(not(has_drtio))]
                 {
                     write_header(stream, Reply::LoadFailed).await?;
                     write_chunk(stream, b"No DRTIO on this system, subkernels are not supported").await?;
@@ -688,7 +684,8 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
     #[cfg(has_drtio_routing)]
     drtio_routing::interconnect_disable_all();
 
-    rtio_mgt::startup(&aux_mutex, &drtio_routing_table, &up_destinations, timer, &cfg);
+    rtio_mgt::startup(&aux_mutex, &drtio_routing_table, &up_destinations, timer);
+    kernel::setup_device_map(&cfg);
 
     analyzer::start(&aux_mutex, &drtio_routing_table, &up_destinations, timer);
     moninj::start(timer, &aux_mutex, &drtio_routing_table);

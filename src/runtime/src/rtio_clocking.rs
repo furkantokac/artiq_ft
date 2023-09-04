@@ -1,4 +1,6 @@
 use embedded_hal::blocking::delay::DelayMs;
+#[cfg(has_si5324)]
+use kernel::i2c;
 use libboard_artiq::pl;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
@@ -7,9 +9,6 @@ use libboard_zynq::i2c::I2c;
 use libboard_zynq::timer::GlobalTimer;
 use libconfig::Config;
 use log::{info, warn};
-
-#[cfg(has_si5324)]
-use crate::i2c;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[allow(non_camel_case_types)]

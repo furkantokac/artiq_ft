@@ -2,7 +2,7 @@ use core::ptr::{read_volatile, write_volatile};
 
 use cslice::CSlice;
 
-use crate::{artiq_raise, pl::csr, rtio_mgt::resolve_channel_name};
+use crate::{artiq_raise, pl::csr, resolve_channel_name};
 
 pub const RTIO_O_STATUS_WAIT: u8 = 1;
 pub const RTIO_O_STATUS_UNDERFLOW: u8 = 2;

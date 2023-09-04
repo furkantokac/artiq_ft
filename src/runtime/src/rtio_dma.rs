@@ -2,13 +2,12 @@ use alloc::{collections::BTreeMap, rc::Rc, string::String, vec::Vec};
 #[cfg(has_drtio)]
 use core::mem;
 
+use kernel::DmaRecorder;
 #[cfg(has_drtio)]
 use libasync::task;
 use libboard_artiq::drtio_routing::RoutingTable;
 use libboard_zynq::timer::GlobalTimer;
 use libcortex_a9::{cache::dcci_slice, mutex::Mutex};
-
-use crate::kernel::DmaRecorder;
 
 const ALIGNMENT: usize = 16 * 8;
 

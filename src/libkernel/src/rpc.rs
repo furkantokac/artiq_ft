@@ -1,75 +1,62 @@
-use alloc::boxed::Box;
-#[cfg(has_drtio)]
-use alloc::vec::Vec;
-use core::{future::Future, str};
+use core::str;
 
-use async_recursion::async_recursion;
 use byteorder::{ByteOrder, NativeEndian};
-use core_io::{Error, Write};
+use core_io::{Error, Read, Write};
 use cslice::{CMutSlice, CSlice};
-#[cfg(has_drtio)]
-use io::{Cursor, ProtoRead};
-use io::ProtoWrite;
-use libasync::smoltcp::TcpStream;
-use libboard_zynq::smoltcp;
+use io::{ProtoRead, ProtoWrite};
 use log::trace;
 
 use self::tag::{split_tag, Tag, TagIterator};
-use crate::proto_async;
 
 #[inline]
-fn round_up(val: usize, power_of_two: usize) -> usize {
+pub fn round_up(val: usize, power_of_two: usize) -> usize {
     assert!(power_of_two.is_power_of_two());
     let max_rem = power_of_two - 1;
     (val + max_rem) & (!max_rem)
 }
 
 #[inline]
-unsafe fn round_up_mut<T>(ptr: *mut T, power_of_two: usize) -> *mut T {
+pub unsafe fn round_up_mut<T>(ptr: *mut T, power_of_two: usize) -> *mut T {
     round_up(ptr as usize, power_of_two) as *mut T
 }
 
 #[inline]
-unsafe fn round_up_const<T>(ptr: *const T, power_of_two: usize) -> *const T {
+pub unsafe fn round_up_const<T>(ptr: *const T, power_of_two: usize) -> *const T {
     round_up(ptr as usize, power_of_two) as *const T
 }
 
 #[inline]
-unsafe fn align_ptr<T>(ptr: *const ()) -> *const T {
+pub unsafe fn align_ptr<T>(ptr: *const ()) -> *const T {
     round_up_const(ptr, core::mem::align_of::<T>()) as *const T
 }
 
 #[inline]
-unsafe fn align_ptr_mut<T>(ptr: *mut ()) -> *mut T {
+pub unsafe fn align_ptr_mut<T>(ptr: *mut ()) -> *mut T {
     round_up_mut(ptr, core::mem::align_of::<T>()) as *mut T
 }
 
-/// Reads (deserializes) `length` array or list elements of type `tag` from `stream`,
-/// writing them into the buffer given by `storage`.
-///
-/// `alloc` is used for nested allocations (if elements themselves contain
-/// lists/arrays), see [recv_value].
-#[async_recursion(?Send)]
-async unsafe fn recv_elements<F>(
-    stream: &TcpStream,
-    elt_tag: Tag<'async_recursion>,
+// versions for reader rather than TcpStream
+// they will be made into sync for satellite subkernels later
+unsafe fn recv_elements<F, R>(
+    reader: &mut R,
+    elt_tag: Tag,
     length: usize,
     storage: *mut (),
-    alloc: &(impl Fn(usize) -> F + 'async_recursion),
-) -> Result<(), smoltcp::Error>
+    alloc: &F,
+) -> Result<(), Error>
 where
-    F: Future<Output = *mut ()>,
+    F: Fn(usize) -> *mut (),
+    R: Read + ?Sized,
 {
-    // List of simple types are special-cased in the protocol for performance.
     match elt_tag {
         Tag::Bool => {
             let dest = core::slice::from_raw_parts_mut(storage as *mut u8, length);
-            proto_async::read_chunk(stream, dest).await?;
+            reader.read_exact(dest)?;
         }
         Tag::Int32 => {
             let ptr = storage as *mut u32;
             let dest = core::slice::from_raw_parts_mut(ptr as *mut u8, length * 4);
-            proto_async::read_chunk(stream, dest).await?;
+            reader.read_exact(dest)?;
             drop(dest);
             let dest = core::slice::from_raw_parts_mut(ptr, length);
             NativeEndian::from_slice_u32(dest);
@@ -77,7 +64,7 @@ where
         Tag::Int64 | Tag::Float64 => {
             let ptr = storage as *mut u64;
             let dest = core::slice::from_raw_parts_mut(ptr as *mut u8, length * 8);
-            proto_async::read_chunk(stream, dest).await?;
+            reader.read_exact(dest)?;
             drop(dest);
             let dest = core::slice::from_raw_parts_mut(ptr, length);
             NativeEndian::from_slice_u64(dest);
@@ -85,27 +72,17 @@ where
         _ => {
             let mut data = storage;
             for _ in 0..length {
-                recv_value(stream, elt_tag, &mut data, alloc).await?
+                recv_value(reader, elt_tag, &mut data, alloc)?
             }
         }
     }
     Ok(())
 }
 
-/// Reads (deserializes) a value of type `tag` from `stream`, writing the results to
-/// the kernel-side buffer `data` (the passed pointer to which is incremented to point
-/// past the just-received data). For nested allocations (lists/arrays), `alloc` is
-/// invoked any number of times with the size of the required allocation as a parameter
-/// (which is assumed to be correctly aligned for all payload types).
-#[async_recursion(?Send)]
-async unsafe fn recv_value<F>(
-    stream: &TcpStream,
-    tag: Tag<'async_recursion>,
-    data: &mut *mut (),
-    alloc: &(impl Fn(usize) -> F + 'async_recursion),
-) -> Result<(), smoltcp::Error>
+unsafe fn recv_value<F, R>(reader: &mut R, tag: Tag, data: &mut *mut (), alloc: &F) -> Result<(), Error>
 where
-    F: Future<Output = *mut ()>,
+    F: Fn(usize) -> *mut (),
+    R: Read + ?Sized,
 {
     macro_rules! consume_value {
         ($ty:ty, | $ptr:ident | $map:expr) => {{
@@ -118,22 +95,22 @@ where
     match tag {
         Tag::None => Ok(()),
         Tag::Bool => consume_value!(i8, |ptr| {
-            *ptr = proto_async::read_i8(stream).await?;
+            *ptr = reader.read_u8()? as i8;
             Ok(())
         }),
         Tag::Int32 => consume_value!(i32, |ptr| {
-            *ptr = proto_async::read_i32(stream).await?;
+            *ptr = reader.read_u32()? as i32;
             Ok(())
         }),
         Tag::Int64 | Tag::Float64 => consume_value!(i64, |ptr| {
-            *ptr = proto_async::read_i64(stream).await?;
+            *ptr = reader.read_u64()? as i64;
             Ok(())
         }),
         Tag::String | Tag::Bytes | Tag::ByteArray => {
             consume_value!(CMutSlice<u8>, |ptr| {
-                let length = proto_async::read_i32(stream).await? as usize;
-                *ptr = CMutSlice::new(alloc(length).await as *mut u8, length);
-                proto_async::read_chunk(stream, (*ptr).as_mut()).await?;
+                let length = reader.read_u32()? as usize;
+                *ptr = CMutSlice::new(alloc(length) as *mut u8, length);
+                reader.read_exact((*ptr).as_mut())?;
                 Ok(())
             })
         }
@@ -143,10 +120,8 @@ where
             let mut it = it.clone();
             for _ in 0..arity {
                 let tag = it.next().expect("truncated tag");
-                recv_value(stream, tag, data, alloc).await?
+                recv_value(reader, tag, data, alloc)?
             }
-            // Take into account any tail padding (if element(s) with largest alignment
-            // are not at the end).
             *data = round_up_mut(*data, alignment);
             Ok(())
         }
@@ -158,50 +133,41 @@ where
             }
             consume_value!(*mut List, |ptr_to_list| {
                 let tag = it.clone().next().expect("truncated tag");
-                let length = proto_async::read_i32(stream).await? as usize;
+                let length = reader.read_u32()? as usize;
 
-                // To avoid multiple kernel CPU roundtrips, use a single allocation for
-                // both the pointer/length List (slice) and the backing storage for the
-                // elements. We can assume that alloc() is aligned suitably, so just
-                // need to take into account any extra padding required.
-                // (Note: At the time of writing, there will never actually be any types
-                // with alignment larger than 8 bytes, so storage_offset == 0 always.)
                 let list_size = 4 + 4;
                 let storage_offset = round_up(list_size, tag.alignment());
                 let storage_size = tag.size() * length;
 
-                let allocation = alloc(storage_offset + storage_size).await as *mut u8;
+                let allocation = alloc(storage_offset + storage_size) as *mut u8;
                 *ptr_to_list = allocation as *mut List;
                 let storage = allocation.offset(storage_offset as isize) as *mut ();
 
                 (**ptr_to_list).length = length;
                 (**ptr_to_list).elements = storage;
-                recv_elements(stream, tag, length, storage, alloc).await
+                recv_elements(reader, tag, length, storage, alloc)
             })
         }
         Tag::Array(it, num_dims) => {
             consume_value!(*mut (), |buffer| {
-                // Deserialize length along each dimension and compute total number of
-                // elements.
                 let mut total_len: usize = 1;
                 for _ in 0..num_dims {
-                    let len = proto_async::read_i32(stream).await? as usize;
+                    let len = reader.read_u32()? as usize;
                     total_len *= len;
                     consume_value!(usize, |ptr| *ptr = len)
                 }
 
-                // Allocate backing storage for elements; deserialize them.
                 let elt_tag = it.clone().next().expect("truncated tag");
-                *buffer = alloc(elt_tag.size() * total_len).await;
-                recv_elements(stream, elt_tag, total_len, *buffer, alloc).await
+                *buffer = alloc(elt_tag.size() * total_len);
+                recv_elements(reader, elt_tag, total_len, *buffer, alloc)
             })
         }
         Tag::Range(it) => {
             *data = round_up_mut(*data, tag.alignment());
             let tag = it.clone().next().expect("truncated tag");
-            recv_value(stream, tag, data, alloc).await?;
-            recv_value(stream, tag, data, alloc).await?;
-            recv_value(stream, tag, data, alloc).await?;
+            recv_value(reader, tag, data, alloc)?;
+            recv_value(reader, tag, data, alloc)?;
+            recv_value(reader, tag, data, alloc)?;
             Ok(())
         }
         Tag::Keyword(_) => unreachable!(),
@@ -209,21 +175,17 @@ where
     }
 }
 
-pub async fn recv_return<F>(
-    stream: &TcpStream,
-    tag_bytes: &[u8],
-    data: *mut (),
-    alloc: &impl Fn(usize) -> F,
-) -> Result<(), smoltcp::Error>
+pub fn recv_return<F, R>(reader: &mut R, tag_bytes: &[u8], data: *mut (), alloc: &F) -> Result<(), Error>
 where
-    F: Future<Output = *mut ()>,
+    F: Fn(usize) -> *mut (),
+    R: Read + ?Sized,
 {
     let mut it = TagIterator::new(tag_bytes);
     trace!("recv ...->{}", it);
 
     let tag = it.next().expect("truncated tag");
     let mut data = data;
-    unsafe { recv_value(stream, tag, &mut data, alloc).await? };
+    unsafe { recv_value(reader, tag, &mut data, alloc)? };
 
     Ok(())
 }
@@ -538,7 +500,7 @@ where W: Write + ?Sized {
     Ok(())
 }
 
-mod tag {
+pub mod tag {
     use core::fmt;
 
     pub fn split_tag(tag_bytes: &[u8]) -> (&[u8], &[u8]) {

@@ -2,12 +2,8 @@
 #![no_main]
 #![recursion_limit = "1024"] // for futures_util::select!
 #![feature(alloc_error_handler)]
-#![feature(panic_info_message)]
-#![feature(c_variadic)]
 #![feature(const_btree_new)]
-#![feature(const_in_array_repeat_expressions)]
-#![feature(naked_functions)]
-#![feature(asm)]
+#![feature(panic_info_message)]
 
 #[macro_use]
 extern crate alloc;
@@ -15,7 +11,8 @@ extern crate alloc;
 #[cfg(feature = "target_kasli_soc")]
 use core::cell::RefCell;
 
-use libasync::{block_async, task};
+use kernel;
+use libasync::task;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_artiq::io_expander;
 use libboard_artiq::{identifier_read, logger, pl};
@@ -23,89 +20,21 @@ use libboard_zynq::{gic, mpcore, timer::GlobalTimer};
 use libconfig::Config;
 use libcortex_a9::l2c::enable_l2_cache;
 use libsupport_zynq::ram;
-use log::{error, info, warn};
-use nb;
-use void::Void;
-
-const ASYNC_ERROR_COLLISION: u8 = 1 << 0;
-const ASYNC_ERROR_BUSY: u8 = 1 << 1;
-const ASYNC_ERROR_SEQUENCE_ERROR: u8 = 1 << 2;
+use log::{info, warn};
 
 mod analyzer;
 mod comms;
-mod eh_artiq;
-mod i2c;
-mod irq;
-mod kernel;
+
 mod mgmt;
 mod moninj;
 mod panic;
 mod proto_async;
-mod rpc;
-#[cfg(ki_impl = "csr")]
-#[path = "rtio_csr.rs"]
-mod rtio;
-#[cfg(ki_impl = "acp")]
-#[path = "rtio_acp.rs"]
-mod rtio;
+mod rpc_async;
 mod rtio_clocking;
 mod rtio_dma;
 mod rtio_mgt;
 #[cfg(has_drtio)]
 mod subkernel;
-
-static mut SEEN_ASYNC_ERRORS: u8 = 0;
-
-pub unsafe fn get_async_errors() -> u8 {
-    let errors = SEEN_ASYNC_ERRORS;
-    SEEN_ASYNC_ERRORS = 0;
-    errors
-}
-
-fn wait_for_async_rtio_error() -> nb::Result<(), Void> {
-    unsafe {
-        if pl::csr::rtio_core::async_error_read() != 0 {
-            Ok(())
-        } else {
-            Err(nb::Error::WouldBlock)
-        }
-    }
-}
-
-async fn report_async_rtio_errors() {
-    loop {
-        let _ = block_async!(wait_for_async_rtio_error()).await;
-        unsafe {
-            let errors = pl::csr::rtio_core::async_error_read();
-            if errors & ASYNC_ERROR_COLLISION != 0 {
-                let channel = pl::csr::rtio_core::collision_channel_read();
-                error!(
-                    "RTIO collision involving channel 0x{:04x}:{}",
-                    channel,
-                    rtio_mgt::resolve_channel_name(channel as u32)
-                );
-            }
-            if errors & ASYNC_ERROR_BUSY != 0 {
-                let channel = pl::csr::rtio_core::busy_channel_read();
-                error!(
-                    "RTIO busy error involving channel 0x{:04x}:{}",
-                    channel,
-                    rtio_mgt::resolve_channel_name(channel as u32)
-                );
-            }
-            if errors & ASYNC_ERROR_SEQUENCE_ERROR != 0 {
-                let channel = pl::csr::rtio_core::sequence_error_channel_read();
-                error!(
-                    "RTIO sequence error involving channel 0x{:04x}:{}",
-                    channel,
-                    rtio_mgt::resolve_channel_name(channel as u32)
-                );
-            }
-            SEEN_ASYNC_ERRORS = errors;
-            pl::csr::rtio_core::async_error_write(errors);
-        }
-    }
-}
 
 #[cfg(feature = "target_kasli_soc")]
 async fn io_expanders_service(
@@ -145,9 +74,9 @@ pub fn main_core0() {
 
     info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
-    i2c::init();
+    kernel::i2c::init();
     #[cfg(feature = "target_kasli_soc")]
-    let i2c_bus = unsafe { (i2c::I2C_BUS).as_mut().unwrap() };
+    let i2c_bus = unsafe { (kernel::i2c::I2C_BUS).as_mut().unwrap() };
 
     #[cfg(feature = "target_kasli_soc")]
     let (mut io_expander0, mut io_expander1);
@@ -180,7 +109,7 @@ pub fn main_core0() {
 
     rtio_clocking::init(&mut timer, &cfg);
 
-    task::spawn(report_async_rtio_errors());
+    task::spawn(kernel::report_async_rtio_errors());
 
     #[cfg(feature = "target_kasli_soc")]
     task::spawn(io_expanders_service(

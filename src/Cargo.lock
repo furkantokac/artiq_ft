@@ -219,6 +219,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "kernel"
+version = "0.1.0"
+dependencies = [
+ "build_zynq",
+ "byteorder",
+ "core_io",
+ "cslice",
+ "dwarf",
+ "dyld",
+ "io",
+ "libasync",
+ "libboard_artiq",
+ "libboard_zynq",
+ "libc",
+ "libconfig",
+ "libcortex_a9",
+ "libm",
+ "libregister",
+ "libsupport_zynq",
+ "log",
+ "log_buffer",
+ "nb 0.1.3",
+ "unwind",
+ "void",
+]
+
+[[package]]
 name = "libasync"
 version = "0.0.0"
 source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c15b54f92b3d4e125ae47a0dce7abe4b2bc9e054"
@@ -438,18 +465,17 @@ dependencies = [
  "embedded-hal",
  "futures",
  "io",
+ "kernel",
  "libasync",
  "libboard_artiq",
  "libboard_zynq",
  "libc",
  "libconfig",
  "libcortex_a9",
- "libm",
  "libregister",
  "libsupport_zynq",
  "log",
  "log_buffer",
- "nb 0.1.3",
  "num-derive",
  "num-traits",
  "unwind",

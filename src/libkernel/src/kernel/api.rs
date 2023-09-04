@@ -5,6 +5,8 @@ use libc::{c_char, c_int, size_t};
 use libm;
 use log::{info, warn};
 
+#[cfg(has_drtio)]
+use super::subkernel;
 use super::{cache,
             core1::rtio_get_destination_status,
             dma,

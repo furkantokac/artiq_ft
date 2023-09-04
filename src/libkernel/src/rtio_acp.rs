@@ -4,7 +4,7 @@ use cslice::CSlice;
 use libcortex_a9::asm;
 use vcell::VolatileCell;
 
-use crate::{artiq_raise, pl::csr, rtio_mgt::resolve_channel_name};
+use crate::{artiq_raise, pl::csr, resolve_channel_name};
 
 pub const RTIO_O_STATUS_WAIT: i32 = 1;
 pub const RTIO_O_STATUS_UNDERFLOW: i32 = 2;
