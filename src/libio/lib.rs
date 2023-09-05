@@ -1,13 +1,10 @@
 #![no_std]
 #![feature(never_type)]
-#![cfg_attr(feature = "alloc", feature(alloc))]
 
+#[cfg(feature = "alloc")]
 extern crate alloc;
 extern crate core_io;
 
-#[cfg(feature = "alloc")]
-#[macro_use]
-use alloc;
 #[cfg(feature = "byteorder")]
 extern crate byteorder;
 

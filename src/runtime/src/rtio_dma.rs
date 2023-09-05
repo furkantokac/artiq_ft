@@ -2,7 +2,7 @@ use alloc::{collections::BTreeMap, rc::Rc, string::String, vec::Vec};
 #[cfg(has_drtio)]
 use core::mem;
 
-use kernel::DmaRecorder;
+use ksupport::kernel::DmaRecorder;
 #[cfg(has_drtio)]
 use libasync::task;
 use libboard_artiq::drtio_routing::RoutingTable;

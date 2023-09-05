@@ -6,9 +6,9 @@ use cslice::CSlice;
 use futures::{future::FutureExt, select_biased};
 #[cfg(has_drtio)]
 use io::{Cursor, ProtoRead};
-use kernel::resolve_channel_name;
+use ksupport::{kernel, resolve_channel_name};
 #[cfg(has_drtio)]
-use kernel::rpc;
+use ksupport::rpc;
 use libasync::{smoltcp::{Sockets, TcpStream},
                task};
 use libboard_artiq::drtio_routing;
@@ -252,7 +252,7 @@ async fn handle_run_kernel(
                             let function = read_i32(stream).await? as u32;
                             control
                                 .tx
-                                .async_send(kernel::Message::RpcRecvReply(Err(kernel::RPCException {
+                                .async_send(kernel::Message::RpcRecvReply(Err(ksupport::RPCException {
                                     id,
                                     message,
                                     param,
@@ -444,6 +444,7 @@ async fn handle_run_kernel(
                         error!("error sending subkernel message: {:?}", e)
                     }
                 };
+                control.borrow_mut().tx.async_send(kernel::Message::SubkernelMsgSent).await;
             }
             #[cfg(has_drtio)]
             kernel::Message::SubkernelMsgRecvRequest { id, timeout } => {
@@ -685,7 +686,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
     drtio_routing::interconnect_disable_all();
 
     rtio_mgt::startup(&aux_mutex, &drtio_routing_table, &up_destinations, timer);
-    kernel::setup_device_map(&cfg);
+    ksupport::setup_device_map(&cfg);
 
     analyzer::start(&aux_mutex, &drtio_routing_table, &up_destinations, timer);
     moninj::start(timer, &aux_mutex, &drtio_routing_table);

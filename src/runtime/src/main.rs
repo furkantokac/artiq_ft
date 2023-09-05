@@ -11,7 +11,7 @@ extern crate alloc;
 #[cfg(feature = "target_kasli_soc")]
 use core::cell::RefCell;
 
-use kernel;
+use ksupport;
 use libasync::task;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_artiq::io_expander;
@@ -74,9 +74,9 @@ pub fn main_core0() {
 
     info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
-    kernel::i2c::init();
+    ksupport::i2c::init();
     #[cfg(feature = "target_kasli_soc")]
-    let i2c_bus = unsafe { (kernel::i2c::I2C_BUS).as_mut().unwrap() };
+    let i2c_bus = unsafe { (ksupport::i2c::I2C_BUS).as_mut().unwrap() };
 
     #[cfg(feature = "target_kasli_soc")]
     let (mut io_expander0, mut io_expander1);
@@ -109,7 +109,7 @@ pub fn main_core0() {
 
     rtio_clocking::init(&mut timer, &cfg);
 
-    task::spawn(kernel::report_async_rtio_errors());
+    task::spawn(ksupport::report_async_rtio_errors());
 
     #[cfg(feature = "target_kasli_soc")]
     task::spawn(io_expanders_service(

@@ -5,6 +5,10 @@ use libcortex_a9::asm;
 use vcell::VolatileCell;
 
 use crate::{artiq_raise, pl::csr, resolve_channel_name};
+#[cfg(has_drtiosat)]
+pub use crate::pl::csr::drtiosat as rtio_core;
+#[cfg(has_rtio_core)]
+pub use crate::pl::csr::rtio_core;
 
 pub const RTIO_O_STATUS_WAIT: i32 = 1;
 pub const RTIO_O_STATUS_UNDERFLOW: i32 = 2;
@@ -52,7 +56,7 @@ static mut TRANSACTION_BUFFER: Transaction = Transaction {
 
 pub extern "C" fn init() {
     unsafe {
-        csr::rtio_core::reset_write(1);
+        rtio_core::reset_write(1);
         csr::rtio::engine_addr_base_write(&TRANSACTION_BUFFER as *const Transaction as u32);
         csr::rtio::enable_write(1);
     }

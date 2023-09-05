@@ -1,3 +1,5 @@
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
 use core_io::{Error as IoError, Read, Write};
 
 #[derive(Debug, Clone)]
@@ -64,7 +66,7 @@ impl Write for Cursor<&mut [u8]> {
 }
 
 #[cfg(feature = "alloc")]
-impl Write for Cursor<::alloc::Vec<u8>> {
+impl Write for Cursor<Vec<u8>> {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         self.inner.extend_from_slice(buf);

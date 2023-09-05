@@ -1,5 +1,5 @@
 [package]
-name = "kernel"
+name = "ksupport"
 description = "Kernel support for Zynq-based platforms"
 version = "0.1.0"
 authors = ["M-Labs"]

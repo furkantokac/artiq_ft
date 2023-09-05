@@ -11,8 +11,6 @@ use super::{cache,
             core1::rtio_get_destination_status,
             dma,
             rpc::{rpc_recv, rpc_send, rpc_send_async}};
-#[cfg(has_drtio)]
-use super::subkernel;
 use crate::{eh_artiq, i2c, rtio};
 
 extern "C" {

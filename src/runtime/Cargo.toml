@@ -39,5 +39,5 @@ dwarf = { path = "../libdwarf" }
 unwind = { path = "../libunwind" }
 libc = { path = "../libc" }
 io = { path = "../libio" }
-kernel = { path = "../libkernel" }
+ksupport = { path = "../libksupport" }
 libboard_artiq = { path = "../libboard_artiq" }

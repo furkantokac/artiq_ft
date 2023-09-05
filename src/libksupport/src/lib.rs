@@ -8,14 +8,14 @@
 #[macro_use]
 extern crate alloc;
 
-use alloc::{collections::BTreeMap, string::String, vec::Vec};
+use alloc::{collections::BTreeMap, string::String};
 
 use io::{Cursor, ProtoRead};
-pub use kernel::{Control, DmaRecorder};
 use libasync::block_async;
 use libconfig::Config;
 use log::{error, warn};
 use void::Void;
+use rtio::rtio_core;
 
 pub mod eh_artiq;
 pub mod i2c;
@@ -151,7 +151,7 @@ pub unsafe fn get_async_errors() -> u8 {
 
 fn wait_for_async_rtio_error() -> nb::Result<(), Void> {
     unsafe {
-        if pl::csr::rtio_core::async_error_read() != 0 {
+        if rtio_core::async_error_read() != 0 {
             Ok(())
         } else {
             Err(nb::Error::WouldBlock)
@@ -163,9 +163,9 @@ pub async fn report_async_rtio_errors() {
     loop {
         let _ = block_async!(wait_for_async_rtio_error()).await;
         unsafe {
-            let errors = pl::csr::rtio_core::async_error_read();
+            let errors = rtio_core::async_error_read();
             if errors & ASYNC_ERROR_COLLISION != 0 {
-                let channel = pl::csr::rtio_core::collision_channel_read();
+                let channel = rtio_core::collision_channel_read();
                 error!(
                     "RTIO collision involving channel 0x{:04x}:{}",
                     channel,
@@ -173,7 +173,7 @@ pub async fn report_async_rtio_errors() {
                 );
             }
             if errors & ASYNC_ERROR_BUSY != 0 {
-                let channel = pl::csr::rtio_core::busy_channel_read();
+                let channel = rtio_core::busy_channel_read();
                 error!(
                     "RTIO busy error involving channel 0x{:04x}:{}",
                     channel,
@@ -181,7 +181,7 @@ pub async fn report_async_rtio_errors() {
                 );
             }
             if errors & ASYNC_ERROR_SEQUENCE_ERROR != 0 {
-                let channel = pl::csr::rtio_core::sequence_error_channel_read();
+                let channel = rtio_core::sequence_error_channel_read();
                 error!(
                     "RTIO sequence error involving channel 0x{:04x}:{}",
                     channel,
@@ -189,7 +189,7 @@ pub async fn report_async_rtio_errors() {
                 );
             }
             SEEN_ASYNC_ERRORS = errors;
-            pl::csr::rtio_core::async_error_write(errors);
+            rtio_core::async_error_write(errors);
         }
     }
 }

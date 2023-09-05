@@ -4,7 +4,7 @@ use core::future::Future;
 use async_recursion::async_recursion;
 use byteorder::{ByteOrder, NativeEndian};
 use cslice::CMutSlice;
-use kernel::rpc::{tag::{Tag, TagIterator},
+use ksupport::rpc::{tag::{Tag, TagIterator},
                   *};
 use libasync::smoltcp::TcpStream;
 use libboard_zynq::smoltcp;

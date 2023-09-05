@@ -2,8 +2,8 @@ use alloc::vec::Vec;
 
 use cslice::CSlice;
 
-use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0};
-use crate::{artiq_raise, rpc::send_args, Message, SubkernelStatus};
+use super::{Message, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, SubkernelStatus};
+use crate::{artiq_raise, rpc::send_args};
 
 pub extern "C" fn load_run(id: u32, run: bool) {
     unsafe {
@@ -61,6 +61,10 @@ pub extern "C" fn send_message(id: u32, count: u8, tag: &CSlice<u8>, data: *cons
             id: id,
             data: buffer[3..].to_vec(),
         });
+    }
+    match unsafe { KERNEL_CHANNEL_0TO1.as_mut().unwrap() }.recv() {
+        Message::SubkernelMsgSent => (),
+        _ => panic!("expected SubkernelMsgSent after SubkernelMsgSend"),
     }
 }
 
