@@ -1,5 +1,6 @@
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
+
 use core_io::{Error as IoError, Read, Write};
 
 #[derive(Debug, Clone)]

@@ -6,9 +6,9 @@ use cslice::CSlice;
 use futures::{future::FutureExt, select_biased};
 #[cfg(has_drtio)]
 use io::{Cursor, ProtoRead};
-use ksupport::{kernel, resolve_channel_name};
 #[cfg(has_drtio)]
 use ksupport::rpc;
+use ksupport::{kernel, resolve_channel_name};
 use libasync::{smoltcp::{Sockets, TcpStream},
                task};
 use libboard_artiq::drtio_routing;
@@ -444,7 +444,11 @@ async fn handle_run_kernel(
                         error!("error sending subkernel message: {:?}", e)
                     }
                 };
-                control.borrow_mut().tx.async_send(kernel::Message::SubkernelMsgSent).await;
+                control
+                    .borrow_mut()
+                    .tx
+                    .async_send(kernel::Message::SubkernelMsgSent)
+                    .await;
             }
             #[cfg(has_drtio)]
             kernel::Message::SubkernelMsgRecvRequest { id, timeout } => {
@@ -472,7 +476,7 @@ async fn handle_run_kernel(
                             kernel::Message::RpcRecvRequest(slot) => slot,
                             other => panic!("expected root value slot from core1, not {:?}", other),
                         };
-                        rpc::recv_return(&mut reader, &tag, slot, &|size| {
+                        rpc::recv_return(&mut reader, &tag, slot, &mut |size| {
                             if size == 0 {
                                 0 as *mut ()
                             } else {

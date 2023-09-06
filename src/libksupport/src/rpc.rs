@@ -42,10 +42,10 @@ unsafe fn recv_elements<F, R>(
     elt_tag: Tag,
     length: usize,
     storage: *mut (),
-    alloc: &F,
+    alloc: &mut F,
 ) -> Result<(), Error>
 where
-    F: Fn(usize) -> *mut (),
+    F: FnMut(usize) -> *mut (),
     R: Read + ?Sized,
 {
     match elt_tag {
@@ -79,9 +79,9 @@ where
     Ok(())
 }
 
-unsafe fn recv_value<F, R>(reader: &mut R, tag: Tag, data: &mut *mut (), alloc: &F) -> Result<(), Error>
+unsafe fn recv_value<F, R>(reader: &mut R, tag: Tag, data: &mut *mut (), alloc: &mut F) -> Result<(), Error>
 where
-    F: Fn(usize) -> *mut (),
+    F: FnMut(usize) -> *mut (),
     R: Read + ?Sized,
 {
     macro_rules! consume_value {
@@ -175,9 +175,9 @@ where
     }
 }
 
-pub fn recv_return<F, R>(reader: &mut R, tag_bytes: &[u8], data: *mut (), alloc: &F) -> Result<(), Error>
+pub fn recv_return<F, R>(reader: &mut R, tag_bytes: &[u8], data: *mut (), alloc: &mut F) -> Result<(), Error>
 where
-    F: Fn(usize) -> *mut (),
+    F: FnMut(usize) -> *mut (),
     R: Read + ?Sized,
 {
     let mut it = TagIterator::new(tag_bytes);

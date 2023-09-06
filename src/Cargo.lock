@@ -497,7 +497,10 @@ name = "satman"
 version = "0.0.0"
 dependencies = [
  "build_zynq",
+ "core_io",
+ "cslice",
  "embedded-hal",
+ "io",
  "ksupport",
  "libasync",
  "libboard_artiq",

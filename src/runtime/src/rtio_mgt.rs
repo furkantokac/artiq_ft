@@ -10,7 +10,8 @@ pub mod drtio {
     use alloc::vec::Vec;
 
     use embedded_hal::blocking::delay::DelayMs;
-    use ksupport::{ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR, SEEN_ASYNC_ERRORS, resolve_channel_name};
+    use ksupport::{resolve_channel_name, ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR,
+                   SEEN_ASYNC_ERRORS};
     use libasync::{delay, task};
     use libboard_artiq::{drtioaux::Error, drtioaux_async, drtioaux_async::Packet,
                          drtioaux_proto::MASTER_PAYLOAD_MAX_SIZE};

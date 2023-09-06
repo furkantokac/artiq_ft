@@ -170,4 +170,8 @@ impl Manager {
             }
         }
     }
+
+    pub fn running(&self) -> bool {
+        self.state == ManagerState::Playback
+    }
 }

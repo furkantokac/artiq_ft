@@ -14,6 +14,8 @@ build_zynq = { path = "../libbuild_zynq" }
 
 [dependencies]
 log = { version = "0.4", default-features = false }
+core_io = { version = "0.1", features = ["collections"] }
+cslice = "0.3"
 embedded-hal = "0.2"
 
 libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["ipv6"]}
@@ -26,3 +28,5 @@ libconfig = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["fat
 libboard_artiq = { path = "../libboard_artiq" }
 unwind = { path = "../libunwind" }
 libc = { path = "../libc" }
+io = { path = "../libio", features = ["alloc"] }
+ksupport = { path = "../libksupport" }

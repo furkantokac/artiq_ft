@@ -14,8 +14,11 @@ use io::{Cursor, ProtoRead};
 use libasync::block_async;
 use libconfig::Config;
 use log::{error, warn};
+#[cfg(has_drtiosat)]
+pub use pl::csr::drtiosat as rtio_core;
+#[cfg(has_rtio_core)]
+pub use pl::csr::rtio_core;
 use void::Void;
-use rtio::rtio_core;
 
 pub mod eh_artiq;
 pub mod i2c;
@@ -151,7 +154,11 @@ pub unsafe fn get_async_errors() -> u8 {
 
 fn wait_for_async_rtio_error() -> nb::Result<(), Void> {
     unsafe {
-        if rtio_core::async_error_read() != 0 {
+        #[cfg(has_rtio_core)]
+        let errors = rtio_core::async_error_read();
+        #[cfg(has_drtiosat)]
+        let errors = rtio_core::protocol_error_read();
+        if errors != 0 {
             Ok(())
         } else {
             Err(nb::Error::WouldBlock)
@@ -163,7 +170,10 @@ pub async fn report_async_rtio_errors() {
     loop {
         let _ = block_async!(wait_for_async_rtio_error()).await;
         unsafe {
+            #[cfg(has_rtio_core)]
             let errors = rtio_core::async_error_read();
+            #[cfg(has_drtiosat)]
+            let errors = rtio_core::protocol_error_read();
             if errors & ASYNC_ERROR_COLLISION != 0 {
                 let channel = rtio_core::collision_channel_read();
                 error!(
@@ -189,7 +199,10 @@ pub async fn report_async_rtio_errors() {
                 );
             }
             SEEN_ASYNC_ERRORS = errors;
+            #[cfg(has_rtio_core)]
             rtio_core::async_error_write(errors);
+            #[cfg(has_drtiosat)]
+            rtio_core::protocol_error_write(errors);
         }
     }
 }

@@ -1,13 +1,15 @@
 #![no_std]
 #![no_main]
-#![feature(never_type, panic_info_message, asm, naked_functions)]
-#![feature(alloc_error_handler)]
+#![feature(alloc_error_handler, try_trait, never_type, panic_info_message)]
 
 #[macro_use]
 extern crate log;
-
+extern crate core_io;
+extern crate cslice;
 extern crate embedded_hal;
 
+extern crate io;
+extern crate ksupport;
 extern crate libboard_artiq;
 extern crate libboard_zynq;
 extern crate libcortex_a9;
@@ -18,8 +20,6 @@ extern crate unwind;
 
 extern crate alloc;
 
-use core::sync::atomic::{AtomicBool, Ordering};
-
 use analyzer::Analyzer;
 use dma::Manager as DmaManager;
 use embedded_hal::blocking::delay::DelayUs;
@@ -27,21 +27,22 @@ use embedded_hal::blocking::delay::DelayUs;
 use libboard_artiq::io_expander;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
-use libboard_artiq::{drtio_routing, drtioaux, drtioaux_proto::SAT_PAYLOAD_MAX_SIZE, identifier_read, logger, pl::csr};
+use libboard_artiq::{drtio_routing, drtioaux,
+                     drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE},
+                     identifier_read, logger,
+                     pl::csr};
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
-use libboard_zynq::{gic, i2c::I2c, mpcore, print, println, stdio, time::Milliseconds, timer::GlobalTimer};
-use libcortex_a9::{asm, interrupt_handler,
-                   l2c::enable_l2_cache,
-                   notify_spin_lock,
-                   regs::{MPIDR, SP},
-                   spin_lock_yield};
-use libregister::{RegisterR, RegisterW};
+use libboard_zynq::{i2c::I2c, print, println, time::Milliseconds, timer::GlobalTimer};
+use libcortex_a9::{l2c::enable_l2_cache, regs::MPIDR};
+use libregister::RegisterR;
 use libsupport_zynq::ram;
+use subkernel::Manager as KernelManager;
 
 mod analyzer;
 mod dma;
 mod repeater;
+mod subkernel;
 
 fn drtiosat_reset(reset: bool) {
     unsafe {
@@ -98,6 +99,7 @@ fn process_aux_packet(
     i2c: &mut I2c,
     dma_manager: &mut DmaManager,
     analyzer: &mut Analyzer,
+    kernel_manager: &mut KernelManager,
 ) -> Result<(), drtioaux::Error> {
     // In the code below, *_chan_sel_write takes an u8 if there are fewer than 256 channels,
     // and u16 otherwise; hence the `as _` conversion.
@@ -487,8 +489,96 @@ fn process_aux_packet(
             timestamp,
         } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
-            let succeeded = dma_manager.playback(id, timestamp).is_ok();
+            let succeeded = if !kernel_manager.running() {
+                dma_manager.playback(id, timestamp).is_ok()
+            } else {
+                false
+            };
             drtioaux::send(0, &drtioaux::Packet::DmaPlaybackReply { succeeded: succeeded })
+        }
+
+        drtioaux::Packet::SubkernelAddDataRequest {
+            destination: _destination,
+            id,
+            last,
+            length,
+            data,
+        } => {
+            forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
+            let succeeded = kernel_manager.add(id, last, &data, length as usize).is_ok();
+            drtioaux::send(0, &drtioaux::Packet::SubkernelAddDataReply { succeeded: succeeded })
+        }
+        drtioaux::Packet::SubkernelLoadRunRequest {
+            destination: _destination,
+            id,
+            run,
+        } => {
+            forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
+            let mut succeeded = kernel_manager.load(id).is_ok();
+            // allow preloading a kernel with delayed run
+            if run {
+                if dma_manager.running() {
+                    // cannot run kernel while DDMA is running
+                    succeeded = false;
+                } else {
+                    succeeded |= kernel_manager.run(id).is_ok();
+                }
+            }
+            drtioaux::send(0, &drtioaux::Packet::SubkernelLoadRunReply { succeeded: succeeded })
+        }
+        drtioaux::Packet::SubkernelExceptionRequest {
+            destination: _destination,
+        } => {
+            forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
+            let mut data_slice: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
+            let meta = kernel_manager.exception_get_slice(&mut data_slice);
+            drtioaux::send(
+                0,
+                &drtioaux::Packet::SubkernelException {
+                    last: meta.last,
+                    length: meta.len,
+                    data: data_slice,
+                },
+            )
+        }
+        drtioaux::Packet::SubkernelMessage {
+            destination,
+            id: _id,
+            last,
+            length,
+            data,
+        } => {
+            forward!(_routing_table, destination, *_rank, _repeaters, &packet, timer);
+            kernel_manager.message_handle_incoming(last, length as usize, &data);
+            drtioaux::send(
+                0,
+                &drtioaux::Packet::SubkernelMessageAck {
+                    destination: destination,
+                },
+            )
+        }
+        drtioaux::Packet::SubkernelMessageAck {
+            destination: _destination,
+        } => {
+            forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
+            if kernel_manager.message_ack_slice() {
+                let mut data_slice: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
+                if let Some(meta) = kernel_manager.message_get_slice(&mut data_slice) {
+                    drtioaux::send(
+                        0,
+                        &drtioaux::Packet::SubkernelMessage {
+                            destination: *_rank,
+                            id: kernel_manager.get_current_id().unwrap(),
+                            last: meta.last,
+                            length: meta.len as u16,
+                            data: data_slice,
+                        },
+                    )?;
+                } else {
+                    error!("Error receiving message slice");
+                }
+            }
+            Ok(())
         }
 
         _ => {
@@ -506,6 +596,7 @@ fn process_aux_packets(
     i2c: &mut I2c,
     dma_manager: &mut DmaManager,
     analyzer: &mut Analyzer,
+    kernel_manager: &mut KernelManager,
 ) {
     let result = drtioaux::recv(0).and_then(|packet| {
         if let Some(packet) = packet {
@@ -518,6 +609,7 @@ fn process_aux_packets(
                 i2c,
                 dma_manager,
                 analyzer,
+                kernel_manager,
             )
         } else {
             Ok(())
@@ -626,8 +718,8 @@ pub extern "C" fn main_core0() -> i32 {
 
     ram::init_alloc_core0();
 
-    let mut i2c = I2c::i2c0();
-    i2c.init().expect("I2C initialization failed");
+    ksupport::i2c::init();
+    let mut i2c = unsafe { (ksupport::i2c::I2C_BUS).as_mut().unwrap() };
 
     #[cfg(feature = "target_kasli_soc")]
     let (mut io_expander0, mut io_expander1);
@@ -682,6 +774,8 @@ pub extern "C" fn main_core0() -> i32 {
 
     let mut hardware_tick_ts = 0;
 
+    let mut control = ksupport::kernel::Control::start();
+
     loop {
         while !drtiosat_link_rx_up() {
             drtiosat_process_errors();
@@ -709,12 +803,12 @@ pub extern "C" fn main_core0() -> i32 {
             si5324::siphaser::calibrate_skew(&mut timer).expect("failed to calibrate skew");
         }
 
-        // DMA manager created here, so when link is dropped, all DMA traces
+        // Various managers created here, so when link is dropped, all DMA traces
         // are cleared out for a clean slate on subsequent connections,
         // without a manual intervention.
         let mut dma_manager = DmaManager::new();
-        // same for RTIO Analyzer
         let mut analyzer = Analyzer::new();
+        let mut kernel_manager = KernelManager::new(&mut control);
 
         drtioaux::reset(0);
         drtiosat_reset(false);
@@ -730,6 +824,7 @@ pub extern "C" fn main_core0() -> i32 {
                 &mut i2c,
                 &mut dma_manager,
                 &mut analyzer,
+                &mut kernel_manager,
             );
             #[allow(unused_mut)]
             for mut rep in repeaters.iter_mut() {
@@ -771,45 +866,7 @@ extern "C" {
     static mut __stack1_start: u32;
 }
 
-interrupt_handler!(IRQ, irq, __irq_stack0_start, __irq_stack1_start, {
-    if MPIDR.read().cpu_id() == 1 {
-        let mpcore = mpcore::RegisterBlock::mpcore();
-        let mut gic = gic::InterruptController::gic(mpcore);
-        let id = gic.get_interrupt_id();
-        if id.0 == 0 {
-            gic.end_interrupt(id);
-            asm::exit_irq();
-            SP.write(&mut __stack1_start as *mut _ as u32);
-            asm::enable_irq();
-            CORE1_RESTART.store(false, Ordering::Relaxed);
-            notify_spin_lock();
-            main_core1();
-        }
-        stdio::drop_uart();
-    }
-    loop {}
-});
-
 static mut PANICKED: [bool; 2] = [false; 2];
-
-static CORE1_RESTART: AtomicBool = AtomicBool::new(false);
-
-pub fn restart_core1() {
-    let mut interrupt_controller = gic::InterruptController::gic(mpcore::RegisterBlock::mpcore());
-    CORE1_RESTART.store(true, Ordering::Relaxed);
-    interrupt_controller.send_sgi(gic::InterruptId(0), gic::CPUCore::Core1.into());
-    while CORE1_RESTART.load(Ordering::Relaxed) {
-        spin_lock_yield();
-    }
-}
-
-#[no_mangle]
-pub fn main_core1() {
-    let mut interrupt_controller = gic::InterruptController::gic(mpcore::RegisterBlock::mpcore());
-    interrupt_controller.enable_interrupts();
-
-    loop {}
-}
 
 #[no_mangle]
 pub extern "C" fn exception(_vect: u32, _regs: *const u32, pc: u32, ea: u32) {
@@ -865,24 +922,4 @@ pub fn panic_fmt(info: &core::panic::PanicInfo) -> ! {
     }
 
     loop {}
-}
-
-// linker symbols
-extern "C" {
-    static __text_start: u32;
-    static __text_end: u32;
-    static __exidx_start: u32;
-    static __exidx_end: u32;
-}
-
-#[no_mangle]
-extern "C" fn dl_unwind_find_exidx(_pc: *const u32, len_ptr: *mut u32) -> *const u32 {
-    let length;
-    let start: *const u32;
-    unsafe {
-        length = (&__exidx_end as *const u32).offset_from(&__exidx_start) as u32;
-        start = &__exidx_start;
-        *len_ptr = length;
-    }
-    start
 }

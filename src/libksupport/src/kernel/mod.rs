@@ -16,7 +16,6 @@ mod cache;
 #[cfg(has_drtio)]
 mod subkernel;
 
-
 #[cfg(has_drtio)]
 #[derive(Debug, Clone)]
 pub enum SubkernelStatus {
