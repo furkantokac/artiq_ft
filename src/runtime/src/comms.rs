@@ -187,22 +187,6 @@ async fn handle_run_kernel(
 ) -> Result<()> {
     control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
     loop {
-        #[cfg(has_drtio)]
-        while let Some(subkernel_finished) =
-            subkernel::get_finished_with_exception(aux_mutex, routing_table, timer).await?
-        {
-            if subkernel_finished.status == subkernel::FinishStatus::CommLost {
-                error!(
-                    "Communication with satellite lost while subkernel {} was running",
-                    subkernel_finished.id
-                );
-            }
-            if let Some(exception) = subkernel_finished.exception {
-                if let Some(stream) = stream {
-                    write_chunk(stream, &exception).await?;
-                }
-            }
-        }
         let reply = control.borrow_mut().rx.async_recv().await;
         match reply {
             kernel::Message::RpcSend { is_async, data } => {

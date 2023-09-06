@@ -160,40 +160,6 @@ pub async fn destination_changed(
     }
 }
 
-pub async fn get_finished_with_exception(
-    aux_mutex: &Rc<Mutex<bool>>,
-    routing_table: &RoutingTable,
-    timer: GlobalTimer,
-) -> Result<Option<SubkernelFinished>, Error> {
-    let mut locked_subkernels = SUBKERNELS.async_lock().await;
-    for (id, subkernel) in locked_subkernels.iter_mut() {
-        match subkernel.state {
-            SubkernelState::Finished {
-                status: FinishStatus::Ok,
-            } => (),
-            SubkernelState::Finished { status } => {
-                subkernel.state = SubkernelState::Finished {
-                    status: FinishStatus::Ok,
-                };
-                return Ok(Some(SubkernelFinished {
-                    id: *id,
-                    status: status,
-                    exception: if status == FinishStatus::Exception {
-                        Some(
-                            drtio::subkernel_retrieve_exception(aux_mutex, routing_table, timer, subkernel.destination)
-                                .await?,
-                        )
-                    } else {
-                        None
-                    },
-                }));
-            }
-            _ => (),
-        }
-    }
-    Ok(None)
-}
-
 pub async fn await_finish(
     aux_mutex: &Rc<Mutex<bool>>,
     routing_table: &RoutingTable,
