@@ -45,7 +45,7 @@ pub mod drtio {
         unsafe { (csr::DRTIO[linkno].rx_up_read)() == 1 }
     }
 
-    async fn process_async_packets(linkno: u8, packet: Packet) -> Option<Packet> {
+    async fn process_async_packets(aux_mutex: &Mutex<bool>, linkno: u8, packet: Packet) -> Option<Packet> {
         // returns None if an async packet has been consumed
         match packet {
             Packet::DmaPlaybackStatus {
@@ -71,6 +71,7 @@ pub mod drtio {
             } => {
                 subkernel::message_handle_incoming(id, last, length as usize, &data).await;
                 // acknowledge receiving part of the message
+                let _lock = aux_mutex.async_lock().await;
                 drtioaux_async::send(linkno, &Packet::SubkernelMessageAck { destination: from })
                     .await
                     .unwrap();
@@ -212,7 +213,7 @@ pub mod drtio {
         let _lock = aux_mutex.async_lock().await;
         match drtioaux_async::recv(linkno).await {
             Ok(Some(packet)) => {
-                if let Some(packet) = process_async_packets(linkno, packet).await {
+                if let Some(packet) = process_async_packets(aux_mutex, linkno, packet).await {
                     warn!("[LINK#{}] unsolicited aux packet: {:?}", linkno, packet);
                 }
             }
@@ -297,22 +298,10 @@ pub mod drtio {
                             match reply {
                                 Ok(Packet::DestinationDownReply) => {
                                     destination_set_up(routing_table, up_destinations, destination, false).await;
-                                    remote_dma::destination_changed(
-                                        aux_mutex,
-                                        routing_table,
-                                        timer,
-                                        destination,
-                                        false,
-                                    )
-                                    .await;
-                                    subkernel::destination_changed(
-                                        aux_mutex,
-                                        routing_table,
-                                        timer,
-                                        destination,
-                                        false,
-                                    )
-                                    .await;
+                                    remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, false)
+                                        .await;
+                                    subkernel::destination_changed(aux_mutex, routing_table, timer, destination, false)
+                                        .await;
                                 }
                                 Ok(Packet::DestinationOkReply) => (),
                                 Ok(Packet::DestinationSequenceErrorReply { channel }) => {
@@ -342,11 +331,11 @@ pub mod drtio {
                                     );
                                     unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_BUSY };
                                 }
-                                Ok(packet) => match process_async_packets(packet).await {
-                                    Some(packet) => {
-                                        error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet)
+                                Ok(packet) => {
+                                    match process_async_packets(aux_mutex, linkno, packet).await {
+                                        Some(packet) => error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet),
+                                        None => continue
                                     }
-                                    None => continue,
                                 },
                                 Err(e) => error!("[DEST#{}] communication failed ({})", destination, e),
                             }
