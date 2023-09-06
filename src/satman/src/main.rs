@@ -126,6 +126,52 @@ fn process_aux_packet(
             #[cfg(not(has_drtio_routing))]
             let hop = 0;
 
+            if let Some(status) = dma_manager.check_state() {
+                info!(
+                    "playback done, error: {}, channel: {}, timestamp: {}",
+                    status.error, status.channel, status.timestamp
+                );
+                drtioaux::send(
+                    0,
+                    &drtioaux::Packet::DmaPlaybackStatus {
+                        destination: rank,
+                        id: status.id,
+                        error: status.error,
+                        channel: status.channel,
+                        timestamp: status.timestamp,
+                    },
+                )
+            } else if let Some(subkernel_finished) = kernel_manager.process_kern_requests(rank, timer) {
+                info!(
+                    "subkernel {} finished, with exception: {}",
+                    subkernel_finished.id, subkernel_finished.with_exception
+                );
+                drtioaux::send(
+                    0,
+                    &drtioaux::Packet::SubkernelFinished {
+                        id: subkernel_finished.id,
+                        with_exception: subkernel_finished.with_exception,
+                    },
+                )
+            } else if kernel_manager.message_is_ready() {
+                let mut data_slice: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
+                if let Some(meta) = kernel_manager.message_get_slice(&mut data_slice) {
+                    drtioaux::send(
+                        0,
+                        &drtioaux::Packet::SubkernelMessage {
+                            destination: rank,
+                            id: kernel_manager.get_current_id().unwrap(),
+                            last: meta.last,
+                            length: meta.len as u16,
+                            data: data_slice,
+                        },
+                    )
+                } else {
+                    warn!("subkernel message is ready but no message is present");
+                    Ok(())
+                }
+            }
+
             if hop == 0 {
                 if let Some(status) = dma_manager.check_state() {
                     info!(
