@@ -123,6 +123,7 @@ pub struct Manager<'a> {
     session: Session,
     control: &'a mut kernel::Control,
     cache: BTreeMap<String, Vec<i32>>,
+    last_finished: Option<SubkernelFinished>,
 }
 
 pub struct SubkernelFinished {
@@ -242,8 +243,8 @@ impl MessageManager {
     }
 
     pub fn accept_outgoing(&mut self, message: Vec<u8>) -> Result<(), Error> {
-        // skip service tag
-        self.out_message = Some(Sliceable::new(message[4..].to_vec()));
+        // service tag skipped in kernel
+        self.out_message = Some(Sliceable::new(message));
         self.out_state = OutMessageState::MessageReady;
         Ok(())
     }
@@ -260,6 +261,7 @@ impl<'a> Manager<'_> {
             session: Session::new(0),
             control: control,
             cache: BTreeMap::new(),
+            last_finished: None,
         }
     }
 
@@ -380,6 +382,10 @@ impl<'a> Manager<'_> {
         }
     }
 
+    pub fn get_last_finished(&mut self) -> Option<SubkernelFinished> {
+        self.last_finished.take()
+    }
+
     fn kernel_stop(&mut self) {
         self.session.kernel_state = KernelState::Absent;
         unsafe {
@@ -415,17 +421,17 @@ impl<'a> Manager<'_> {
         self.kernel_stop();
     }
 
-    pub fn process_kern_requests(&mut self, rank: u8, timer: GlobalTimer) -> Option<SubkernelFinished> {
+    pub fn process_kern_requests(&mut self, rank: u8, timer: GlobalTimer) {
         if !self.running() {
-            return None;
+            return;
         }
 
         match self.process_external_messages(timer) {
             Ok(()) => (),
-            Err(Error::AwaitingMessage) => return None, // kernel still waiting, do not process kernel messages
+            Err(Error::AwaitingMessage) => return, // kernel still waiting, do not process kernel messages
             Err(Error::KernelException(exception)) => {
                 self.session.last_exception = Some(exception);
-                return Some(SubkernelFinished {
+                self.last_finished = Some(SubkernelFinished {
                     id: self.session.id,
                     with_exception: true,
                 });
@@ -433,7 +439,7 @@ impl<'a> Manager<'_> {
             Err(e) => {
                 error!("Error while running processing external messages: {:?}", e);
                 self.runtime_exception(e);
-                return Some(SubkernelFinished {
+                self.last_finished = Some(SubkernelFinished {
                     id: self.session.id,
                     with_exception: true,
                 });
@@ -441,14 +447,16 @@ impl<'a> Manager<'_> {
         }
 
         match self.process_kern_message(rank, timer) {
-            Ok(true) => Some(SubkernelFinished {
-                id: self.session.id,
-                with_exception: false,
-            }),
-            Ok(false) | Err(Error::NoMessage) => None,
+            Ok(true) => {
+                self.last_finished = Some(SubkernelFinished {
+                    id: self.session.id,
+                    with_exception: false,
+                });
+            }
+            Ok(false) | Err(Error::NoMessage) => (),
             Err(Error::KernelException(exception)) => {
                 self.session.last_exception = Some(exception);
-                return Some(SubkernelFinished {
+                self.last_finished = Some(SubkernelFinished {
                     id: self.session.id,
                     with_exception: true,
                 });
@@ -456,10 +464,10 @@ impl<'a> Manager<'_> {
             Err(e) => {
                 error!("Error while running kernel: {:?}", e);
                 self.runtime_exception(e);
-                Some(SubkernelFinished {
+                self.last_finished = Some(SubkernelFinished {
                     id: self.session.id,
                     with_exception: true,
-                })
+                });
             }
         }
     }

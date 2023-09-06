@@ -1,3 +1,4 @@
+#[cfg(feature = "alloc")]
 use alloc::{string::String, vec};
 use core::str::Utf8Error;
 
@@ -50,7 +51,8 @@ pub trait ProtoRead {
     }
 
     #[inline]
-    fn read_bytes(&mut self) -> Result<::alloc::vec::Vec<u8>, Self::ReadError> {
+    #[cfg(feature = "alloc")]
+    fn read_bytes(&mut self) -> Result<vec::Vec<u8>, Self::ReadError> {
         let length = self.read_u32()?;
         let mut value = vec![0; length as usize];
         self.read_exact(&mut value)?;
@@ -58,7 +60,8 @@ pub trait ProtoRead {
     }
 
     #[inline]
-    fn read_string(&mut self) -> Result<::alloc::string::String, ReadStringError<Self::ReadError>> {
+    #[cfg(feature = "alloc")]
+    fn read_string(&mut self) -> Result<String, ReadStringError<Self::ReadError>> {
         let bytes = self.read_bytes().map_err(ReadStringError::Other)?;
         String::from_utf8(bytes).map_err(|err| ReadStringError::Utf8(err.utf8_error()))
     }
@@ -135,6 +138,7 @@ pub trait ProtoWrite {
     }
 
     #[inline]
+    #[cfg(feature = "alloc")]
     fn write_string(&mut self, value: &str) -> Result<(), Self::WriteError> {
         self.write_bytes(value.as_bytes())
     }
