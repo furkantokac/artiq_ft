@@ -124,6 +124,23 @@ fn process_aux_packet(
             #[cfg(not(has_drtio_routing))]
             let hop = 0;
 
+            if let Some(status) = dma_manager.check_state() {
+                info!(
+                    "playback done, error: {}, channel: {}, timestamp: {}",
+                    status.error, status.channel, status.timestamp
+                );
+                return drtioaux::send(
+                    0,
+                    &drtioaux::Packet::DmaPlaybackStatus {
+                        destination: *_rank,
+                        id: status.id,
+                        error: status.error,
+                        channel: status.channel,
+                        timestamp: status.timestamp,
+                    },
+                );
+            }
+
             if hop == 0 {
                 let errors;
                 unsafe {
@@ -737,24 +754,6 @@ pub extern "C" fn main_core0() -> i32 {
                 }
                 if let Err(e) = drtioaux::send(0, &drtioaux::Packet::TSCAck) {
                     error!("aux packet error: {:?}", e);
-                }
-            }
-            if let Some(status) = dma_manager.check_state() {
-                info!(
-                    "playback done, error: {}, channel: {}, timestamp: {}",
-                    status.error, status.channel, status.timestamp
-                );
-                if let Err(e) = drtioaux::send(
-                    0,
-                    &drtioaux::Packet::DmaPlaybackStatus {
-                        destination: rank,
-                        id: status.id,
-                        error: status.error,
-                        channel: status.channel,
-                        timestamp: status.timestamp,
-                    },
-                ) {
-                    error!("error sending DMA playback status: {:?}", e);
                 }
             }
         }

@@ -44,6 +44,23 @@ pub mod drtio {
         unsafe { (csr::DRTIO[linkno].rx_up_read)() == 1 }
     }
 
+    async fn process_async_packets(packet: Packet) -> Option<Packet> {
+        // returns None if an async packet has been consumed
+        match packet {
+            Packet::DmaPlaybackStatus {
+                id,
+                destination,
+                error,
+                channel,
+                timestamp,
+            } => {
+                remote_dma::playback_done(id, destination, error, channel, timestamp).await;
+                None
+            }
+            other => Some(other),
+        }
+    }
+
     async fn recv_aux_timeout(linkno: u8, timeout: u64, timer: GlobalTimer) -> Result<Packet, &'static str> {
         if !link_rx_up(linkno).await {
             return Err("link went down");
@@ -66,22 +83,7 @@ pub mod drtio {
         }
         let _lock = aux_mutex.async_lock().await;
         drtioaux_async::send(linkno, request).await.unwrap();
-        loop {
-            let reply = recv_aux_timeout(linkno, 200, timer).await;
-            match reply {
-                Ok(Packet::DmaPlaybackStatus {
-                    id,
-                    destination,
-                    error,
-                    channel,
-                    timestamp,
-                }) => {
-                    remote_dma::playback_done(id, destination, error, channel, timestamp).await;
-                }
-                Ok(packet) => return Ok(packet),
-                Err(e) => return Err(e),
-            }
-        }
+        Ok(recv_aux_timeout(linkno, 200, timer).await?)
     }
 
     async fn drain_buffer(linkno: u8, draining_time: Milliseconds, timer: GlobalTimer) {
@@ -190,14 +192,11 @@ pub mod drtio {
     async fn process_unsolicited_aux(aux_mutex: &Rc<Mutex<bool>>, linkno: u8) {
         let _lock = aux_mutex.async_lock().await;
         match drtioaux_async::recv(linkno).await {
-            Ok(Some(Packet::DmaPlaybackStatus {
-                id,
-                destination,
-                error,
-                channel,
-                timestamp,
-            })) => remote_dma::playback_done(id, destination, error, channel, timestamp).await,
-            Ok(Some(packet)) => warn!("[LINK#{}] unsolicited aux packet: {:?}", linkno, packet),
+            Ok(Some(packet)) => {
+                if let Some(packet) = process_async_packets(packet).await {
+                    warn!("[LINK#{}] unsolicited aux packet: {:?}", linkno, packet);
+                }
+            }
             Ok(None) => (),
             Err(_) => warn!("[LINK#{}] aux packet error", linkno),
         }
@@ -266,51 +265,65 @@ pub mod drtio {
                 let linkno = hop - 1;
                 if destination_up(up_destinations, destination).await {
                     if up_links[linkno as usize] {
-                        let reply = aux_transact(
-                            aux_mutex,
-                            linkno,
-                            &Packet::DestinationStatusRequest {
-                                destination: destination,
-                            },
-                            timer,
-                        )
-                        .await;
-                        match reply {
-                            Ok(Packet::DestinationDownReply) => {
-                                destination_set_up(routing_table, up_destinations, destination, false).await;
-                                remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, false)
+                        loop {
+                            let reply = aux_transact(
+                                aux_mutex,
+                                linkno,
+                                &Packet::DestinationStatusRequest {
+                                    destination: destination,
+                                },
+                                timer,
+                            )
+                            .await;
+                            match reply {
+                                Ok(Packet::DestinationDownReply) => {
+                                    destination_set_up(routing_table, up_destinations, destination, false).await;
+                                    remote_dma::destination_changed(
+                                        aux_mutex,
+                                        routing_table,
+                                        timer,
+                                        destination,
+                                        false,
+                                    )
                                     .await;
+                                }
+                                Ok(Packet::DestinationOkReply) => (),
+                                Ok(Packet::DestinationSequenceErrorReply { channel }) => {
+                                    error!(
+                                        "[DEST#{}] RTIO sequence error involving channel 0x{:04x}:{}",
+                                        destination,
+                                        channel,
+                                        resolve_channel_name(channel as u32)
+                                    );
+                                    unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_SEQUENCE_ERROR };
+                                }
+                                Ok(Packet::DestinationCollisionReply { channel }) => {
+                                    error!(
+                                        "[DEST#{}] RTIO collision involving channel 0x{:04x}:{}",
+                                        destination,
+                                        channel,
+                                        resolve_channel_name(channel as u32)
+                                    );
+                                    unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_COLLISION };
+                                }
+                                Ok(Packet::DestinationBusyReply { channel }) => {
+                                    error!(
+                                        "[DEST#{}] RTIO busy error involving channel 0x{:04x}:{}",
+                                        destination,
+                                        channel,
+                                        resolve_channel_name(channel as u32)
+                                    );
+                                    unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_BUSY };
+                                }
+                                Ok(packet) => match process_async_packets(packet).await {
+                                    Some(packet) => {
+                                        error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet)
+                                    }
+                                    None => continue,
+                                },
+                                Err(e) => error!("[DEST#{}] communication failed ({})", destination, e),
                             }
-                            Ok(Packet::DestinationOkReply) => (),
-                            Ok(Packet::DestinationSequenceErrorReply { channel }) => {
-                                error!(
-                                    "[DEST#{}] RTIO sequence error involving channel 0x{:04x}:{}",
-                                    destination,
-                                    channel,
-                                    resolve_channel_name(channel as u32)
-                                );
-                                unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_SEQUENCE_ERROR };
-                            }
-                            Ok(Packet::DestinationCollisionReply { channel }) => {
-                                error!(
-                                    "[DEST#{}] RTIO collision involving channel 0x{:04x}:{}",
-                                    destination,
-                                    channel,
-                                    resolve_channel_name(channel as u32)
-                                );
-                                unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_COLLISION };
-                            }
-                            Ok(Packet::DestinationBusyReply { channel }) => {
-                                error!(
-                                    "[DEST#{}] RTIO busy error involving channel 0x{:04x}:{}",
-                                    destination,
-                                    channel,
-                                    resolve_channel_name(channel as u32)
-                                );
-                                unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_BUSY };
-                            }
-                            Ok(packet) => error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet),
-                            Err(e) => error!("[DEST#{}] communication failed ({})", destination, e),
+                            break;
                         }
                     } else {
                         destination_set_up(routing_table, up_destinations, destination, false).await;
