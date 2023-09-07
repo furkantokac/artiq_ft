@@ -127,7 +127,6 @@ def prepare_zc706_platform(platform):
 class ZC706(SoCCore):
     def __init__(self, acpki=False):
         self.acpki = acpki
-        self.rustc_cfg = dict()
 
         platform = zc706.Platform()
         prepare_zc706_platform(platform)
@@ -154,9 +153,9 @@ class ZC706(SoCCore):
                 p_CLKSWING_CFG=3),
             Instance("BUFG", i_I=cdr_clk, o_O=cdr_clk_buf)
         ]
-        self.rustc_cfg["has_si5324"] = None
-        self.rustc_cfg["si5324_as_synthesizer"] = None
-        self.rustc_cfg["si5324_soft_reset"] = None
+        self.config["HAS_SI5324"] = None
+        self.config["SI5324_AS_SYNTHESIZER"] = None
+        self.config["SI5324_SOFT_RESET"] = None
         
         self.submodules.bootstrap = CLK200BootstrapClock(platform)
         self.submodules.sys_crg = zynq_clocking.SYSCRG(self.platform, self.ps7, cdr_clk_buf)
@@ -170,14 +169,14 @@ class ZC706(SoCCore):
         self.csr_devices.append("rtio_core")
 
         if self.acpki:
-            self.rustc_cfg["ki_impl"] = "acp"
+            self.config["KI_IMPL"] = "acp"
             self.submodules.rtio = acpki.KernelInitiator(self.rtio_tsc,
                                                          bus=self.ps7.s_axi_acp,
                                                          user=self.ps7.s_axi_acp_user,
                                                          evento=self.ps7.event.o)
             self.csr_devices.append("rtio")
         else:
-            self.rustc_cfg["ki_impl"] = "csr"
+            self.config["KI_IMPL"] = "csr"
             self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
             self.csr_devices.append("rtio")
 
@@ -200,7 +199,6 @@ class ZC706(SoCCore):
 class _MasterBase(SoCCore):
     def __init__(self, acpki=False, drtio100mhz=False):
         self.acpki = acpki
-        self.rustc_cfg = dict()
 
         clk_freq = 100e6 if drtio100mhz else 125e6
 
@@ -271,18 +269,18 @@ class _MasterBase(SoCCore):
             memory_address = self.axi2csr.register_port(coreaux.get_tx_port(), mem_size)
             self.axi2csr.register_port(coreaux.get_rx_port(), mem_size)
             self.add_memory_region(memory_name, self.mem_map["csr"] + memory_address, mem_size * 2)
-        self.rustc_cfg["has_drtio"] = None
-        self.rustc_cfg["has_drtio_routing"] = None
+        self.config["HAS_DRTIO"] = None
+        self.config["HAS_DRTIO_ROUTING"] = None
         self.add_csr_group("drtio", drtio_csr_group)
         self.add_csr_group("drtioaux", drtioaux_csr_group)
         self.add_memory_group("drtioaux_mem", drtioaux_memory_group)
 
-        self.rustc_cfg["rtio_frequency"] = str(self.gt_drtio.rtio_clk_freq/1e6)
+        self.config["RTIO_FREQUENCY"] = str(self.gt_drtio.rtio_clk_freq/1e6)
 
         self.submodules.si5324_rst_n = gpio.GPIOOut(platform.request("si5324_33").rst_n)
         self.csr_devices.append("si5324_rst_n")
-        self.rustc_cfg["has_si5324"] = None
-        self.rustc_cfg["si5324_as_synthesizer"] = None
+        self.config["HAS_SI5324"] = None
+        self.config["SI5324_AS_SYNTHESIZER"] = None
 
         # Constrain TX & RX timing for the first transceiver channel
         # (First channel acts as master for phase alignment for all channels' TX)
@@ -302,14 +300,14 @@ class _MasterBase(SoCCore):
         self.csr_devices.append("rtio_core")
 
         if self.acpki:
-            self.rustc_cfg["ki_impl"] = "acp"
+            self.config["KI_IMPL"] = "acp"
             self.submodules.rtio = acpki.KernelInitiator(self.rtio_tsc,
                                                          bus=self.ps7.s_axi_acp,
                                                          user=self.ps7.s_axi_acp_user,
                                                          evento=self.ps7.event.o)
             self.csr_devices.append("rtio")
         else:
-            self.rustc_cfg["ki_impl"] = "csr"
+            self.config["KI_IMPL"] = "csr"
             self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
             self.csr_devices.append("rtio")
 
@@ -336,7 +334,6 @@ class _MasterBase(SoCCore):
 class _SatelliteBase(SoCCore):
     def __init__(self, acpki=False, drtio100mhz=False):
         self.acpki = acpki
-        self.rustc_cfg = dict()
 
         clk_freq = 100e6 if drtio100mhz else 125e6
 
@@ -425,13 +422,13 @@ class _SatelliteBase(SoCCore):
             # and registered in PS interface
             # manually, because software refers to rx/tx by halves of entire memory block, not names
             self.add_memory_region(memory_name, self.mem_map["csr"] + memory_address, mem_size * 2)
-        self.rustc_cfg["has_drtio"] = None
-        self.rustc_cfg["has_drtio_routing"] = None
+        self.config["HAS_DRTIO"] = None
+        self.config["HAS_DRTIO_ROUTING"] = None
         self.add_csr_group("drtioaux", drtioaux_csr_group)
         self.add_csr_group("drtiorep", drtiorep_csr_group)
         self.add_memory_group("drtioaux_mem", drtioaux_memory_group)
 
-        self.rustc_cfg["rtio_frequency"] = str(self.gt_drtio.rtio_clk_freq/1e6)
+        self.config["RTIO_FREQUENCY"] = str(self.gt_drtio.rtio_clk_freq/1e6)
 
         # Si5324 Phaser
         self.submodules.siphaser = SiPhaser7Series(
@@ -444,8 +441,7 @@ class _SatelliteBase(SoCCore):
         self.csr_devices.append("siphaser")
         self.submodules.si5324_rst_n = gpio.GPIOOut(platform.request("si5324_33").rst_n)
         self.csr_devices.append("si5324_rst_n")
-        self.rustc_cfg["has_si5324"] = None
-        self.rustc_cfg["has_siphaser"] = None
+        self.config["HAS_SI5324"] = None
 
         rtio_clk_period = 1e9/self.gt_drtio.rtio_clk_freq
         # Constrain TX & RX timing for the first transceiver channel
@@ -465,14 +461,14 @@ class _SatelliteBase(SoCCore):
         self.csr_devices.append("rtio_moninj")
 
         if self.acpki:
-            self.rustc_cfg["ki_impl"] = "acp"
+            self.config["KI_IMPL"] = "acp"
             self.submodules.rtio = acpki.KernelInitiator(self.rtio_tsc,
                                                          bus=self.ps7.s_axi_acp,
                                                          user=self.ps7.s_axi_acp_user,
                                                          evento=self.ps7.event.o)
             self.csr_devices.append("rtio")
         else:
-            self.rustc_cfg["ki_impl"] = "csr"
+            self.config["KI_IMPL"] = "csr"
             self.submodules.rtio = rtio.KernelInitiator(self.rtio_tsc, now64=True)
             self.csr_devices.append("rtio")
 
@@ -690,11 +686,14 @@ def write_mem_file(soc, filename):
 
 def write_rustc_cfg_file(soc, filename):
     with open(filename, "w") as f:
-        for k, v in sorted(soc.rustc_cfg.items(), key=itemgetter(0)):
-            if v is None:
-                f.write("{}\n".format(k))
-            else:
-                f.write("{}=\"{}\"\n".format(k, v))
+        for name, origin, busword, obj in soc.get_csr_regions():
+            f.write("has_{}\n".format(name.lower()))
+        for name, value in soc.get_constants():
+            if name.upper().startswith("CONFIG_"):
+                if value is None:
+                    f.write("{}\n".format(name.lower()[7:]))
+                else:
+                    f.write("{}=\"{}\"\n".format(name.lower()[7:], str(value)))
 
 
 def main():
