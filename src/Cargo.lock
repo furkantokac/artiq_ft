@@ -221,7 +221,7 @@ dependencies = [
 [[package]]
 name = "libasync"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#67dbb5932fa8ff5f143983476f741f945871d286"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c15b54f92b3d4e125ae47a0dce7abe4b2bc9e054"
 dependencies = [
  "embedded-hal",
  "libcortex_a9",
@@ -253,7 +253,7 @@ dependencies = [
 [[package]]
 name = "libboard_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#67dbb5932fa8ff5f143983476f741f945871d286"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c15b54f92b3d4e125ae47a0dce7abe4b2bc9e054"
 dependencies = [
  "bit_field",
  "embedded-hal",
@@ -278,7 +278,7 @@ dependencies = [
 [[package]]
 name = "libconfig"
 version = "0.1.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#67dbb5932fa8ff5f143983476f741f945871d286"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c15b54f92b3d4e125ae47a0dce7abe4b2bc9e054"
 dependencies = [
  "core_io",
  "fatfs",
@@ -289,7 +289,7 @@ dependencies = [
 [[package]]
 name = "libcortex_a9"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#67dbb5932fa8ff5f143983476f741f945871d286"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c15b54f92b3d4e125ae47a0dce7abe4b2bc9e054"
 dependencies = [
  "bit_field",
  "libregister",
@@ -305,7 +305,7 @@ checksum = "348108ab3fba42ec82ff6e9564fc4ca0247bdccdc68dd8af9764bbc79c3c8ffb"
 [[package]]
 name = "libregister"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#67dbb5932fa8ff5f143983476f741f945871d286"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c15b54f92b3d4e125ae47a0dce7abe4b2bc9e054"
 dependencies = [
  "bit_field",
  "vcell",
@@ -315,7 +315,7 @@ dependencies = [
 [[package]]
 name = "libsupport_zynq"
 version = "0.0.0"
-source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#67dbb5932fa8ff5f143983476f741f945871d286"
+source = "git+https://git.m-labs.hk/M-Labs/zynq-rs.git#c15b54f92b3d4e125ae47a0dce7abe4b2bc9e054"
 dependencies = [
  "cc",
  "compiler_builtins",
