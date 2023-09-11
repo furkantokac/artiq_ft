@@ -10,7 +10,6 @@ from migen.genlib.cdc import MultiReg
 from migen_axi.integration.soc_core import SoCCore
 from migen_axi.platforms import zc706
 from misoc.interconnect.csr import *
-from misoc.integration import cpu_interface
 from misoc.cores import gpio
 
 from artiq.gateware import rtio, nist_clock, nist_qc2
@@ -26,7 +25,7 @@ import analyzer
 import acpki
 import drtio_aux_controller
 import zynq_clocking
-
+from config import write_csr_file, write_mem_file, write_rustc_cfg_file
 
 class SMAClkinForward(Module):
     def __init__(self, platform):
@@ -671,30 +670,6 @@ class NIST_QC2_Satellite(_SatelliteBase, _NIST_QC2_RTIO):
 
 VARIANTS = {cls.__name__.lower(): cls for cls in [NIST_CLOCK, NIST_CLOCK_Master, NIST_CLOCK_Satellite,
                                                   NIST_QC2, NIST_QC2_Master, NIST_QC2_Satellite]}
-
-
-def write_csr_file(soc, filename):
-    with open(filename, "w") as f:
-        f.write(cpu_interface.get_csr_rust(
-            soc.get_csr_regions(), soc.get_csr_groups(), soc.get_constants()))
-
-def write_mem_file(soc, filename):
-    with open(filename, "w") as f:
-        f.write(cpu_interface.get_mem_rust(
-            soc.get_memory_regions(), soc.get_memory_groups(), None))
-
-
-def write_rustc_cfg_file(soc, filename):
-    with open(filename, "w") as f:
-        for name, origin, busword, obj in soc.get_csr_regions():
-            f.write("has_{}\n".format(name.lower()))
-        for name, value in soc.get_constants():
-            if name.upper().startswith("CONFIG_"):
-                if value is None:
-                    f.write("{}\n".format(name.lower()[7:]))
-                else:
-                    f.write("{}=\"{}\"\n".format(name.lower()[7:], str(value)))
-
 
 def main():
     parser = argparse.ArgumentParser(

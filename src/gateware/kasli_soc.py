@@ -11,7 +11,6 @@ from migen_axi.integration.soc_core import SoCCore
 from migen_axi.platforms import kasli_soc
 from misoc.interconnect.csr import *
 from misoc.cores import virtual_leds
-from misoc.integration import cpu_interface
 
 from artiq.coredevice import jsondesc
 from artiq.gateware import rtio, eem_7series
@@ -27,7 +26,7 @@ import analyzer
 import acpki
 import drtio_aux_controller
 import zynq_clocking
-
+from config import write_csr_file, write_mem_file, write_rustc_cfg_file
 
 eem_iostandard_dict = {
      0: "LVDS_25",
@@ -483,31 +482,6 @@ class GenericSatellite(SoCCore):
 
         self.comb += [self.virtual_leds.get(i).eq(channel.rx_ready)
                 for i, channel in enumerate(self.gt_drtio.channels)]
-
-
-def write_mem_file(soc, filename):
-    with open(filename, "w") as f:
-        f.write(cpu_interface.get_mem_rust(
-            soc.get_memory_regions(), soc.get_memory_groups(), None))
-
-
-def write_csr_file(soc, filename):
-    with open(filename, "w") as f:
-        f.write(cpu_interface.get_csr_rust(
-            soc.get_csr_regions(), soc.get_csr_groups(), soc.get_constants()))
-
-
-def write_rustc_cfg_file(soc, filename):
-    with open(filename, "w") as f:
-        for name, origin, busword, obj in soc.get_csr_regions():
-            f.write("has_{}\n".format(name.lower()))
-        for name, value in soc.get_constants():
-            if name.upper().startswith("CONFIG_"):
-                if value is None:
-                    f.write("{}\n".format(name.lower()[7:]))
-                else:
-                    f.write("{}=\"{}\"\n".format(name.lower()[7:], str(value)))
-
 
 def main():
     parser = argparse.ArgumentParser(
