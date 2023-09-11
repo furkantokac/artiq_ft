@@ -12,6 +12,7 @@
 #[macro_use]
 extern crate alloc;
 
+#[cfg(feature = "target_kasli_soc")]
 use core::cell::RefCell;
 
 use libasync::{block_async, task};
@@ -143,6 +144,7 @@ pub fn main_core0() {
     info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
     i2c::init();
+    #[cfg(feature = "target_kasli_soc")]
     let i2c_bus = unsafe { (i2c::I2C_BUS).as_mut().unwrap() };
 
     #[cfg(feature = "target_kasli_soc")]
