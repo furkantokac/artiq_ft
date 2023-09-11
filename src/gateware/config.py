@@ -12,11 +12,5 @@ def write_mem_file(soc, filename):
 
 def write_rustc_cfg_file(soc, filename):
     with open(filename, "w") as f:
-        for name, origin, busword, obj in soc.get_csr_regions():
-            f.write("has_{}\n".format(name.lower()))
-        for name, value in soc.get_constants():
-            if name.upper().startswith("CONFIG_"):
-                if value is None:
-                    f.write("{}\n".format(name.lower()[7:]))
-                else:
-                    f.write("{}=\"{}\"\n".format(name.lower()[7:], str(value)))
+        f.write(cpu_interface.get_rust_cfg(
+            soc.get_csr_regions(), soc.get_constants()))
