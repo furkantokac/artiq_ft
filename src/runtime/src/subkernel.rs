@@ -209,8 +209,9 @@ pub async fn await_finish(
     }
 }
 
-struct Message {
+pub struct Message {
     from_id: u32,
+    pub count: u8,
     pub tag: u8,
     pub data: Vec<u8>,
 }
@@ -234,8 +235,9 @@ pub async fn message_handle_incoming(id: u32, last: bool, length: usize, data: &
                 id,
                 Message {
                     from_id: id,
-                    tag: data[0],
-                    data: data[1..length].to_vec(),
+                    count: data[0],
+                    tag: data[1],
+                    data: data[2..length].to_vec(),
                 },
             );
         }
@@ -249,7 +251,7 @@ pub async fn message_handle_incoming(id: u32, last: bool, length: usize, data: &
     }
 }
 
-pub async fn message_await(id: u32, timeout: u64, timer: GlobalTimer) -> Result<(u8, Vec<u8>), Error> {
+pub async fn message_await(id: u32, timeout: u64, timer: GlobalTimer) -> Result<Message, Error> {
     match SUBKERNELS.async_lock().await.get(&id).unwrap().state {
         SubkernelState::Finished {
             status: FinishStatus::CommLost,
@@ -265,7 +267,7 @@ pub async fn message_await(id: u32, timeout: u64, timer: GlobalTimer) -> Result<
                 let msg = &message_queue[i];
                 if msg.from_id == id {
                     let message = message_queue.remove(i);
-                    return Ok((message.tag, message.data));
+                    return Ok(message);
                 }
             }
         }

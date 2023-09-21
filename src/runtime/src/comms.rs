@@ -448,22 +448,23 @@ async fn handle_run_kernel(
             #[cfg(has_drtio)]
             kernel::Message::SubkernelMsgRecvRequest { id, timeout } => {
                 let message_received = subkernel::message_await(id, timeout, timer).await;
-                let status = match message_received {
-                    Ok(_) => kernel::SubkernelStatus::NoError,
-                    Err(SubkernelError::Timeout) => kernel::SubkernelStatus::Timeout,
-                    Err(SubkernelError::IncorrectState) => kernel::SubkernelStatus::IncorrectState,
-                    Err(SubkernelError::CommLost) => kernel::SubkernelStatus::CommLost,
-                    Err(_) => kernel::SubkernelStatus::OtherError,
+                let (status, count) = match message_received {
+                    Ok(ref message) => (kernel::SubkernelStatus::NoError, message.count),
+                    Err(SubkernelError::Timeout) => (kernel::SubkernelStatus::Timeout, 0),
+                    Err(SubkernelError::IncorrectState) => (kernel::SubkernelStatus::IncorrectState, 0),
+                    Err(SubkernelError::CommLost) => (kernel::SubkernelStatus::CommLost, 0),
+                    Err(_) => (kernel::SubkernelStatus::OtherError, 0),
                 };
                 control
                     .borrow_mut()
                     .tx
-                    .async_send(kernel::Message::SubkernelMsgRecvReply { status: status })
+                    .async_send(kernel::Message::SubkernelMsgRecvReply { status: status, count: count })
                     .await;
-                if let Ok((tag, data)) = message_received {
+                if let Ok(message) = message_received {
                     // receive code almost identical to RPC recv, except we are not reading from a stream
-                    let mut reader = Cursor::new(data);
-                    let mut tag: [u8; 1] = [tag];
+                    let mut reader = Cursor::new(message.data);
+                    let mut tag: [u8; 1] = [message.tag];
+                    let mut i = 0;
                     loop {
                         // kernel has to consume all arguments in the whole message
                         let slot = match fast_recv(&mut control.borrow_mut().rx).await {
@@ -493,10 +494,12 @@ async fn handle_run_kernel(
                             .tx
                             .async_send(kernel::Message::RpcRecvReply(Ok(0)))
                             .await;
-                        match reader.read_u8() {
-                            Ok(0) | Err(_) => break, // reached the end of data, we're done
-                            Ok(t) => tag[0] = t,     // update the tag for next read
-                        };
+                        i += 1;
+                        if i < count {
+                            tag[0] = reader.read_u8()?;
+                        } else {
+                            break;
+                        }
                     }
                 }
             }

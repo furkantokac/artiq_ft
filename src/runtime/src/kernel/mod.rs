@@ -116,6 +116,7 @@ pub enum Message {
     #[cfg(has_drtio)]
     SubkernelMsgRecvReply {
         status: SubkernelStatus,
+        count: u8,
     },
 }
 

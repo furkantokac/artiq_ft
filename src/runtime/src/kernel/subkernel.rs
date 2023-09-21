@@ -51,18 +51,20 @@ pub extern "C" fn await_finish(id: u32, timeout: u64) {
     }
 }
 
-pub extern "C" fn send_message(id: u32, tag: &CSlice<u8>, data: *const *const ()) {
+pub extern "C" fn send_message(id: u32, count: u8, tag: &CSlice<u8>, data: *const *const ()) {
     let mut buffer = Vec::<u8>::new();
     send_args(&mut buffer, 0, tag.as_ref(), data).expect("RPC encoding failed");
+    // overwrite service tag, include how many tags are in the message
+    buffer[3] = count;
     unsafe {
         KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(Message::SubkernelMsgSend {
             id: id,
-            data: buffer[4..].to_vec(),
+            data: buffer[3..].to_vec(),
         });
     }
 }
 
-pub extern "C" fn await_message(id: u32, timeout: u64) {
+pub extern "C" fn await_message(id: u32, timeout: u64, min: u8, max: u8) {
     unsafe {
         KERNEL_CHANNEL_1TO0
             .as_mut()
@@ -75,18 +77,27 @@ pub extern "C" fn await_message(id: u32, timeout: u64) {
     match unsafe { KERNEL_CHANNEL_0TO1.as_mut().unwrap() }.recv() {
         Message::SubkernelMsgRecvReply {
             status: SubkernelStatus::NoError,
-        } => (),
+            count
+        } => {
+            if min > count || count > max {
+                artiq_raise!("SubkernelError", "Received more or less arguments than required")
+            }
+        },
         Message::SubkernelMsgRecvReply {
             status: SubkernelStatus::IncorrectState,
+            ..
         } => artiq_raise!("SubkernelError", "Subkernel not running"),
         Message::SubkernelMsgRecvReply {
             status: SubkernelStatus::Timeout,
+            ..
         } => artiq_raise!("SubkernelError", "Subkernel timed out"),
         Message::SubkernelMsgRecvReply {
             status: SubkernelStatus::CommLost,
+            ..
         } => artiq_raise!("SubkernelError", "Lost communication with satellite"),
         Message::SubkernelMsgRecvReply {
             status: SubkernelStatus::OtherError,
+            ..
         } => artiq_raise!("SubkernelError", "An error occurred during subkernel operation"),
         _ => panic!("expected SubkernelMsgRecvReply after SubkernelMsgRecvRequest"),
     }
