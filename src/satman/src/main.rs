@@ -124,51 +124,51 @@ fn process_aux_packet(
             #[cfg(not(has_drtio_routing))]
             let hop = 0;
 
-            if let Some(status) = dma_manager.check_state() {
-                info!(
-                    "playback done, error: {}, channel: {}, timestamp: {}",
-                    status.error, status.channel, status.timestamp
-                );
-                return drtioaux::send(
-                    0,
-                    &drtioaux::Packet::DmaPlaybackStatus {
-                        destination: *_rank,
-                        id: status.id,
-                        error: status.error,
-                        channel: status.channel,
-                        timestamp: status.timestamp,
-                    },
-                );
-            }
-
             if hop == 0 {
-                let errors;
-                unsafe {
-                    errors = csr::drtiosat::rtio_error_read();
-                }
-                if errors & 1 != 0 {
-                    let channel;
-                    unsafe {
-                        channel = csr::drtiosat::sequence_error_channel_read();
-                        csr::drtiosat::rtio_error_write(1);
-                    }
-                    drtioaux::send(0, &drtioaux::Packet::DestinationSequenceErrorReply { channel })?;
-                } else if errors & 2 != 0 {
-                    let channel;
-                    unsafe {
-                        channel = csr::drtiosat::collision_channel_read();
-                        csr::drtiosat::rtio_error_write(2);
-                    }
-                    drtioaux::send(0, &drtioaux::Packet::DestinationCollisionReply { channel })?;
-                } else if errors & 4 != 0 {
-                    let channel;
-                    unsafe {
-                        channel = csr::drtiosat::busy_channel_read();
-                        csr::drtiosat::rtio_error_write(4);
-                    }
-                    drtioaux::send(0, &drtioaux::Packet::DestinationBusyReply { channel })?;
+                if let Some(status) = dma_manager.check_state() {
+                    info!(
+                        "playback done, error: {}, channel: {}, timestamp: {}",
+                        status.error, status.channel, status.timestamp
+                    );
+                    drtioaux::send(
+                        0,
+                        &drtioaux::Packet::DmaPlaybackStatus {
+                            destination: _destination,
+                            id: status.id,
+                            error: status.error,
+                            channel: status.channel,
+                            timestamp: status.timestamp,
+                        },
+                    )?;
                 } else {
-                    drtioaux::send(0, &drtioaux::Packet::DestinationOkReply)?;
+                    let errors;
+                    unsafe {
+                        errors = csr::drtiosat::rtio_error_read();
+                    }
+                    if errors & 1 != 0 {
+                        let channel;
+                        unsafe {
+                            channel = csr::drtiosat::sequence_error_channel_read();
+                            csr::drtiosat::rtio_error_write(1);
+                        }
+                        drtioaux::send(0, &drtioaux::Packet::DestinationSequenceErrorReply { channel })?;
+                    } else if errors & 2 != 0 {
+                        let channel;
+                        unsafe {
+                            channel = csr::drtiosat::collision_channel_read();
+                            csr::drtiosat::rtio_error_write(2);
+                        }
+                        drtioaux::send(0, &drtioaux::Packet::DestinationCollisionReply { channel })?;
+                    } else if errors & 4 != 0 {
+                        let channel;
+                        unsafe {
+                            channel = csr::drtiosat::busy_channel_read();
+                            csr::drtiosat::rtio_error_write(4);
+                        }
+                        drtioaux::send(0, &drtioaux::Packet::DestinationBusyReply { channel })?;
+                    } else {
+                        drtioaux::send(0, &drtioaux::Packet::DestinationOkReply)?;
+                    }
                 }
             }
 
