@@ -119,10 +119,10 @@ fn process_aux_packet(
         }
 
         drtioaux::Packet::DestinationStatusRequest {
-            destination: _destination,
+            destination,
         } => {
             #[cfg(has_drtio_routing)]
-            let hop = _routing_table.0[_destination as usize][*_rank as usize];
+            let hop = _routing_table.0[destination as usize][*_rank as usize];
             #[cfg(not(has_drtio_routing))]
             let hop = 0;
 
@@ -135,7 +135,7 @@ fn process_aux_packet(
                     drtioaux::send(
                         0,
                         &drtioaux::Packet::DmaPlaybackStatus {
-                            destination: *_rank,
+                            destination: destination,
                             id: status.id,
                             error: status.error,
                             channel: status.channel,
@@ -160,7 +160,7 @@ fn process_aux_packet(
                         Some(meta) => drtioaux::send(
                             0,
                             &drtioaux::Packet::SubkernelMessage {
-                                destination: *_rank,
+                                destination: destination,
                                 id: kernel_manager.get_current_id().unwrap(),
                                 last: meta.last,
                                 length: meta.len as u16,
@@ -209,7 +209,7 @@ fn process_aux_packet(
                         let repno = hop - 1;
                         match _repeaters[repno].aux_forward(
                             &drtioaux::Packet::DestinationStatusRequest {
-                                destination: _destination,
+                                destination: destination,
                             },
                             timer,
                         ) {
