@@ -65,6 +65,7 @@ pub struct Sliceable {
 
 /* represents interkernel messages */
 struct Message {
+    count: u8,
     tag: u8,
     data: Vec<u8>,
 }
@@ -181,8 +182,9 @@ impl MessageManager {
             Some(message) => message.data.extend(&data[..length]),
             None => {
                 self.in_buffer = Some(Message {
-                    tag: data[0],
-                    data: data[1..length].to_vec(),
+                    count: data[0],
+                    tag: data[1],
+                    data: data[2..length].to_vec(),
                 });
             }
         };
@@ -529,6 +531,7 @@ impl<'a> Manager<'_> {
                 if timer.get_time() > timeout {
                     self.control.tx.send(kernel::Message::SubkernelMsgRecvReply {
                         status: kernel::SubkernelStatus::Timeout,
+                        count: 0,
                     });
                     self.session.kernel_state = KernelState::Running;
                     return Ok(());
@@ -536,6 +539,7 @@ impl<'a> Manager<'_> {
                 if let Some(message) = self.session.messages.get_incoming() {
                     self.control.tx.send(kernel::Message::SubkernelMsgRecvReply {
                         status: kernel::SubkernelStatus::NoError,
+                        count: message.count,
                     });
                     self.session.kernel_state = KernelState::Running;
                     self.pass_message_to_kernel(&message, timer)
@@ -559,6 +563,7 @@ impl<'a> Manager<'_> {
     fn pass_message_to_kernel(&mut self, message: &Message, timer: GlobalTimer) -> Result<(), Error> {
         let mut reader = Cursor::new(&message.data);
         let mut tag: [u8; 1] = [message.tag];
+        let mut i = message.count;
         loop {
             let slot = match recv_w_timeout(&mut self.control.rx, timer, 100)? {
                 kernel::Message::RpcRecvRequest(slot) => slot,
@@ -601,11 +606,12 @@ impl<'a> Manager<'_> {
                 unexpected!("{}", unexpected);
             }
             self.control.tx.send(kernel::Message::RpcRecvReply(Ok(0)));
-            match reader.read_u8() {
-                Ok(0) | Err(_) => break, // reached the end of data, we're done
-                Ok(t) => {
-                    tag[0] = t;
-                } // update the tag for next read
+            i -= 1;
+            if i == 0 {
+                break;
+            } else {
+                // update the tag for next read
+                tag[0] = reader.read_u8()?;
             }
         }
         Ok(())
