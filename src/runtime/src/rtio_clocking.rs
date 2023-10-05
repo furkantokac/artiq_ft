@@ -76,7 +76,7 @@ fn init_rtio(timer: &mut GlobalTimer) {
     }
     // if it's not locked, it will hang at the CSR.
 
-    timer.delay_ms(20); // wait for CPLL/QPLL/SYS PLL lock
+    timer.delay_ms(50); // wait for CPLL/QPLL/SYS PLL lock
     let clk = unsafe { pl::csr::sys_crg::current_clock_read() };
     if clk == 1 {
         info!("SYS CLK switched successfully");
@@ -95,7 +95,7 @@ fn init_drtio(timer: &mut GlobalTimer) {
         pl::csr::gt_drtio::stable_clkin_write(1);
     }
 
-    timer.delay_ms(20); // wait for CPLL/QPLL/SYS PLL lock
+    timer.delay_ms(50); // wait for CPLL/QPLL/SYS PLL lock
     let clk = unsafe { pl::csr::sys_crg::current_clock_read() };
     if clk == 1 {
         info!("SYS CLK switched successfully");
