@@ -69,6 +69,8 @@ class SYSCRG(Module, AutoCSR):
         # assumes bootstrap clock is same freq as main and sys output
         self.clock_domains.cd_sys = ClockDomain()
         self.clock_domains.cd_sys4x = ClockDomain(reset_less=True)
+        self.clock_domains.cd_sys5x = ClockDomain(reset_less=True)
+        self.clock_domains.cd_clk200 = ClockDomain()
 
         self.current_clock = CSRStatus()
 
@@ -78,11 +80,6 @@ class SYSCRG(Module, AutoCSR):
 
         period = 1e9/freq
 
-        pll_locked = Signal()
-        pll_sys = Signal()
-        pll_sys4x = Signal()
-        fb_clk = Signal()
-
         self.submodules.clk_sw_fsm = ClockSwitchFSM()
 
         if clk_sw is None:
@@ -91,32 +88,55 @@ class SYSCRG(Module, AutoCSR):
         else:
             self.comb += self.clk_sw_fsm.i_clk_sw.eq(clk_sw)
 
+        mmcm_locked = Signal()
+        mmcm_sys = Signal()
+        mmcm_sys4x = Signal()
+        mmcm_sys5x = Signal()
+        mmcm_clk208 = Signal()
+        mmcm_fb_clk = Signal()
         self.specials += [
-            Instance("PLLE2_ADV",
-                     p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
-                     p_BANDWIDTH="HIGH",
-                     p_REF_JITTER1=0.001,
-                     p_CLKIN1_PERIOD=period, i_CLKIN1=main_clk,
-                     p_CLKIN2_PERIOD=period, i_CLKIN2=bootstrap_clk,
-                     i_CLKINSEL=self.clk_sw_fsm.o_clk_sw,
+            Instance("MMCME2_ADV",
+                p_STARTUP_WAIT="FALSE", o_LOCKED=mmcm_locked,
+                p_BANDWIDTH="HIGH",
+                p_REF_JITTER1=0.001,
+                p_CLKIN1_PERIOD=period, i_CLKIN1=main_clk,
+                p_CLKIN2_PERIOD=period, i_CLKIN2=bootstrap_clk,
+                i_CLKINSEL=self.clk_sw_fsm.o_clk_sw,
 
-                     # VCO @ 1.5GHz when using 125MHz input
-                     # 1.2GHz for 100MHz (zc706)
-                     p_CLKFBOUT_MULT=12, p_DIVCLK_DIVIDE=1,
-                     i_CLKFBIN=fb_clk,
-                     i_RST=self.clk_sw_fsm.o_reset,
+                # VCO @ 1.25GHz
+                p_CLKFBOUT_MULT_F=10, p_DIVCLK_DIVIDE=1,
+                i_CLKFBIN=mmcm_fb_clk,
+                i_RST=self.clk_sw_fsm.o_reset,
 
-                     o_CLKFBOUT=fb_clk,
+                o_CLKFBOUT=mmcm_fb_clk,
 
-                     p_CLKOUT0_DIVIDE=3, p_CLKOUT0_PHASE=0.0,
-                     o_CLKOUT0=pll_sys4x,
+                p_CLKOUT0_DIVIDE_F=2.5, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=mmcm_sys4x,
 
-                     p_CLKOUT1_DIVIDE=12, p_CLKOUT1_PHASE=0.0,
-                     o_CLKOUT1=pll_sys),
-            Instance("BUFG", i_I=pll_sys, o_O=self.cd_sys.clk),
-            Instance("BUFG", i_I=pll_sys4x, o_O=self.cd_sys4x.clk),
+                # 125MHz
+                p_CLKOUT1_DIVIDE=10, p_CLKOUT1_PHASE=0.0, o_CLKOUT1=mmcm_sys,
 
-            AsyncResetSynchronizer(self.cd_sys, ~pll_locked),
+                # 625MHz
+                p_CLKOUT2_DIVIDE=2, p_CLKOUT2_PHASE=0.0, o_CLKOUT2=mmcm_sys5x,
+
+                # 208MHz
+                p_CLKOUT3_DIVIDE=6, p_CLKOUT3_PHASE=0.0, o_CLKOUT3=mmcm_clk208,
+            ),
+            Instance("BUFG", i_I=mmcm_sys5x, o_O=self.cd_sys5x.clk),
+            Instance("BUFG", i_I=mmcm_sys, o_O=self.cd_sys.clk),
+            Instance("BUFG", i_I=mmcm_sys4x, o_O=self.cd_sys4x.clk),
+            Instance("BUFG", i_I=mmcm_clk208, o_O=self.cd_clk200.clk),
+            AsyncResetSynchronizer(self.cd_sys, ~mmcm_locked),
+            AsyncResetSynchronizer(self.cd_clk200, ~mmcm_locked),
         ]
+
+        reset_counter = Signal(4, reset=15)
+        ic_reset = Signal(reset=1)
+        self.sync.clk200 += \
+            If(reset_counter != 0,
+                reset_counter.eq(reset_counter - 1)
+            ).Else(
+                ic_reset.eq(0)
+            )
+        self.specials += Instance("IDELAYCTRL", i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
 
         self.comb += self.current_clock.status.eq(self.clk_sw_fsm.o_clk_sw)
