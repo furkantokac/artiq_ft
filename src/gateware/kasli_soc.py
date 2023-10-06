@@ -61,13 +61,14 @@ class SMAClkinForward(Module):
         ]
 
 
-class GTP125BootstrapClock(Module):
-    def __init__(self, platform):
+class GTPBootstrapClock(Module):
+    def __init__(self, platform, freq=125e6):
         self.clock_domains.cd_bootstrap = ClockDomain(reset_less=True)
         self.cd_bootstrap.clk.attr.add("keep")
 
         bootstrap_125 = platform.request("clk125_gtp")
         bootstrap_se = Signal()
+        clk_out = Signal()
         platform.add_period_constraint(bootstrap_125.p, 8.0)
         self.specials += [
             Instance("IBUFDS_GTE2",
@@ -77,8 +78,30 @@ class GTP125BootstrapClock(Module):
                 p_CLKCM_CFG="TRUE",
                 p_CLKRCV_TRST="TRUE",
                 p_CLKSWING_CFG=3),
-            Instance("BUFG", i_I=bootstrap_se, o_O=self.cd_bootstrap.clk)
+            Instance("BUFG", i_I=bootstrap_se, o_O=clk_out)
         ]
+        if freq == 125e6:
+            self.comb += self.cd_bootstrap.clk.eq(clk_out)
+        elif freq == 100e6:
+            pll_fb = Signal()
+            pll_out = Signal()
+            self.specials += [
+                Instance("PLLE2_BASE",
+                    p_CLKIN1_PERIOD=8.0,
+                    i_CLKIN1=clk_out,
+                    i_CLKFBIN=pll_fb,
+                    o_CLKFBOUT=pll_fb,
+
+                    # VCO @ 1GHz
+                    p_CLKFBOUT_MULT=8, p_DIVCLK_DIVIDE=1,
+
+                    # 100MHz for bootstrap
+                    p_CLKOUT1_DIVIDE=10, p_CLKOUT1_PHASE=0.0, o_CLKOUT1=pll_out,
+                ),
+                Instance("BUFG", i_I=pll_out, o_O=self.cd_bootstrap.clk)
+            ]
+        else:
+            raise ValueError("Bootstrap frequency must be 100 or 125MHz")
 
 
 class GenericStandalone(SoCCore):
@@ -95,6 +118,7 @@ class GenericStandalone(SoCCore):
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
 
         self.config["HW_REV"] = description["hw_rev"]
+        
 
         self.submodules += SMAClkinForward(self.platform)
 
@@ -109,8 +133,7 @@ class GenericStandalone(SoCCore):
                 p_DIFF_TERM="TRUE", p_IBUF_LOW_PWR="FALSE",
                 i_I=clk_synth.p, i_IB=clk_synth.n, o_O=clk_synth_se)
         fix_serdes_timing_path(platform)
-        self.submodules.bootstrap = GTP125BootstrapClock(self.platform)
-
+        self.submodules.bootstrap = GTPBootstrapClock(self.platform, description["rtio_frequency"])
 
         self.submodules.sys_crg = zynq_clocking.SYSCRG(self.platform, self.ps7, clk_synth_se)
         platform.add_false_path_constraints(
@@ -203,7 +226,7 @@ class GenericMaster(SoCCore):
         gtx0 = self.gt_drtio.gtxs[0]
         self.specials += Instance("BUFG", i_I=gtx0.txoutclk, o_O=txout_buf)
 
-        self.submodules.bootstrap = GTP125BootstrapClock(self.platform)
+        self.submodules.bootstrap = GTPBootstrapClock(self.platform, clk_freq)
         self.submodules.sys_crg = zynq_clocking.SYSCRG(
             self.platform,
             self.ps7,
@@ -344,7 +367,7 @@ class GenericSatellite(SoCCore):
         gtx0 = self.gt_drtio.gtxs[0]
         self.specials += Instance("BUFG", i_I=gtx0.txoutclk, o_O=txout_buf)
 
-        self.submodules.bootstrap = GTP125BootstrapClock(self.platform)
+        self.submodules.bootstrap = GTPBootstrapClock(self.platform, clk_freq)
         self.submodules.sys_crg = zynq_clocking.SYSCRG(
             self.platform, 
             self.ps7,
