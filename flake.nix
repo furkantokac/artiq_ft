@@ -338,18 +338,22 @@
       } //
       (build { target = "zc706"; variant = "nist_clock"; }) //
       (build { target = "zc706"; variant = "nist_clock_master"; }) //
+      (build { target = "zc706"; variant = "nist_clock_master_100mhz"; }) //
       (build { target = "zc706"; variant = "nist_clock_satellite"; }) //
       (build { target = "zc706"; variant = "nist_clock_satellite_100mhz"; }) //
       (build { target = "zc706"; variant = "nist_qc2"; }) //
       (build { target = "zc706"; variant = "nist_qc2_master"; }) //
+      (build { target = "zc706"; variant = "nist_qc2_master_100mhz"; }) //
       (build { target = "zc706"; variant = "nist_qc2_satellite"; }) //
       (build { target = "zc706"; variant = "nist_qc2_satellite_100mhz"; }) //
       (build { target = "zc706"; variant = "acpki_nist_clock"; }) //
       (build { target = "zc706"; variant = "acpki_nist_clock_master"; }) //
+      (build { target = "zc706"; variant = "acpki_nist_clock_master_100mhz"; }) //
       (build { target = "zc706"; variant = "acpki_nist_clock_satellite"; }) //
       (build { target = "zc706"; variant = "acpki_nist_clock_satellite_100mhz"; }) //
       (build { target = "zc706"; variant = "acpki_nist_qc2"; }) //
       (build { target = "zc706"; variant = "acpki_nist_qc2_master"; }) //
+      (build { target = "zc706"; variant = "acpki_nist_qc2_master_100mhz"; }) //
       (build { target = "zc706"; variant = "acpki_nist_qc2_satellite"; }) //
       (build { target = "zc706"; variant = "acpki_nist_qc2_satellite_100mhz"; }) //
       (build { target = "kasli_soc"; variant = "demo"; json = ./demo.json; }) //
