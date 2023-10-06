@@ -264,7 +264,10 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
     {
         let i2c = unsafe { (&mut i2c::I2C_BUS).as_mut().unwrap() };
         match clk {
-            RtioClock::Ext0_Bypass => si5324::bypass(i2c, SI5324_EXT_INPUT, timer).expect("cannot bypass Si5324"),
+            RtioClock::Ext0_Bypass => {
+                info!("bypassing the PLL for RTIO clock");
+                si5324::bypass(i2c, SI5324_EXT_INPUT, timer).expect("cannot bypass Si5324")
+            }
             _ => setup_si5324(i2c, timer, clk),
         }
     }
