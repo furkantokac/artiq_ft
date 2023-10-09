@@ -17,6 +17,7 @@ byteorder = { version = "1.3", default-features = false }
 void = { version = "1", default-features = false }
 log_buffer = { version = "1.2" }
 libm = { version = "0.2", features = ["unstable"] }
+vcell = "0.1"
 
 libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["ipv6"]}
 libsupport_zynq = { default-features = false, features = ["alloc_core"], git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
