@@ -463,7 +463,10 @@ async fn handle_run_kernel(
                 control
                     .borrow_mut()
                     .tx
-                    .async_send(kernel::Message::SubkernelMsgRecvReply { status: status, count: count })
+                    .async_send(kernel::Message::SubkernelMsgRecvReply {
+                        status: status,
+                        count: count,
+                    })
                     .await;
                 if let Ok(message) = message_received {
                     // receive code almost identical to RPC recv, except we are not reading from a stream

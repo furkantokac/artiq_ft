@@ -81,12 +81,12 @@ pub extern "C" fn await_message(id: u32, timeout: u64, min: u8, max: u8) {
     match unsafe { KERNEL_CHANNEL_0TO1.as_mut().unwrap() }.recv() {
         Message::SubkernelMsgRecvReply {
             status: SubkernelStatus::NoError,
-            count
+            count,
         } => {
             if min > count || count > max {
                 artiq_raise!("SubkernelError", "Received more or less arguments than required")
             }
-        },
+        }
         Message::SubkernelMsgRecvReply {
             status: SubkernelStatus::IncorrectState,
             ..

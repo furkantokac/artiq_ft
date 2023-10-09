@@ -118,9 +118,7 @@ fn process_aux_packet(
             drtioaux::send(0, &drtioaux::Packet::ResetAck)
         }
 
-        drtioaux::Packet::DestinationStatusRequest {
-            destination,
-        } => {
+        drtioaux::Packet::DestinationStatusRequest { destination } => {
             #[cfg(has_drtio_routing)]
             let hop = _routing_table.0[destination as usize][*_rank as usize];
             #[cfg(not(has_drtio_routing))]

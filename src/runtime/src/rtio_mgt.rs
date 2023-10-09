@@ -294,8 +294,14 @@ pub mod drtio {
                             match reply {
                                 Ok(Packet::DestinationDownReply) => {
                                     destination_set_up(routing_table, up_destinations, destination, false).await;
-                                    remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, false)
-                                        .await;
+                                    remote_dma::destination_changed(
+                                        aux_mutex,
+                                        routing_table,
+                                        timer,
+                                        destination,
+                                        false,
+                                    )
+                                    .await;
                                     subkernel::destination_changed(aux_mutex, routing_table, timer, destination, false)
                                         .await;
                                 }
@@ -327,11 +333,11 @@ pub mod drtio {
                                     );
                                     unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_BUSY };
                                 }
-                                Ok(packet) => {
-                                    match process_async_packets(aux_mutex, linkno, packet).await {
-                                        Some(packet) => error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet),
-                                        None => continue
+                                Ok(packet) => match process_async_packets(aux_mutex, linkno, packet).await {
+                                    Some(packet) => {
+                                        error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet)
                                     }
+                                    None => continue,
                                 },
                                 Err(e) => error!("[DEST#{}] communication failed ({})", destination, e),
                             }
