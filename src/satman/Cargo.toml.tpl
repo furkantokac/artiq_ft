@@ -18,12 +18,12 @@ core_io = { version = "0.1", features = ["collections"] }
 cslice = "0.3"
 embedded-hal = "0.2"
 
-libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["ipv6"]}
-libsupport_zynq = { default-features = false, features = ["alloc_core"], git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
-libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
-libasync = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
-libregister = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
-libconfig = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["fat_lfn", "ipv6"] }
+libboard_zynq = { path = "@@ZYNQ_RS@@/libboard_zynq", features = ["ipv6"]}
+libsupport_zynq = { path = "@@ZYNQ_RS@@/libsupport_zynq", default-features = false, features = ["alloc_core"] }
+libcortex_a9 = { path = "@@ZYNQ_RS@@/libcortex_a9" }
+libasync = { path = "@@ZYNQ_RS@@/libasync" }
+libregister = { path = "@@ZYNQ_RS@@/libregister" }
+libconfig = { path = "@@ZYNQ_RS@@/libconfig", features = ["fat_lfn", "ipv6"] }
 
 libboard_artiq = { path = "../libboard_artiq" }
 unwind = { path = "../libunwind" }

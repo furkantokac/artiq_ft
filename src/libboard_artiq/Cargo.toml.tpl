@@ -24,8 +24,8 @@ nb = "1.0"
 void = { version = "1", default-features = false }
 
 io = { path = "../libio", features = ["byteorder"] }
-libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git"}
-libregister = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
-libconfig = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["fat_lfn"] }
-libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
-libasync = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libboard_zynq = { path = "@@ZYNQ_RS@@/libboard_zynq" }
+libregister = { path = "@@ZYNQ_RS@@/libregister" }
+libconfig = { path = "@@ZYNQ_RS@@/libconfig", features = ["fat_lfn"] }
+libcortex_a9 = { path = "@@ZYNQ_RS@@/libcortex_a9" }
+libasync = { path = "@@ZYNQ_RS@@/libasync" }

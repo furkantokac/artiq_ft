@@ -58,7 +58,6 @@ Notes:
 - When calling make, you need to specify both the variant and firmware type.
 - Firmware type must be either ``runtime`` for DRTIO-less or DRTIO master variants, or ``satman`` for DRTIO satellite.
 - If the board is connected to the local machine, use the ``local_run.sh`` script.
-- To update ``zynq-rs``, update the cargo files as per usual for Rust projects, but also keep ``flake.lock`` in sync.
 
 License
 -------

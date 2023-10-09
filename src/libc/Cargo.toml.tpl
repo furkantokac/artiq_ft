@@ -6,7 +6,7 @@ edition = "2018"
 build = "build.rs"
 
 [dependencies]
-libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libboard_zynq = { path = "@@ZYNQ_RS@@/libboard_zynq" }
 
 [build-dependencies]
 cc = { version = "1.0.1" }

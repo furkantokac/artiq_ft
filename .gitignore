@@ -3,3 +3,11 @@ examples/*.elf
 __pycache__
 
 build
+
+src/libboard_artiq/Cargo.toml
+src/libc/Cargo.toml
+src/libdyld/Cargo.toml
+src/libio/Cargo.toml
+src/libksupport/Cargo.toml
+src/runtime/Cargo.toml
+src/satman/Cargo.toml

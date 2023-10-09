@@ -122,9 +122,6 @@
         src = ./src;
         cargoLock = { 
           lockFile = src/Cargo.lock;
-          outputHashes = {
-            "libasync-0.0.0" = "sha256-MppR7yxs3cjG7tQc82vX0MhyN71CJL2QWkM65F5hrFU=";
-          };
         };
 
         nativeBuildInputs = [
@@ -138,6 +135,7 @@
           export XARGO_RUST_SRC="${rust}/lib/rustlib/src/rust/library"
           export CLANG_EXTRA_INCLUDE_DIR="${pkgs.llvmPackages_9.clang-unwrapped.lib}/lib/clang/9.0.1/include"
           export CARGO_HOME=$(mktemp -d cargo-home.XXX)
+          export ZYNQ_RS=${zynq-rs}
           make TARGET=${target} GWARGS="${if json == null then "-V ${variant}" else json}" ${fwtype}
         '';
 
@@ -251,18 +249,19 @@
         '';
     };
 
-    fmt-check = pkgs.stdenv.mkDerivation {
+    fmt-check = pkgs.stdenvNoCC.mkDerivation {
       name = "fmt-check";
 
-      nativeBuildInputs = [
-        rust
-      ];
+      src = ./src;
 
-      phases = [ "buildPhase" ];
+      nativeBuildInputs = [ rust pkgs.gnumake ];
+
+      phases = [ "unpackPhase" "buildPhase" ];
 
       buildPhase =
         ''
-        cd ${self}/src
+        export ZYNQ_RS=${zynq-rs}
+        make manifests
         cargo fmt -- --check
         touch $out
         '';
@@ -381,6 +380,7 @@
       ];
       XARGO_RUST_SRC = "${rust}/lib/rustlib/src/rust/library";
       CLANG_EXTRA_INCLUDE_DIR = "${pkgs.llvmPackages_9.clang-unwrapped.lib}/lib/clang/9.0.1/include";
+      ZYNQ_RS = "${zynq-rs}";
       OPENOCD_ZYNQ = "${zynq-rs}/openocd";
       SZL = "${zynqpkgs.szl}";
     };

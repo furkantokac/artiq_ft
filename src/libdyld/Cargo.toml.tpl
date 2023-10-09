@@ -8,4 +8,4 @@ name = "dyld"
 
 [dependencies]
 log = "0.4"
-libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
+libcortex_a9 = { path = "@@ZYNQ_RS@@/libcortex_a9" }

@@ -27,12 +27,12 @@ async-recursion = "0.3"
 log_buffer = { version = "1.2" }
 vcell = "0.1"
 
-libboard_zynq = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["ipv6"]}
-libsupport_zynq = { default-features = false, features = ["alloc_core"], git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
-libcortex_a9 = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
-libasync = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
-libregister = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
-libconfig = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git", features = ["fat_lfn", "ipv6"] }
+libboard_zynq = { path = "@@ZYNQ_RS@@/libboard_zynq", features = ["ipv6"]}
+libsupport_zynq = { path = "@@ZYNQ_RS@@/libsupport_zynq", default-features = false, features = ["alloc_core"] }
+libcortex_a9 = { path = "@@ZYNQ_RS@@/libcortex_a9" }
+libasync = { path = "@@ZYNQ_RS@@/libasync" }
+libregister = { path = "@@ZYNQ_RS@@/libregister" }
+libconfig = { path = "@@ZYNQ_RS@@/libconfig", features = ["fat_lfn", "ipv6"] }
 
 dyld = { path = "../libdyld" }
 dwarf = { path = "../libdwarf" }
