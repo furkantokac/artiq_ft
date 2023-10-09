@@ -7,7 +7,7 @@ runtime: ../build/runtime.bin
 
 satman: ../build/satman.bin
 
-.PHONY: all
+.PHONY: all manifests
 
 manifests = libboard_artiq/Cargo.toml libc/Cargo.toml libdyld/Cargo.toml libio/Cargo.toml libksupport/Cargo.toml runtime/Cargo.toml satman/Cargo.toml
 
