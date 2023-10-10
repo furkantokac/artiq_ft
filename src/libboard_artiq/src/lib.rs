@@ -31,6 +31,8 @@ pub mod mem;
 pub mod pl;
 #[cfg(has_si5324)]
 pub mod si5324;
+#[cfg(has_drtio_eem)]
+pub mod drtio_eem;
 
 use core::{cmp, str};
 

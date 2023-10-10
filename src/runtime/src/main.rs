@@ -16,6 +16,8 @@ use libasync::task;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_artiq::io_expander;
 use libboard_artiq::{identifier_read, logger, pl};
+#[cfg(has_drtio_eem)]
+use libboard_artiq::drtio_eem;
 use libboard_zynq::{gic, mpcore, timer::GlobalTimer};
 use libconfig::Config;
 use libcortex_a9::l2c::enable_l2_cache;
@@ -108,6 +110,9 @@ pub fn main_core0() {
     };
 
     rtio_clocking::init(&mut timer, &cfg);
+
+    #[cfg(has_drtio_eem)]
+    drtio_eem::init(&mut timer, &cfg);
 
     task::spawn(ksupport::report_async_rtio_errors());
 

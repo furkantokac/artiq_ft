@@ -104,6 +104,9 @@ fn init_drtio(timer: &mut GlobalTimer) {
     unsafe {
         pl::csr::rtio_core::reset_phy_write(1);
         pl::csr::gt_drtio::txenable_write(0xffffffffu32 as _);
+
+        #[cfg(has_drtio_eem)]
+        pl::csr::eem_transceiver::txenable_write(0xffffffffu32 as _);
     }
 }
 
