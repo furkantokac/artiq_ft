@@ -13,11 +13,11 @@ use core::cell::RefCell;
 
 use ksupport;
 use libasync::task;
+#[cfg(has_drtio_eem)]
+use libboard_artiq::drtio_eem;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_artiq::io_expander;
 use libboard_artiq::{identifier_read, logger, pl};
-#[cfg(has_drtio_eem)]
-use libboard_artiq::drtio_eem;
 use libboard_zynq::{gic, mpcore, timer::GlobalTimer};
 use libconfig::Config;
 use libcortex_a9::l2c::enable_l2_cache;

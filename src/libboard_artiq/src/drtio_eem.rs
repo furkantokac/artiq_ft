@@ -1,9 +1,10 @@
-use crate::pl;
 use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayUs;
 use libboard_zynq::timer::GlobalTimer;
 use libconfig::Config;
 use libsupport_zynq::alloc::format;
 use log::{debug, error, info};
+
+use crate::pl;
 
 struct SerdesConfig {
     pub delay: [u8; 4],
@@ -61,11 +62,7 @@ unsafe fn assign_delay(timer: &mut GlobalTimer) -> SerdesConfig {
                 if prev_low_rate <= curr_low_rate && curr_low_rate >= 0.5 {
                     let prev_dev = 0.5 - prev_low_rate;
                     let curr_dev = curr_low_rate - 0.5;
-                    let selected_idx = if prev_dev < curr_dev {
-                        curr_dly - 1
-                    } else {
-                        curr_dly
-                    };
+                    let selected_idx = if prev_dev < curr_dev { curr_dly - 1 } else { curr_dly };
 
                     // The setup setup/hold calibration timing (even with
                     // tolerance) might be invalid in other lanes due to skew.
@@ -110,11 +107,7 @@ unsafe fn assign_delay(timer: &mut GlobalTimer) -> SerdesConfig {
             let index = (best_dly as isize + dly_delta) as u8;
             let low_rate = read_align(index, timer);
             // abs() from f32 is not available in core library
-            let deviation = if low_rate < 0.5 {
-                0.5 - low_rate
-            } else {
-                low_rate - 0.5
-            };
+            let deviation = if low_rate < 0.5 { 0.5 - low_rate } else { low_rate - 0.5 };
 
             if deviation < min_deviation {
                 min_deviation = deviation;
@@ -128,9 +121,7 @@ unsafe fn assign_delay(timer: &mut GlobalTimer) -> SerdesConfig {
 
     debug!("setup/hold timing calibration: {:?}", delay_list);
 
-    SerdesConfig {
-        delay: delay_list,
-    }
+    SerdesConfig { delay: delay_list }
 }
 
 fn read_align(dly: u8, timer: &mut GlobalTimer) -> f32 {
@@ -219,7 +210,11 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
                         info!("storing calibration timing values into sd card");
                     }
                     Err(e) => {
-                        error!("calibration successful but calibration timing values cannot be stored into sd card. Error:{}", e);
+                        error!(
+                            "calibration successful but calibration timing values cannot be stored into sd card. \
+                             Error:{}",
+                            e
+                        );
                     }
                 };
             }

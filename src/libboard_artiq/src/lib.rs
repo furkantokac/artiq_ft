@@ -29,10 +29,10 @@ pub mod mem;
 #[rustfmt::skip]
 #[path = "../../../build/pl.rs"]
 pub mod pl;
-#[cfg(has_si5324)]
-pub mod si5324;
 #[cfg(has_drtio_eem)]
 pub mod drtio_eem;
+#[cfg(has_si5324)]
+pub mod si5324;
 
 use core::{cmp, str};
 
