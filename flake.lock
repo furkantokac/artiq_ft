@@ -11,11 +11,11 @@
         "src-pythonparser": "src-pythonparser"
       },
       "locked": {
-        "lastModified": 1696817638,
-        "narHash": "sha256-rbIN4Ll1VX4RXxDBlLGgTiQC6L6jZE9q8HYBxPhwCpY=",
+        "lastModified": 1697013694,
+        "narHash": "sha256-jmr+pFeyV0+nUbFY8/g2Aw4kU06i5CG0XhLobI8vUR8=",
         "ref": "refs/heads/master",
-        "rev": "d070826911e86b5ec9de958c4bcd93ef0b7fddb2",
-        "revCount": 8564,
+        "rev": "f7abc156cbc0a371452148d11436e5f241798092",
+        "revCount": 8569,
         "type": "git",
         "url": "https://github.com/m-labs/artiq.git"
       },
@@ -163,11 +163,11 @@
     "src-migen": {
       "flake": false,
       "locked": {
-        "lastModified": 1693990700,
-        "narHash": "sha256-qJLA03QcZ5S9DrqrseuzIQBTWS7rjAbYJxLYZEQ8rxA=",
+        "lastModified": 1697013661,
+        "narHash": "sha256-qNCqgWyE4vTDmyjE2XMJqW1djuBxT25A36AzQfZqluU=",
         "owner": "m-labs",
         "repo": "migen",
-        "rev": "2cfee3e0db6fdca9b5918686ea77c93252e7cebd",
+        "rev": "aadc19df93b7aa9ca761aaebbb98a11e0cf2d7c7",
         "type": "github"
       },
       "original": {
