@@ -127,15 +127,20 @@ class GenericStandalone(SoCCore):
 
         clk_synth = platform.request("cdr_clk_clean_fabric")
         clk_synth_se = Signal()
+        clk_synth_se_buf = Signal()
         platform.add_period_constraint(clk_synth.p, 8.0)
 
-        self.specials += Instance("IBUFGDS",
+        self.specials += [ 
+            Instance("IBUFGDS",
                 p_DIFF_TERM="TRUE", p_IBUF_LOW_PWR="FALSE",
-                i_I=clk_synth.p, i_IB=clk_synth.n, o_O=clk_synth_se)
+                i_I=clk_synth.p, i_IB=clk_synth.n, o_O=clk_synth_se
+            ),
+            Instance("BUFG", i_I=clk_synth_se, o_O=clk_synth_se_buf),
+        ]
         fix_serdes_timing_path(platform)
         self.submodules.bootstrap = GTPBootstrapClock(self.platform, description["rtio_frequency"])
 
-        self.submodules.sys_crg = zynq_clocking.SYSCRG(self.platform, self.ps7, clk_synth_se)
+        self.submodules.sys_crg = zynq_clocking.SYSCRG(self.platform, self.ps7, clk_synth_se_buf)
         platform.add_false_path_constraints(
             self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
         self.csr_devices.append("sys_crg")
