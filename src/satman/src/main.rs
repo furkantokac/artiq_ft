@@ -23,6 +23,8 @@ extern crate alloc;
 use analyzer::Analyzer;
 use dma::Manager as DmaManager;
 use embedded_hal::blocking::delay::DelayUs;
+#[cfg(has_grabber)]
+use libboard_artiq::grabber;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_artiq::io_expander;
 #[cfg(has_si5324)]
@@ -698,6 +700,8 @@ fn hardware_tick(ts: &mut u64, timer: &mut GlobalTimer) {
     if now > ts_ms {
         ts_ms = now + Milliseconds(200);
         *ts = ts_ms.0;
+        #[cfg(has_grabber)]
+        grabber::tick();
     }
 }
 

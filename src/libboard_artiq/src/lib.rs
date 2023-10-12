@@ -31,6 +31,8 @@ pub mod mem;
 pub mod pl;
 #[cfg(has_drtio_eem)]
 pub mod drtio_eem;
+#[cfg(has_grabber)]
+pub mod grabber;
 #[cfg(has_si5324)]
 pub mod si5324;
 

@@ -107,6 +107,7 @@ class GTPBootstrapClock(Module):
 class GenericStandalone(SoCCore):
     def __init__(self, description, acpki=False):
         self.acpki = acpki
+        clk_freq = description["rtio_frequency"]
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
@@ -138,7 +139,8 @@ class GenericStandalone(SoCCore):
             Instance("BUFG", i_I=clk_synth_se, o_O=clk_synth_se_buf),
         ]
         fix_serdes_timing_path(platform)
-        self.submodules.bootstrap = GTPBootstrapClock(self.platform, description["rtio_frequency"])
+        self.submodules.bootstrap = GTPBootstrapClock(self.platform, clk_freq)
+        self.config["CLOCK_FREQUENCY"] = int(clk_freq)
 
         self.submodules.sys_crg = zynq_clocking.SYSCRG(self.platform, self.ps7, clk_synth_se_buf)
         platform.add_false_path_constraints(
@@ -229,6 +231,7 @@ class GenericMaster(SoCCore):
             pads=data_pads,
             clk_freq=clk_freq)
         self.csr_devices.append("gt_drtio")
+        self.config["CLOCK_FREQUENCY"] = int(clk_freq)
 
         txout_buf = Signal()
         gtx0 = self.gt_drtio.gtxs[0]
@@ -532,6 +535,7 @@ class GenericSatellite(SoCCore):
 
         rtio_clk_period = 1e9/clk_freq
         self.config["RTIO_FREQUENCY"] = str(clk_freq/1e6)
+        self.config["CLOCK_FREQUENCY"] = int(clk_freq)
 
         self.submodules.siphaser = SiPhaser7Series(
             si5324_clkin=platform.request("cdr_clk"),

@@ -57,6 +57,20 @@ async fn io_expanders_service(
     }
 }
 
+#[cfg(has_grabber)]
+mod grabber {
+    use libasync::delay;
+    use libboard_artiq::grabber;
+    use libboard_zynq::time::Milliseconds;
+    pub async fn grabber_thread(mut timer: GlobalTimer) {
+        let mut countdown = timer.countdown();
+        loop {
+            grabber::tick();
+            delay(&mut countdown, Milliseconds(200)).await;
+        }
+    }
+}
+
 static mut LOG_BUFFER: [u8; 1 << 17] = [0; 1 << 17];
 
 #[no_mangle]
@@ -113,6 +127,9 @@ pub fn main_core0() {
 
     #[cfg(has_drtio_eem)]
     drtio_eem::init(&mut timer, &cfg);
+
+    #[cfg(has_grabber)]
+    task::spawn(grabber::grabber_thread(timer));
 
     task::spawn(ksupport::report_async_rtio_errors());
 
