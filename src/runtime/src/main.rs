@@ -62,7 +62,8 @@ mod grabber {
     use libasync::delay;
     use libboard_artiq::grabber;
     use libboard_zynq::time::Milliseconds;
-    pub async fn grabber_thread(mut timer: GlobalTimer) {
+    use crate::GlobalTimer;
+    pub async fn grabber_thread(timer: GlobalTimer) {
         let mut countdown = timer.countdown();
         loop {
             grabber::tick();
