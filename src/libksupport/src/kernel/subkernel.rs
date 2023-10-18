@@ -53,7 +53,7 @@ pub extern "C" fn await_finish(id: u32, timeout: u64) {
 
 pub extern "C" fn send_message(id: u32, count: u8, tag: &CSlice<u8>, data: *const *const ()) {
     let mut buffer = Vec::<u8>::new();
-    send_args(&mut buffer, 0, tag.as_ref(), data).expect("RPC encoding failed");
+    send_args(&mut buffer, 0, tag.as_ref(), data, false).expect("RPC encoding failed");
     // overwrite service tag, include how many tags are in the message
     buffer[3] = count;
     unsafe {
@@ -68,7 +68,7 @@ pub extern "C" fn send_message(id: u32, count: u8, tag: &CSlice<u8>, data: *cons
     }
 }
 
-pub extern "C" fn await_message(id: u32, timeout: u64, min: u8, max: u8) {
+pub extern "C" fn await_message(id: u32, timeout: u64, tags: &CSlice<u8>, min: u8, max: u8) {
     unsafe {
         KERNEL_CHANNEL_1TO0
             .as_mut()
@@ -76,6 +76,7 @@ pub extern "C" fn await_message(id: u32, timeout: u64, min: u8, max: u8) {
             .send(Message::SubkernelMsgRecvRequest {
                 id: id,
                 timeout: timeout,
+                tags: tags.as_ref().to_vec(),
             });
     }
     match unsafe { KERNEL_CHANNEL_0TO1.as_mut().unwrap() }.recv() {

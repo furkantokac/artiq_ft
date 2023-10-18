@@ -212,7 +212,6 @@ pub async fn await_finish(
 pub struct Message {
     from_id: u32,
     pub count: u8,
-    pub tag: u8,
     pub data: Vec<u8>,
 }
 
@@ -236,8 +235,7 @@ pub async fn message_handle_incoming(id: u32, last: bool, length: usize, data: &
                 Message {
                     from_id: id,
                     count: data[0],
-                    tag: data[1],
-                    data: data[2..length].to_vec(),
+                    data: data[1..length].to_vec(),
                 },
             );
         }

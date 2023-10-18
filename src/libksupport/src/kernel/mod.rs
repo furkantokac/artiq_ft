@@ -103,6 +103,7 @@ pub enum Message {
     SubkernelMsgRecvRequest {
         id: u32,
         timeout: u64,
+        tags: Vec<u8>,
     },
     #[cfg(has_drtio)]
     SubkernelMsgRecvReply {

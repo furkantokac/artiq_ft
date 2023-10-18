@@ -5,7 +5,7 @@ use core_io::Error as IoError;
 use cslice::CSlice;
 use futures::{future::FutureExt, select_biased};
 #[cfg(has_drtio)]
-use io::{Cursor, ProtoRead};
+use io::Cursor;
 #[cfg(has_drtio)]
 use ksupport::rpc;
 use ksupport::{kernel, resolve_channel_name};
@@ -451,7 +451,7 @@ async fn handle_run_kernel(
                     .await;
             }
             #[cfg(has_drtio)]
-            kernel::Message::SubkernelMsgRecvRequest { id, timeout } => {
+            kernel::Message::SubkernelMsgRecvRequest { id, timeout, tags } => {
                 let message_received = subkernel::message_await(id, timeout, timer).await;
                 let (status, count) = match message_received {
                     Ok(ref message) => (kernel::SubkernelStatus::NoError, message.count),
@@ -471,7 +471,7 @@ async fn handle_run_kernel(
                 if let Ok(message) = message_received {
                     // receive code almost identical to RPC recv, except we are not reading from a stream
                     let mut reader = Cursor::new(message.data);
-                    let mut tag: [u8; 1] = [message.tag];
+                    let mut current_tags: &[u8] = &tags;
                     let mut i = 0;
                     loop {
                         // kernel has to consume all arguments in the whole message
@@ -479,7 +479,7 @@ async fn handle_run_kernel(
                             kernel::Message::RpcRecvRequest(slot) => slot,
                             other => panic!("expected root value slot from core1, not {:?}", other),
                         };
-                        rpc::recv_return(&mut reader, &tag, slot, &mut |size| {
+                        let remaining_tags = rpc::recv_return(&mut reader, &current_tags, slot, &mut |size| {
                             if size == 0 {
                                 0 as *mut ()
                             } else {
@@ -500,7 +500,7 @@ async fn handle_run_kernel(
                             .await;
                         i += 1;
                         if i < count {
-                            tag[0] = reader.read_u8()?;
+                            current_tags = remaining_tags;
                         } else {
                             break;
                         }

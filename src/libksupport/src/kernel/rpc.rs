@@ -10,7 +10,7 @@ use crate::{eh_artiq, rpc::send_args};
 fn rpc_send_common(is_async: bool, service: u32, tag: &CSlice<u8>, data: *const *const ()) {
     let core1_tx = unsafe { KERNEL_CHANNEL_1TO0.as_mut().unwrap() };
     let mut buffer = Vec::<u8>::new();
-    send_args(&mut buffer, service, tag.as_ref(), data).expect("RPC encoding failed");
+    send_args(&mut buffer, service, tag.as_ref(), data, true).expect("RPC encoding failed");
     core1_tx.send(Message::RpcSend { is_async, data: buffer });
 }
 

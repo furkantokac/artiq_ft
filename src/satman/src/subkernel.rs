@@ -6,7 +6,7 @@ use core::{cmp::min, option::NoneError, slice, str};
 
 use core_io::{Error as IoError, Write};
 use cslice::AsCSlice;
-use io::{Cursor, ProtoRead, ProtoWrite};
+use io::{Cursor, ProtoWrite};
 use ksupport::{eh_artiq, kernel, rpc};
 use libboard_artiq::{drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE},
                      pl::csr};
@@ -14,12 +14,12 @@ use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use libcortex_a9::sync_channel::Receiver;
 use log::warn;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum KernelState {
     Absent,
     Loaded,
     Running,
-    MsgAwait(Milliseconds),
+    MsgAwait(Milliseconds, Vec<u8>),
     MsgSending,
 }
 
@@ -66,7 +66,6 @@ pub struct Sliceable {
 /* represents interkernel messages */
 struct Message {
     count: u8,
-    tag: u8,
     data: Vec<u8>,
 }
 
@@ -183,8 +182,7 @@ impl MessageManager {
             None => {
                 self.in_buffer = Some(Message {
                     count: data[0],
-                    tag: data[1],
-                    data: data[2..length].to_vec(),
+                    data: data[1..length].to_vec(),
                 });
             }
         };
@@ -509,9 +507,9 @@ impl<'a> Manager<'_> {
                 self.session.messages.accept_outgoing(data)?;
                 self.session.kernel_state = KernelState::MsgSending;
             }
-            kernel::Message::SubkernelMsgRecvRequest { id: _, timeout } => {
+            kernel::Message::SubkernelMsgRecvRequest { id: _, timeout, tags } => {
                 let max_time = timer.get_time() + Milliseconds(timeout);
-                self.session.kernel_state = KernelState::MsgAwait(max_time);
+                self.session.kernel_state = KernelState::MsgAwait(max_time, tags);
             }
             kernel::Message::UpDestinationsRequest(destination) => {
                 self.control
@@ -526,9 +524,9 @@ impl<'a> Manager<'_> {
     }
 
     fn process_external_messages(&mut self, timer: GlobalTimer) -> Result<(), Error> {
-        match self.session.kernel_state {
-            KernelState::MsgAwait(timeout) => {
-                if timer.get_time() > timeout {
+        match &self.session.kernel_state {
+            KernelState::MsgAwait(timeout, tags) => {
+                if timer.get_time() > *timeout {
                     self.control.tx.send(kernel::Message::SubkernelMsgRecvReply {
                         status: kernel::SubkernelStatus::Timeout,
                         count: 0,
@@ -541,8 +539,9 @@ impl<'a> Manager<'_> {
                         status: kernel::SubkernelStatus::NoError,
                         count: message.count,
                     });
+                    let tags = tags.clone();
                     self.session.kernel_state = KernelState::Running;
-                    self.pass_message_to_kernel(&message, timer)
+                    self.pass_message_to_kernel(&message, tags, timer)
                 } else {
                     Err(Error::AwaitingMessage)
                 }
@@ -560,9 +559,9 @@ impl<'a> Manager<'_> {
         }
     }
 
-    fn pass_message_to_kernel(&mut self, message: &Message, timer: GlobalTimer) -> Result<(), Error> {
+    fn pass_message_to_kernel(&mut self, message: &Message, tags: Vec<u8>, timer: GlobalTimer) -> Result<(), Error> {
         let mut reader = Cursor::new(&message.data);
-        let mut tag: [u8; 1] = [message.tag];
+        let mut current_tags: &[u8] = &tags;
         let mut i = message.count;
         loop {
             let slot = match recv_w_timeout(&mut self.control.rx, timer, 100)? {
@@ -571,7 +570,7 @@ impl<'a> Manager<'_> {
             };
             let mut exception: Option<Sliceable> = None;
             let mut unexpected: Option<String> = None;
-            rpc::recv_return(&mut reader, &tag, slot, &mut |size| {
+            let remaining_tags = rpc::recv_return(&mut reader, current_tags, slot, &mut |size| {
                 if size == 0 {
                     0 as *mut ()
                 } else {
@@ -610,8 +609,7 @@ impl<'a> Manager<'_> {
             if i == 0 {
                 break;
             } else {
-                // update the tag for next read
-                tag[0] = reader.read_u8()?;
+                current_tags = remaining_tags;
             }
         }
         Ok(())
