@@ -8,14 +8,14 @@
 #[macro_use]
 extern crate alloc;
 
-#[cfg(feature = "target_kasli_soc")]
+#[cfg(all(feature = "target_kasli_soc", has_drtio))]
 use core::cell::RefCell;
 
 use ksupport;
 use libasync::task;
 #[cfg(has_drtio_eem)]
 use libboard_artiq::drtio_eem;
-#[cfg(feature = "target_kasli_soc")]
+#[cfg(all(feature = "target_kasli_soc", has_drtio))]
 use libboard_artiq::io_expander;
 use libboard_artiq::{identifier_read, logger, pl};
 use libboard_zynq::{gic, mpcore, timer::GlobalTimer};
@@ -38,7 +38,7 @@ mod rtio_mgt;
 #[cfg(has_drtio)]
 mod subkernel;
 
-#[cfg(feature = "target_kasli_soc")]
+#[cfg(all(feature = "target_kasli_soc", has_drtio))]
 async fn io_expanders_service(
     i2c_bus: RefCell<&mut libboard_zynq::i2c::I2c>,
     io_expander0: RefCell<io_expander::IoExpander>,
@@ -93,12 +93,12 @@ pub fn main_core0() {
     info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
     ksupport::i2c::init();
-    #[cfg(feature = "target_kasli_soc")]
+    #[cfg(all(feature = "target_kasli_soc", has_drtio))]
     let i2c_bus = unsafe { (ksupport::i2c::I2C_BUS).as_mut().unwrap() };
 
-    #[cfg(feature = "target_kasli_soc")]
+    #[cfg(all(feature = "target_kasli_soc", has_drtio))]
     let (mut io_expander0, mut io_expander1);
-    #[cfg(feature = "target_kasli_soc")]
+    #[cfg(all(feature = "target_kasli_soc", has_drtio))]
     {
         io_expander0 = io_expander::IoExpander::new(i2c_bus, 0).unwrap();
         io_expander1 = io_expander::IoExpander::new(i2c_bus, 1).unwrap();
@@ -135,7 +135,7 @@ pub fn main_core0() {
 
     task::spawn(ksupport::report_async_rtio_errors());
 
-    #[cfg(feature = "target_kasli_soc")]
+    #[cfg(all(feature = "target_kasli_soc", has_drtio))]
     task::spawn(io_expanders_service(
         RefCell::new(i2c_bus),
         RefCell::new(io_expander0),
