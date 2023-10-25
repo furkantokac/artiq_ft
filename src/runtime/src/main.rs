@@ -94,14 +94,10 @@ pub fn main_core0() {
 
     ksupport::i2c::init();
     #[cfg(all(feature = "target_kasli_soc", has_drtio))]
-    let i2c_bus = unsafe { (ksupport::i2c::I2C_BUS).as_mut().unwrap() };
-
-    #[cfg(all(feature = "target_kasli_soc", has_drtio))]
-    let (mut io_expander0, mut io_expander1);
-    #[cfg(all(feature = "target_kasli_soc", has_drtio))]
     {
-        io_expander0 = io_expander::IoExpander::new(i2c_bus, 0).unwrap();
-        io_expander1 = io_expander::IoExpander::new(i2c_bus, 1).unwrap();
+        let i2c_bus = unsafe { (ksupport::i2c::I2C_BUS).as_mut().unwrap() };
+        let mut io_expander0 = io_expander::IoExpander::new(i2c_bus, 0).unwrap();
+        let mut io_expander1 = io_expander::IoExpander::new(i2c_bus, 1).unwrap();
         io_expander0
             .init(i2c_bus)
             .expect("I2C I/O expander #0 initialization failed");
@@ -115,6 +111,11 @@ pub fn main_core0() {
         io_expander1.set(1, 1, false);
         io_expander0.service(i2c_bus).unwrap();
         io_expander1.service(i2c_bus).unwrap();
+        task::spawn(io_expanders_service(
+            RefCell::new(i2c_bus),
+            RefCell::new(io_expander0),
+            RefCell::new(io_expander1),
+        ));
     }
 
     let cfg = match Config::new() {
@@ -135,11 +136,5 @@ pub fn main_core0() {
 
     task::spawn(ksupport::report_async_rtio_errors());
 
-    #[cfg(all(feature = "target_kasli_soc", has_drtio))]
-    task::spawn(io_expanders_service(
-        RefCell::new(i2c_bus),
-        RefCell::new(io_expander0),
-        RefCell::new(io_expander1),
-    ));
     comms::main(timer, cfg);
 }
