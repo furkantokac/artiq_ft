@@ -41,3 +41,7 @@ libc = { path = "../libc" }
 io = { path = "../libio", features = ["alloc"] }
 ksupport = { path = "../libksupport" }
 libboard_artiq = { path = "../libboard_artiq" }
+
+[dependencies.tar-no-std]
+git = "https://git.m-labs.hk/M-Labs/tar-no-std"
+rev = "2ab6dc5"

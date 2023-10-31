@@ -3,6 +3,12 @@
 version = 3
 
 [[package]]
+name = "arrayvec"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
+
+[[package]]
 name = "async-recursion"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -474,6 +480,7 @@ dependencies = [
  "log_buffer",
  "num-derive",
  "num-traits",
+ "tar-no-std",
  "unwind",
  "vcell",
  "void",
@@ -536,6 +543,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "tar-no-std"
+version = "0.1.8"
+source = "git+https://git.m-labs.hk/M-Labs/tar-no-std?rev=2ab6dc5#2ab6dc58e5249c59c4eb03eaf3a119bcdd678d32"
+dependencies = [
+ "arrayvec",
+ "bitflags",
+ "log",
 ]
 
 [[package]]

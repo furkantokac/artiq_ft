@@ -3,17 +3,23 @@ use core::{cell::RefCell, fmt, slice, str};
 
 use core_io::Error as IoError;
 use cslice::CSlice;
+#[cfg(has_drtio)]
+use dyld::elf;
 use futures::{future::FutureExt, select_biased};
 #[cfg(has_drtio)]
 use io::Cursor;
 #[cfg(has_drtio)]
 use ksupport::rpc;
 use ksupport::{kernel, resolve_channel_name};
+#[cfg(has_drtio)]
+use libasync::delay;
 use libasync::{smoltcp::{Sockets, TcpStream},
                task};
 use libboard_artiq::drtio_routing;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
+#[cfg(has_drtio)]
+use libboard_zynq::time::Milliseconds;
 use libboard_zynq::{self as zynq,
                     smoltcp::{self,
                               iface::{EthernetInterfaceBuilder, NeighborCache},
@@ -27,6 +33,8 @@ use libcortex_a9::{mutex::Mutex,
 use log::{error, info, warn};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
+#[cfg(has_drtio)]
+use tar_no_std::TarArchiveRef;
 
 #[cfg(has_drtio)]
 use crate::pl;
@@ -43,6 +51,8 @@ pub enum Error {
     BufferExhausted,
     #[cfg(has_drtio)]
     SubkernelError(subkernel::Error),
+    #[cfg(has_drtio)]
+    DestinationDown,
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -57,6 +67,8 @@ impl fmt::Display for Error {
             Error::BufferExhausted => write!(f, "buffer exhausted"),
             #[cfg(has_drtio)]
             Error::SubkernelError(error) => write!(f, "subkernel error: {:?}", error),
+            #[cfg(has_drtio)]
+            Error::DestinationDown => write!(f, "subkernel destination down"),
         }
     }
 }
@@ -538,6 +550,56 @@ async fn handle_run_kernel(
     Ok(())
 }
 
+async fn handle_flash_kernel(
+    buffer: &Vec<u8>,
+    control: &Rc<RefCell<kernel::Control>>,
+    _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
+    _aux_mutex: &Rc<Mutex<bool>>,
+    _routing_table: &drtio_routing::RoutingTable,
+    _timer: GlobalTimer,
+) -> Result<()> {
+    if buffer[0] == elf::ELFMAG0 && buffer[1] == elf::ELFMAG1 && buffer[2] == elf::ELFMAG2 && buffer[3] == elf::ELFMAG3
+    {
+        // assume ELF file, proceed as before
+        load_kernel(buffer, control, None).await
+    } else {
+        #[cfg(has_drtio)]
+        {
+            let archive = TarArchiveRef::new(buffer.as_ref());
+            let entries = archive.entries();
+            let mut main_lib: Vec<u8> = Vec::new();
+            for entry in entries {
+                if entry.filename().as_str() == "main.elf" {
+                    main_lib = entry.data().to_vec();
+                } else {
+                    // subkernel filename must be in format:
+                    // "<subkernel id> <destination>.elf"
+                    let filename = entry.filename();
+                    let mut iter = filename.as_str().split_whitespace();
+                    let sid: u32 = iter.next().unwrap().parse().unwrap();
+                    let dest: u8 = iter.next().unwrap().strip_suffix(".elf").unwrap().parse().unwrap();
+                    let up = _up_destinations.borrow()[dest as usize];
+                    if up {
+                        let subkernel_lib = entry.data().to_vec();
+                        subkernel::add_subkernel(sid, dest, subkernel_lib).await;
+                        match subkernel::upload(_aux_mutex, _routing_table, _timer, sid).await {
+                            Ok(_) => (),
+                            Err(_) => return Err(Error::UnexpectedPattern),
+                        }
+                    } else {
+                        return Err(Error::DestinationDown);
+                    }
+                }
+            }
+            load_kernel(&main_lib, control, None).await
+        }
+        #[cfg(not(has_drtio))]
+        {
+            panic!("multi-kernel libraries are not supported in standalone systems");
+        }
+    }
+}
+
 async fn load_kernel(
     buffer: &Vec<u8>,
     control: &Rc<RefCell<kernel::Control>>,
@@ -693,7 +755,6 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
 
     Sockets::init(32);
 
-    // before, mutex was on io, but now that io isn't used...?
     let aux_mutex: Rc<Mutex<bool>> = Rc::new(Mutex::new(false));
     #[cfg(has_drtio)]
     let drtio_routing_table = Rc::new(RefCell::new(drtio_routing::config_routing_table(
@@ -716,9 +777,16 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
     let idle_kernel = Rc::new(cfg.read("idle_kernel").ok());
     if let Ok(buffer) = cfg.read("startup_kernel") {
         info!("Loading startup kernel...");
-        if let Ok(()) = task::block_on(load_kernel(&buffer, &control, None)) {
+        let routing_table = drtio_routing_table.borrow();
+        if let Ok(()) = task::block_on(handle_flash_kernel(
+            &buffer,
+            &control,
+            &up_destinations,
+            &aux_mutex,
+            &routing_table,
+            timer,
+        )) {
             info!("Starting startup kernel...");
-            let routing_table = drtio_routing_table.borrow();
             let _ = task::block_on(handle_run_kernel(
                 None,
                 &control,
@@ -766,8 +834,17 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
                             .map_err(|e| warn!("connection terminated: {}", e));
                         if let Some(buffer) = &*idle_kernel {
                             info!("Loading idle kernel");
-                            let _ = load_kernel(&buffer, &control, None)
-                                .await.map_err(|_| warn!("error loading idle kernel"));
+                            let res = handle_flash_kernel(&buffer, &control, &up_destinations,  &aux_mutex, &routing_table, timer)
+                                .await;
+                            match res {
+                                #[cfg(has_drtio)]
+                                Err(Error::DestinationDown) => {
+                                    let mut countdown = timer.countdown();
+                                    delay(&mut countdown, Milliseconds(500)).await;
+                                }
+                                Err(_) => warn!("error loading idle kernel"),
+                                _ => (),
+                            }
                             info!("Running idle kernel");
                             let _ = handle_run_kernel(None, &control, &up_destinations, &aux_mutex, &routing_table, timer)
                                 .await.map_err(|_| warn!("error running idle kernel"));
