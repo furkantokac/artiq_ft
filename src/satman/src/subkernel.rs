@@ -8,7 +8,7 @@ use core_io::{Error as IoError, Write};
 use cslice::AsCSlice;
 use io::{Cursor, ProtoWrite};
 use ksupport::{eh_artiq, kernel, rpc};
-use libboard_artiq::{drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE},
+use libboard_artiq::{drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE},
                      pl::csr};
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use libcortex_a9::sync_channel::Receiver;
@@ -133,24 +133,23 @@ pub struct SubkernelFinished {
 
 pub struct SliceMeta {
     pub len: u16,
-    pub last: bool,
+    pub status: PayloadStatus,
 }
 
 macro_rules! get_slice_fn {
     ($name:tt, $size:expr) => {
         pub fn $name(&mut self, data_slice: &mut [u8; $size]) -> SliceMeta {
-            if self.data.len() == 0 {
-                return SliceMeta { len: 0, last: true };
-            }
+            let first = self.it == 0;
             let len = min($size, self.data.len() - self.it);
             let last = self.it + len == self.data.len();
+            let status = PayloadStatus::from_status(first, last);
 
             data_slice[..len].clone_from_slice(&self.data[self.it..self.it + len]);
             self.it += len;
 
             SliceMeta {
                 len: len as u16,
-                last: last,
+                status: status,
             }
         }
     };
@@ -175,8 +174,11 @@ impl MessageManager {
         }
     }
 
-    pub fn handle_incoming(&mut self, last: bool, length: usize, data: &[u8; MASTER_PAYLOAD_MAX_SIZE]) {
+    pub fn handle_incoming(&mut self, status: PayloadStatus, length: usize, data: &[u8; MASTER_PAYLOAD_MAX_SIZE]) {
         // called when receiving a message from master
+        if status.is_first() {
+            self.in_buffer = None;
+        }
         match self.in_buffer.as_mut() {
             Some(message) => message.data.extend(&data[..length]),
             None => {
@@ -186,7 +188,7 @@ impl MessageManager {
                 });
             }
         };
-        if last {
+        if status.is_last() {
             // when done, remove from working queue
             self.in_queue.push_back(self.in_buffer.take().unwrap());
         }
@@ -218,7 +220,7 @@ impl MessageManager {
             return None;
         }
         let meta = self.out_message.as_mut()?.get_slice_master(data_slice);
-        if meta.last {
+        if meta.status.is_last() {
             // clear the message slot
             self.out_message = None;
             // notify kernel with a flag that message is sent
@@ -265,10 +267,10 @@ impl<'a> Manager<'_> {
         }
     }
 
-    pub fn add(&mut self, id: u32, last: bool, data: &[u8], data_len: usize) -> Result<(), Error> {
+    pub fn add(&mut self, id: u32, status: PayloadStatus, data: &[u8], data_len: usize) -> Result<(), Error> {
         let kernel = match self.kernels.get_mut(&id) {
             Some(kernel) => {
-                if kernel.complete {
+                if kernel.complete || status.is_first() {
                     // replace entry
                     self.kernels.remove(&id);
                     self.kernels.insert(
@@ -296,7 +298,7 @@ impl<'a> Manager<'_> {
         };
         kernel.library.extend(&data[0..data_len]);
 
-        kernel.complete = last;
+        kernel.complete = status.is_last();
         Ok(())
     }
 
@@ -325,11 +327,16 @@ impl<'a> Manager<'_> {
         Ok(())
     }
 
-    pub fn message_handle_incoming(&mut self, last: bool, length: usize, slice: &[u8; MASTER_PAYLOAD_MAX_SIZE]) {
+    pub fn message_handle_incoming(
+        &mut self,
+        status: PayloadStatus,
+        length: usize,
+        slice: &[u8; MASTER_PAYLOAD_MAX_SIZE],
+    ) {
         if !self.running() {
             return;
         }
-        self.session.messages.handle_incoming(last, length, slice);
+        self.session.messages.handle_incoming(status, length, slice);
     }
 
     pub fn message_get_slice(&mut self, slice: &mut [u8; MASTER_PAYLOAD_MAX_SIZE]) -> Option<SliceMeta> {
@@ -378,7 +385,10 @@ impl<'a> Manager<'_> {
     pub fn exception_get_slice(&mut self, data_slice: &mut [u8; SAT_PAYLOAD_MAX_SIZE]) -> SliceMeta {
         match self.session.last_exception.as_mut() {
             Some(exception) => exception.get_slice_sat(data_slice),
-            None => SliceMeta { len: 0, last: true },
+            None => SliceMeta {
+                len: 0,
+                status: PayloadStatus::FirstAndLast,
+            },
         }
     }
 

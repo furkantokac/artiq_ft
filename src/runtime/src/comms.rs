@@ -458,6 +458,20 @@ async fn handle_run_kernel(
                     Err(SubkernelError::Timeout) => (kernel::SubkernelStatus::Timeout, 0),
                     Err(SubkernelError::IncorrectState) => (kernel::SubkernelStatus::IncorrectState, 0),
                     Err(SubkernelError::CommLost) => (kernel::SubkernelStatus::CommLost, 0),
+                    Err(SubkernelError::SubkernelException) => {
+                        error!("Exception in subkernel");
+                        // just retrieve the exception
+                        let status = subkernel::await_finish(aux_mutex, routing_table, timer, id, timeout)
+                            .await
+                            .unwrap();
+                        match stream {
+                            None => (),
+                            Some(stream) => {
+                                write_chunk(stream, &status.exception.unwrap()).await?;
+                            }
+                        }
+                        (kernel::SubkernelStatus::OtherError, 0)
+                    }
                     Err(_) => (kernel::SubkernelStatus::OtherError, 0),
                 };
                 control

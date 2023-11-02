@@ -1,7 +1,8 @@
 use alloc::{collections::BTreeMap, rc::Rc, vec::Vec};
 
 use libasync::task;
-use libboard_artiq::{drtio_routing::RoutingTable, drtioaux_proto::MASTER_PAYLOAD_MAX_SIZE};
+use libboard_artiq::{drtio_routing::RoutingTable,
+                     drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE}};
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use libcortex_a9::mutex::Mutex;
 use log::error;
@@ -28,6 +29,7 @@ pub enum Error {
     Timeout,
     IncorrectState,
     SubkernelNotFound,
+    SubkernelException,
     CommLost,
     DrtioError(&'static str),
 }
@@ -123,11 +125,13 @@ pub async fn subkernel_finished(id: u32, with_exception: bool) {
     // called upon receiving DRTIO SubkernelRunDone
     // may be None if session ends and is cleared
     if let Some(subkernel) = SUBKERNELS.async_lock().await.get_mut(&id) {
-        subkernel.state = SubkernelState::Finished {
-            status: match with_exception {
-                true => FinishStatus::Exception,
-                false => FinishStatus::Ok,
-            },
+        if subkernel.state == SubkernelState::Running {
+            subkernel.state = SubkernelState::Finished {
+                status: match with_exception {
+                    true => FinishStatus::Exception,
+                    false => FinishStatus::Ok,
+                },
+            }
         }
     }
 }
@@ -220,13 +224,27 @@ static MESSAGE_QUEUE: Mutex<Vec<Message>> = Mutex::new(Vec::new());
 // currently under construction message(s) (can be from multiple sources)
 static CURRENT_MESSAGES: Mutex<BTreeMap<u32, Message>> = Mutex::new(BTreeMap::new());
 
-pub async fn message_handle_incoming(id: u32, last: bool, length: usize, data: &[u8; MASTER_PAYLOAD_MAX_SIZE]) {
+pub async fn message_handle_incoming(
+    id: u32,
+    status: PayloadStatus,
+    length: usize,
+    data: &[u8; MASTER_PAYLOAD_MAX_SIZE],
+) {
     // called when receiving a message from satellite
-    if SUBKERNELS.async_lock().await.get(&id).is_none() {
-        // do not add messages for non-existing or deleted subkernels
-        return;
+    {
+        let subkernel_lock = SUBKERNELS.async_lock().await;
+        let subkernel = subkernel_lock.get(&id);
+        if subkernel.is_none() || subkernel.unwrap().state != SubkernelState::Running {
+            // do not add messages for non-existing or deleted subkernels
+            return;
+        }
     }
     let mut current_messages = CURRENT_MESSAGES.async_lock().await;
+
+    if status.is_first() {
+        current_messages.remove(&id);
+    }
+
     match current_messages.get_mut(&id) {
         Some(message) => message.data.extend(&data[..length]),
         None => {
@@ -240,7 +258,7 @@ pub async fn message_handle_incoming(id: u32, last: bool, length: usize, data: &
             );
         }
     };
-    if last {
+    if status.is_last() {
         // when done, remove from working queue
         MESSAGE_QUEUE
             .async_lock()
@@ -268,6 +286,15 @@ pub async fn message_await(id: u32, timeout: u64, timer: GlobalTimer) -> Result<
                     return Ok(message);
                 }
             }
+        }
+        match SUBKERNELS.async_lock().await.get(&id).unwrap().state {
+            SubkernelState::Finished {
+                status: FinishStatus::CommLost,
+            } => return Err(Error::CommLost),
+            SubkernelState::Finished {
+                status: FinishStatus::Exception,
+            } => return Err(Error::SubkernelException),
+            _ => (),
         }
         task::r#yield().await;
     }
