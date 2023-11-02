@@ -1,6 +1,6 @@
 use alloc::{collections::btree_map::BTreeMap, vec::Vec};
 
-use libboard_artiq::pl::csr;
+use libboard_artiq::{drtioaux_proto::PayloadStatus, pl::csr};
 use libcortex_a9::cache::dcci_slice;
 
 const ALIGNMENT: usize = 64;
@@ -50,10 +50,10 @@ impl Manager {
         }
     }
 
-    pub fn add(&mut self, id: u32, last: bool, trace: &[u8], trace_len: usize) -> Result<(), Error> {
+    pub fn add(&mut self, id: u32, status: PayloadStatus, trace: &[u8], trace_len: usize) -> Result<(), Error> {
         let entry = match self.entries.get_mut(&id) {
             Some(entry) => {
-                if entry.complete {
+                if entry.complete || status.is_first() {
                     // replace entry
                     self.entries.remove(&id);
                     self.entries.insert(
@@ -83,7 +83,7 @@ impl Manager {
         };
         entry.trace.extend(&trace[0..trace_len]);
 
-        if last {
+        if status.is_last() {
             entry.trace.push(0);
             let data_len = entry.trace.len();
 

@@ -162,7 +162,7 @@ fn process_aux_packet(
                             &drtioaux::Packet::SubkernelMessage {
                                 destination: destination,
                                 id: kernel_manager.get_current_id().unwrap(),
-                                last: meta.last,
+                                status: meta.status,
                                 length: meta.len as u16,
                                 data: data_slice,
                             },
@@ -494,12 +494,12 @@ fn process_aux_packet(
         drtioaux::Packet::DmaAddTraceRequest {
             destination: _destination,
             id,
-            last,
+            status,
             length,
             trace,
         } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
-            let succeeded = dma_manager.add(id, last, &trace, length as usize).is_ok();
+            let succeeded = dma_manager.add(id, status, &trace, length as usize).is_ok();
             drtioaux::send(0, &drtioaux::Packet::DmaAddTraceReply { succeeded: succeeded })
         }
         drtioaux::Packet::DmaRemoveTraceRequest {
@@ -527,12 +527,12 @@ fn process_aux_packet(
         drtioaux::Packet::SubkernelAddDataRequest {
             destination: _destination,
             id,
-            last,
+            status,
             length,
             data,
         } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
-            let succeeded = kernel_manager.add(id, last, &data, length as usize).is_ok();
+            let succeeded = kernel_manager.add(id, status, &data, length as usize).is_ok();
             drtioaux::send(0, &drtioaux::Packet::SubkernelAddDataReply { succeeded: succeeded })
         }
         drtioaux::Packet::SubkernelLoadRunRequest {
@@ -562,7 +562,7 @@ fn process_aux_packet(
             drtioaux::send(
                 0,
                 &drtioaux::Packet::SubkernelException {
-                    last: meta.last,
+                    last: meta.status.is_last(),
                     length: meta.len,
                     data: data_slice,
                 },
@@ -571,12 +571,12 @@ fn process_aux_packet(
         drtioaux::Packet::SubkernelMessage {
             destination,
             id: _id,
-            last,
+            status,
             length,
             data,
         } => {
             forward!(_routing_table, destination, *_rank, _repeaters, &packet, timer);
-            kernel_manager.message_handle_incoming(last, length as usize, &data);
+            kernel_manager.message_handle_incoming(status, length as usize, &data);
             drtioaux::send(
                 0,
                 &drtioaux::Packet::SubkernelMessageAck {
@@ -596,7 +596,7 @@ fn process_aux_packet(
                         &drtioaux::Packet::SubkernelMessage {
                             destination: *_rank,
                             id: kernel_manager.get_current_id().unwrap(),
-                            last: meta.last,
+                            status: meta.status,
                             length: meta.len as u16,
                             data: data_slice,
                         },

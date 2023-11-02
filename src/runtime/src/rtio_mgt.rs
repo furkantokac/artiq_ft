@@ -13,8 +13,10 @@ pub mod drtio {
     use ksupport::{resolve_channel_name, ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR,
                    SEEN_ASYNC_ERRORS};
     use libasync::{delay, task};
-    use libboard_artiq::{drtioaux::Error, drtioaux_async, drtioaux_async::Packet,
-                         drtioaux_proto::MASTER_PAYLOAD_MAX_SIZE};
+    use libboard_artiq::{drtioaux::Error,
+                         drtioaux_async,
+                         drtioaux_async::Packet,
+                         drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE}};
     use libboard_zynq::time::Milliseconds;
     use log::{error, info, warn};
 
@@ -61,11 +63,11 @@ pub mod drtio {
             Packet::SubkernelMessage {
                 id,
                 destination: from,
-                last,
+                status,
                 length,
                 data,
             } => {
-                subkernel::message_handle_incoming(id, last, length as usize, &data).await;
+                subkernel::message_handle_incoming(id, status, length as usize, &data).await;
                 // acknowledge receiving part of the message
                 let _lock = aux_mutex.async_lock().await;
                 drtioaux_async::send(linkno, &Packet::SubkernelMessageAck { destination: from })
@@ -463,7 +465,7 @@ pub mod drtio {
         reply_handler_f: HandlerF,
     ) -> Result<(), &'static str>
     where
-        PacketF: Fn(&[u8; MASTER_PAYLOAD_MAX_SIZE], bool, usize) -> Packet,
+        PacketF: Fn(&[u8; MASTER_PAYLOAD_MAX_SIZE], PayloadStatus, usize) -> Packet,
         HandlerF: Fn(&Packet) -> Result<(), &'static str>,
     {
         let mut i = 0;
@@ -474,10 +476,12 @@ pub mod drtio {
             } else {
                 data.len() - i
             } as usize;
+            let first = i == 0;
             let last = i + len == data.len();
             slice[..len].clone_from_slice(&data[i..i + len]);
             i += len;
-            let packet = packet_f(&slice, last, len);
+            let status = PayloadStatus::from_status(first, last);
+            let packet = packet_f(&slice, status, len);
             let reply = aux_transact(aux_mutex, linkno, &packet, timer).await?;
             reply_handler_f(&reply)?;
         }
@@ -498,10 +502,10 @@ pub mod drtio {
             aux_mutex,
             timer,
             trace,
-            |slice, last, len| Packet::DmaAddTraceRequest {
+            |slice, status, len| Packet::DmaAddTraceRequest {
                 id: id,
                 destination: destination,
-                last: last,
+                status: status,
                 length: len as u16,
                 trace: *slice,
             },
@@ -655,10 +659,10 @@ pub mod drtio {
             aux_mutex,
             timer,
             data,
-            |slice, last, len| Packet::SubkernelAddDataRequest {
+            |slice, status, len| Packet::SubkernelAddDataRequest {
                 id: id,
                 destination: destination,
-                last: last,
+                status: status,
                 length: len as u16,
                 data: *slice,
             },
@@ -742,10 +746,10 @@ pub mod drtio {
             aux_mutex,
             timer,
             message,
-            |slice, last, len| Packet::SubkernelMessage {
+            |slice, status, len| Packet::SubkernelMessage {
                 destination: destination,
                 id: id,
-                last: last,
+                status: status,
                 length: len as u16,
                 data: *slice,
             },
