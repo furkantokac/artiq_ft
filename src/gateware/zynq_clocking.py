@@ -88,7 +88,7 @@ class SYSCRG(Module, AutoCSR):
         else:
             self.comb += self.clk_sw_fsm.i_clk_sw.eq(clk_sw)
 
-        mmcm_locked = Signal()
+        self.mmcm_locked = Signal()
         mmcm_sys = Signal()
         mmcm_sys4x = Signal()
         mmcm_sys5x = Signal()
@@ -96,7 +96,7 @@ class SYSCRG(Module, AutoCSR):
         mmcm_fb_clk = Signal()
         self.specials += [
             Instance("MMCME2_ADV",
-                p_STARTUP_WAIT="FALSE", o_LOCKED=mmcm_locked,
+                p_STARTUP_WAIT="FALSE", o_LOCKED=self.mmcm_locked,
                 p_BANDWIDTH="HIGH",
                 p_REF_JITTER1=0.001,
                 p_CLKIN1_PERIOD=period, i_CLKIN1=main_clk,
@@ -125,8 +125,8 @@ class SYSCRG(Module, AutoCSR):
             Instance("BUFG", i_I=mmcm_sys, o_O=self.cd_sys.clk),
             Instance("BUFG", i_I=mmcm_sys4x, o_O=self.cd_sys4x.clk),
             Instance("BUFG", i_I=mmcm_clk208, o_O=self.cd_clk200.clk),
-            AsyncResetSynchronizer(self.cd_sys, ~mmcm_locked),
-            AsyncResetSynchronizer(self.cd_clk200, ~mmcm_locked),
+            AsyncResetSynchronizer(self.cd_sys, ~self.mmcm_locked),
+            AsyncResetSynchronizer(self.cd_clk200, ~self.mmcm_locked),
         ]
 
         reset_counter = Signal(4, reset=15)
