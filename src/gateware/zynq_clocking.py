@@ -65,7 +65,7 @@ class ClockSwitchFSM(Module):
 
 
 class SYSCRG(Module, AutoCSR):
-    def __init__(self, platform, ps7, main_clk, clk_sw=None, freq=125e6):
+    def __init__(self, platform, ps7, main_clk, clk_sw=None, freq=125e6, ext_async_rst=None):
         # assumes bootstrap clock is same freq as main and sys output
         self.clock_domains.cd_sys = ClockDomain()
         self.clock_domains.cd_sys4x = ClockDomain(reset_less=True)
@@ -125,9 +125,18 @@ class SYSCRG(Module, AutoCSR):
             Instance("BUFG", i_I=mmcm_sys, o_O=self.cd_sys.clk),
             Instance("BUFG", i_I=mmcm_sys4x, o_O=self.cd_sys4x.clk),
             Instance("BUFG", i_I=mmcm_clk208, o_O=self.cd_clk200.clk),
-            AsyncResetSynchronizer(self.cd_sys, ~self.mmcm_locked),
-            AsyncResetSynchronizer(self.cd_clk200, ~self.mmcm_locked),
         ]
+
+        if ext_async_rst is not None:
+            self.specials += [
+                AsyncResetSynchronizer(self.cd_sys, ~self.mmcm_locked | ext_async_rst),
+                AsyncResetSynchronizer(self.cd_clk200, ~self.mmcm_locked | ext_async_rst),
+            ]
+        else:
+            self.specials += [
+                AsyncResetSynchronizer(self.cd_sys, ~self.mmcm_locked),
+                AsyncResetSynchronizer(self.cd_clk200, ~self.mmcm_locked),
+            ]
 
         reset_counter = Signal(4, reset=15)
         ic_reset = Signal(reset=1)
