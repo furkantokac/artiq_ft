@@ -226,6 +226,7 @@ class _MasterBase(SoCCore):
         self.csr_devices.append("gt_drtio")
 
         self.submodules.rtio_tsc = rtio.TSC(glbl_fine_ts_width=3)
+        ext_async_rst = Signal()
         txout_buf = Signal()
         gtx0 = self.gt_drtio.gtxs[0]
         self.specials += Instance("BUFG", i_I=gtx0.txoutclk, o_O=txout_buf)
@@ -234,11 +235,16 @@ class _MasterBase(SoCCore):
             self.platform, 
             self.ps7, 
             txout_buf,
-            clk_sw=gtx0.tx_init.done,
+            clk_sw=self.gt_drtio.stable_clkin.storage,
+            clk_sw_status=gtx0.tx_init.done,
+            ext_async_rst=ext_async_rst,
             freq=clk_freq)
         platform.add_false_path_constraints(
             self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
         self.csr_devices.append("sys_crg")
+
+        self.comb += ext_async_rst.eq(self.sys_crg.clk_sw_fsm.o_clk_sw & ~gtx0.tx_init.done)
+        self.specials += MultiReg(self.sys_crg.clk_sw_fsm.o_clk_sw & self.sys_crg.mmcm_locked, self.gt_drtio.clk_path_ready, odomain="bootstrap")
 
         drtio_csr_group = []
         drtioaux_csr_group = []
@@ -361,6 +367,7 @@ class _SatelliteBase(SoCCore):
             clk_freq=clk_freq)
         self.csr_devices.append("gt_drtio")
 
+        ext_async_rst = Signal()
         txout_buf = Signal()
         txout_buf.attr.add("keep")
         gtx0 = self.gt_drtio.gtxs[0]
@@ -373,11 +380,16 @@ class _SatelliteBase(SoCCore):
             self.platform, 
             self.ps7, 
             txout_buf,
-            clk_sw=gtx0.tx_init.done,
+            clk_sw=self.gt_drtio.stable_clkin.storage,
+            clk_sw_status=gtx0.tx_init.done,
+            ext_async_rst=ext_async_rst,
             freq=clk_freq)
         platform.add_false_path_constraints(
             self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
         self.csr_devices.append("sys_crg")
+
+        self.comb += ext_async_rst.eq(self.sys_crg.clk_sw_fsm.o_clk_sw & ~gtx0.tx_init.done)
+        self.specials += MultiReg(self.sys_crg.clk_sw_fsm.o_clk_sw & self.sys_crg.mmcm_locked, self.gt_drtio.clk_path_ready, odomain="bootstrap")
 
         drtioaux_csr_group = []
         drtioaux_memory_group = []

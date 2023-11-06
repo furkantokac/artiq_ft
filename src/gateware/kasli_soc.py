@@ -237,18 +237,25 @@ class GenericMaster(SoCCore):
         gtx0 = self.gt_drtio.gtxs[0]
         self.specials += Instance("BUFG", i_I=gtx0.txoutclk, o_O=txout_buf)
 
+        ext_async_rst = Signal()
+
         self.submodules.bootstrap = GTPBootstrapClock(self.platform, clk_freq)
         self.submodules.sys_crg = zynq_clocking.SYSCRG(
             self.platform,
             self.ps7,
             txout_buf,
-            clk_sw=gtx0.tx_init.done)
+            clk_sw=self.gt_drtio.stable_clkin.storage,
+            clk_sw_status=gtx0.tx_init.done,
+            ext_async_rst=ext_async_rst)
         self.csr_devices.append("sys_crg")
         self.crg = self.ps7 # HACK for eem_7series to find the clock
         self.crg.cd_sys = self.sys_crg.cd_sys
         platform.add_false_path_constraints(
             self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
         fix_serdes_timing_path(platform)
+
+        self.comb += ext_async_rst.eq(self.sys_crg.clk_sw_fsm.o_clk_sw & ~gtx0.tx_init.done)
+        self.specials += MultiReg(self.sys_crg.clk_sw_fsm.o_clk_sw & self.sys_crg.mmcm_locked, self.gt_drtio.clk_path_ready, odomain="bootstrap")
 
         self.config["HAS_SI5324"] = None
         self.config["SI5324_SOFT_RESET"] = None
@@ -419,12 +426,16 @@ class GenericSatellite(SoCCore):
         gtx0 = self.gt_drtio.gtxs[0]
         self.specials += Instance("BUFG", i_I=gtx0.txoutclk, o_O=txout_buf)
 
+        ext_async_rst = Signal()
+
         self.submodules.bootstrap = GTPBootstrapClock(self.platform, clk_freq)
         self.submodules.sys_crg = zynq_clocking.SYSCRG(
             self.platform, 
             self.ps7,
             txout_buf,
-            clk_sw=gtx0.tx_init.done)
+            clk_sw=self.gt_drtio.stable_clkin.storage,
+            clk_sw_status=gtx0.tx_init.done,
+            ext_async_rst=ext_async_rst)
         platform.add_false_path_constraints(
             self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
         self.csr_devices.append("sys_crg")
@@ -432,6 +443,9 @@ class GenericSatellite(SoCCore):
         self.crg.cd_sys = self.sys_crg.cd_sys
 
         fix_serdes_timing_path(platform)
+
+        self.comb += ext_async_rst.eq(self.sys_crg.clk_sw_fsm.o_clk_sw & ~gtx0.tx_init.done)
+        self.specials += MultiReg(self.sys_crg.clk_sw_fsm.o_clk_sw & self.sys_crg.mmcm_locked, self.gt_drtio.clk_path_ready, odomain="bootstrap")
 
         self.rtio_channels = []
         has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
