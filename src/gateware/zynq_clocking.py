@@ -65,7 +65,7 @@ class ClockSwitchFSM(Module):
 
 
 class SYSCRG(Module, AutoCSR):
-    def __init__(self, platform, ps7, main_clk, clk_sw=None, freq=125e6, ext_async_rst=None):
+    def __init__(self, platform, ps7, main_clk, clk_sw=None, clk_sw_status=None, freq=125e6, ext_async_rst=None, ):
         # assumes bootstrap clock is same freq as main and sys output
         self.clock_domains.cd_sys = ClockDomain()
         self.clock_domains.cd_sys4x = ClockDomain(reset_less=True)
@@ -148,4 +148,7 @@ class SYSCRG(Module, AutoCSR):
             )
         self.specials += Instance("IDELAYCTRL", i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
 
-        self.comb += self.current_clock.status.eq(self.clk_sw_fsm.o_clk_sw)
+        if clk_sw_status is None:
+            self.comb += self.current_clock.status.eq(self.clk_sw_fsm.o_clk_sw)
+        else:
+            self.comb += self.current_clock.status.eq(clk_sw_status)
