@@ -3,7 +3,6 @@ use core::{cell::RefCell, fmt, slice, str};
 
 use core_io::Error as IoError;
 use cslice::CSlice;
-#[cfg(has_drtio)]
 use dyld::elf;
 use futures::{future::FutureExt, select_biased};
 #[cfg(has_drtio)]
