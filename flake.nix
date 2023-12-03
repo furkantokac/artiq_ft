@@ -78,6 +78,7 @@
 
       # migen/misoc version checks are broken with pyproject for some reason
       postPatch = ''
+        sed -i "1,4d" pyproject.toml
         substituteInPlace pyproject.toml \
           --replace '"migen@git+https://github.com/m-labs/migen",' ""
         substituteInPlace pyproject.toml \
@@ -152,6 +153,7 @@
 
         doCheck = false;
         dontFixup = true;
+        auditable = false;
       };
       gateware = pkgs.runCommand "${target}-${variant}-gateware"
         {
