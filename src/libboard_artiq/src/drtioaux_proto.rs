@@ -5,7 +5,7 @@ use io::proto::{ProtoRead, ProtoWrite};
 // used by satellite -> master analyzer, subkernel exceptions
 pub const SAT_PAYLOAD_MAX_SIZE: usize  = /*max size*/512 - /*CRC*/4 - /*packet ID*/1 - /*last*/1 - /*length*/2;
 // used by DDMA, subkernel program data (need to provide extra ID and destination)
-pub const MASTER_PAYLOAD_MAX_SIZE: usize = SAT_PAYLOAD_MAX_SIZE - /*destination*/1 - /*ID*/4;
+pub const MASTER_PAYLOAD_MAX_SIZE: usize = SAT_PAYLOAD_MAX_SIZE - /*source*/1 - /*destination*/1 - /*ID*/4;
 
 #[derive(Debug)]
 pub enum Error {
@@ -89,6 +89,8 @@ pub enum Packet {
     RoutingSetRank {
         rank: u8,
     },
+    RoutingRetrievePackets,
+    RoutingNoPackets,
     RoutingAck,
 
     MonitorRequest {
@@ -197,6 +199,7 @@ pub enum Packet {
     },
 
     DmaAddTraceRequest {
+        source: u8,
         destination: u8,
         id: u32,
         status: PayloadStatus,
@@ -204,24 +207,30 @@ pub enum Packet {
         trace: [u8; MASTER_PAYLOAD_MAX_SIZE],
     },
     DmaAddTraceReply {
+        destination: u8,
         succeeded: bool,
     },
     DmaRemoveTraceRequest {
+        source: u8,
         destination: u8,
         id: u32,
     },
     DmaRemoveTraceReply {
+        destination: u8,
         succeeded: bool,
     },
     DmaPlaybackRequest {
+        source: u8,
         destination: u8,
         id: u32,
         timestamp: u64,
     },
     DmaPlaybackReply {
+        destination: u8,
         succeeded: bool,
     },
     DmaPlaybackStatus {
+        source: u8,
         destination: u8,
         id: u32,
         error: u8,
@@ -240,22 +249,20 @@ pub enum Packet {
         succeeded: bool,
     },
     SubkernelLoadRunRequest {
+        source: u8,
         destination: u8,
         id: u32,
         run: bool,
     },
     SubkernelLoadRunReply {
-        succeeded: bool,
-    },
-    SubkernelStopRequest {
         destination: u8,
-    },
-    SubkernelStopReply {
         succeeded: bool,
     },
     SubkernelFinished {
+        destination: u8,
         id: u32,
         with_exception: bool,
+        exception_src: u8,
     },
     SubkernelExceptionRequest {
         destination: u8,
@@ -266,6 +273,7 @@ pub enum Packet {
         data: [u8; SAT_PAYLOAD_MAX_SIZE],
     },
     SubkernelMessage {
+        source: u8,
         destination: u8,
         id: u32,
         status: PayloadStatus,
@@ -315,6 +323,8 @@ impl Packet {
                 rank: reader.read_u8()?,
             },
             0x32 => Packet::RoutingAck,
+            0x33 => Packet::RoutingRetrievePackets,
+            0x34 => Packet::RoutingNoPackets,
 
             0x40 => Packet::MonitorRequest {
                 destination: reader.read_u8()?,
@@ -429,39 +439,47 @@ impl Packet {
             }
 
             0xb0 => {
+                let source = reader.read_u8()?;
                 let destination = reader.read_u8()?;
                 let id = reader.read_u32()?;
-                let status = PayloadStatus::from(reader.read_u8()?);
+                let status = reader.read_u8()?;
                 let length = reader.read_u16()?;
                 let mut trace: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut trace[0..length as usize])?;
                 Packet::DmaAddTraceRequest {
+                    source: source,
                     destination: destination,
                     id: id,
-                    status: status,
+                    status: PayloadStatus::from(status),
                     length: length as u16,
                     trace: trace,
                 }
             }
             0xb1 => Packet::DmaAddTraceReply {
+                destination: reader.read_u8()?,
                 succeeded: reader.read_bool()?,
             },
             0xb2 => Packet::DmaRemoveTraceRequest {
+                source: reader.read_u8()?,
                 destination: reader.read_u8()?,
                 id: reader.read_u32()?,
             },
             0xb3 => Packet::DmaRemoveTraceReply {
+                destination: reader.read_u8()?,
                 succeeded: reader.read_bool()?,
             },
             0xb4 => Packet::DmaPlaybackRequest {
+                source: reader.read_u8()?,
                 destination: reader.read_u8()?,
                 id: reader.read_u32()?,
                 timestamp: reader.read_u64()?,
             },
             0xb5 => Packet::DmaPlaybackReply {
+                destination: reader.read_u8()?,
                 succeeded: reader.read_bool()?,
             },
             0xb6 => Packet::DmaPlaybackStatus {
+                source: reader.read_u8()?,
                 destination: reader.read_u8()?,
                 id: reader.read_u32()?,
                 error: reader.read_u8()?,
@@ -488,22 +506,20 @@ impl Packet {
                 succeeded: reader.read_bool()?,
             },
             0xc4 => Packet::SubkernelLoadRunRequest {
+                source: reader.read_u8()?,
                 destination: reader.read_u8()?,
                 id: reader.read_u32()?,
                 run: reader.read_bool()?,
             },
             0xc5 => Packet::SubkernelLoadRunReply {
-                succeeded: reader.read_bool()?,
-            },
-            0xc6 => Packet::SubkernelStopRequest {
                 destination: reader.read_u8()?,
-            },
-            0xc7 => Packet::SubkernelStopReply {
                 succeeded: reader.read_bool()?,
             },
             0xc8 => Packet::SubkernelFinished {
+                destination: reader.read_u8()?,
                 id: reader.read_u32()?,
                 with_exception: reader.read_bool()?,
+                exception_src: reader.read_u8()?,
             },
             0xc9 => Packet::SubkernelExceptionRequest {
                 destination: reader.read_u8()?,
@@ -520,16 +536,18 @@ impl Packet {
                 }
             }
             0xcb => {
+                let source = reader.read_u8()?;
                 let destination = reader.read_u8()?;
                 let id = reader.read_u32()?;
-                let status = PayloadStatus::from(reader.read_u8()?);
+                let status = reader.read_u8()?;
                 let length = reader.read_u16()?;
                 let mut data: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut data[0..length as usize])?;
                 Packet::SubkernelMessage {
+                    source: source,
                     destination: destination,
                     id: id,
-                    status: status,
+                    status: PayloadStatus::from(status),
                     length: length as u16,
                     data: data,
                 }
@@ -580,6 +598,8 @@ impl Packet {
                 writer.write_u8(rank)?;
             }
             Packet::RoutingAck => writer.write_u8(0x32)?,
+            Packet::RoutingRetrievePackets => writer.write_u8(0x33)?,
+            Packet::RoutingNoPackets => writer.write_u8(0x34)?,
 
             Packet::MonitorRequest {
                 destination,
@@ -751,6 +771,7 @@ impl Packet {
             }
 
             Packet::DmaAddTraceRequest {
+                source,
                 destination,
                 id,
                 status,
@@ -758,6 +779,7 @@ impl Packet {
                 length,
             } => {
                 writer.write_u8(0xb0)?;
+                writer.write_u8(source)?;
                 writer.write_u8(destination)?;
                 writer.write_u32(id)?;
                 writer.write_u8(status as u8)?;
@@ -766,34 +788,45 @@ impl Packet {
                 writer.write_u16(length)?;
                 writer.write_all(&trace[0..length as usize])?;
             }
-            Packet::DmaAddTraceReply { succeeded } => {
+            Packet::DmaAddTraceReply { destination, succeeded } => {
                 writer.write_u8(0xb1)?;
+                writer.write_u8(destination)?;
                 writer.write_bool(succeeded)?;
             }
-            Packet::DmaRemoveTraceRequest { destination, id } => {
+            Packet::DmaRemoveTraceRequest {
+                source,
+                destination,
+                id,
+            } => {
                 writer.write_u8(0xb2)?;
+                writer.write_u8(source)?;
                 writer.write_u8(destination)?;
                 writer.write_u32(id)?;
             }
-            Packet::DmaRemoveTraceReply { succeeded } => {
+            Packet::DmaRemoveTraceReply { destination, succeeded } => {
                 writer.write_u8(0xb3)?;
+                writer.write_u8(destination)?;
                 writer.write_bool(succeeded)?;
             }
             Packet::DmaPlaybackRequest {
+                source,
                 destination,
                 id,
                 timestamp,
             } => {
                 writer.write_u8(0xb4)?;
+                writer.write_u8(source)?;
                 writer.write_u8(destination)?;
                 writer.write_u32(id)?;
                 writer.write_u64(timestamp)?;
             }
-            Packet::DmaPlaybackReply { succeeded } => {
+            Packet::DmaPlaybackReply { destination, succeeded } => {
                 writer.write_u8(0xb5)?;
+                writer.write_u8(destination)?;
                 writer.write_bool(succeeded)?;
             }
             Packet::DmaPlaybackStatus {
+                source,
                 destination,
                 id,
                 error,
@@ -801,6 +834,7 @@ impl Packet {
                 timestamp,
             } => {
                 writer.write_u8(0xb6)?;
+                writer.write_u8(source)?;
                 writer.write_u8(destination)?;
                 writer.write_u32(id)?;
                 writer.write_u8(error)?;
@@ -826,28 +860,34 @@ impl Packet {
                 writer.write_u8(0xc1)?;
                 writer.write_bool(succeeded)?;
             }
-            Packet::SubkernelLoadRunRequest { destination, id, run } => {
+            Packet::SubkernelLoadRunRequest {
+                source,
+                destination,
+                id,
+                run,
+            } => {
                 writer.write_u8(0xc4)?;
+                writer.write_u8(source)?;
                 writer.write_u8(destination)?;
                 writer.write_u32(id)?;
                 writer.write_bool(run)?;
             }
-            Packet::SubkernelLoadRunReply { succeeded } => {
+            Packet::SubkernelLoadRunReply { destination, succeeded } => {
                 writer.write_u8(0xc5)?;
-                writer.write_bool(succeeded)?;
-            }
-            Packet::SubkernelStopRequest { destination } => {
-                writer.write_u8(0xc6)?;
                 writer.write_u8(destination)?;
-            }
-            Packet::SubkernelStopReply { succeeded } => {
-                writer.write_u8(0xc7)?;
                 writer.write_bool(succeeded)?;
             }
-            Packet::SubkernelFinished { id, with_exception } => {
+            Packet::SubkernelFinished {
+                destination,
+                id,
+                with_exception,
+                exception_src,
+            } => {
                 writer.write_u8(0xc8)?;
+                writer.write_u8(destination)?;
                 writer.write_u32(id)?;
                 writer.write_bool(with_exception)?;
+                writer.write_u8(exception_src)?;
             }
             Packet::SubkernelExceptionRequest { destination } => {
                 writer.write_u8(0xc9)?;
@@ -860,6 +900,7 @@ impl Packet {
                 writer.write_all(&data[0..length as usize])?;
             }
             Packet::SubkernelMessage {
+                source,
                 destination,
                 id,
                 status,
@@ -867,6 +908,7 @@ impl Packet {
                 length,
             } => {
                 writer.write_u8(0xcb)?;
+                writer.write_u8(source)?;
                 writer.write_u8(destination)?;
                 writer.write_u32(id)?;
                 writer.write_u8(status as u8)?;

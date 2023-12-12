@@ -77,6 +77,7 @@ pub enum Message {
     #[cfg(has_drtio)]
     SubkernelLoadRunRequest {
         id: u32,
+        destination: u8,
         run: bool,
     },
     #[cfg(has_drtio)]
@@ -95,6 +96,7 @@ pub enum Message {
     #[cfg(has_drtio)]
     SubkernelMsgSend {
         id: u32,
+        destination: Option<u8>,
         data: Vec<u8>,
     },
     #[cfg(has_drtio)]

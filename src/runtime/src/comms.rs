@@ -401,7 +401,11 @@ async fn handle_run_kernel(
                 control.borrow_mut().tx.async_send(reply).await;
             }
             #[cfg(has_drtio)]
-            kernel::Message::SubkernelLoadRunRequest { id, run } => {
+            kernel::Message::SubkernelLoadRunRequest {
+                id,
+                destination: _,
+                run,
+            } => {
                 let succeeded = match subkernel::load(aux_mutex, routing_table, timer, id, run).await {
                     Ok(()) => true,
                     Err(e) => {
@@ -447,7 +451,11 @@ async fn handle_run_kernel(
                     .await;
             }
             #[cfg(has_drtio)]
-            kernel::Message::SubkernelMsgSend { id, data } => {
+            kernel::Message::SubkernelMsgSend {
+                id,
+                destination: _,
+                data,
+            } => {
                 let res = subkernel::message_send(aux_mutex, routing_table, timer, id, data).await;
                 match res {
                     Ok(_) => (),

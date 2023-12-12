@@ -13,7 +13,7 @@ use crate::rtio_mgt::drtio;
 pub enum FinishStatus {
     Ok,
     CommLost,
-    Exception,
+    Exception(u8), // exception source
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -121,14 +121,14 @@ pub async fn clear_subkernels() {
     CURRENT_MESSAGES.async_lock().await.clear();
 }
 
-pub async fn subkernel_finished(id: u32, with_exception: bool) {
+pub async fn subkernel_finished(id: u32, with_exception: bool, exception_src: u8) {
     // called upon receiving DRTIO SubkernelRunDone
     // may be None if session ends and is cleared
     if let Some(subkernel) = SUBKERNELS.async_lock().await.get_mut(&id) {
         if subkernel.state == SubkernelState::Running {
             subkernel.state = SubkernelState::Finished {
                 status: match with_exception {
-                    true => FinishStatus::Exception,
+                    true => FinishStatus::Exception(exception_src),
                     false => FinishStatus::Ok,
                 },
             }
@@ -196,11 +196,8 @@ pub async fn await_finish(
                 Ok(SubkernelFinished {
                     id: id,
                     status: status,
-                    exception: if status == FinishStatus::Exception {
-                        Some(
-                            drtio::subkernel_retrieve_exception(aux_mutex, routing_table, timer, subkernel.destination)
-                                .await?,
-                        )
+                    exception: if let FinishStatus::Exception(dest) = status {
+                        Some(drtio::subkernel_retrieve_exception(aux_mutex, routing_table, timer, dest).await?)
                     } else {
                         None
                     },
@@ -292,7 +289,7 @@ pub async fn message_await(id: u32, timeout: u64, timer: GlobalTimer) -> Result<
                 status: FinishStatus::CommLost,
             } => return Err(Error::CommLost),
             SubkernelState::Finished {
-                status: FinishStatus::Exception,
+                status: FinishStatus::Exception(_),
             } => return Err(Error::SubkernelException),
             _ => (),
         }

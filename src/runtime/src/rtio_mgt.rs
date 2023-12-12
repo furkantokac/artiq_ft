@@ -43,39 +43,97 @@ pub mod drtio {
         unsafe { (csr::DRTIO[linkno].rx_up_read)() == 1 }
     }
 
-    async fn process_async_packets(aux_mutex: &Mutex<bool>, linkno: u8, packet: Packet) -> Option<Packet> {
-        // returns None if an async packet has been consumed
-        match packet {
-            Packet::DmaPlaybackStatus {
-                id,
-                destination,
-                error,
-                channel,
-                timestamp,
-            } => {
-                remote_dma::playback_done(id, destination, error, channel, timestamp).await;
-                None
+    async fn link_has_async_ready(linkno: u8) -> bool {
+        let linkno = linkno as usize;
+        let async_ready;
+        unsafe {
+            async_ready = (csr::DRTIO[linkno].async_messages_ready_read)() == 1;
+            (csr::DRTIO[linkno].async_messages_ready_write)(1);
+        }
+        async_ready
+    }
+
+    async fn process_async_packets(aux_mutex: &Mutex<bool>, linkno: u8, routing_table: &drtio_routing::RoutingTable, timer: GlobalTimer) {
+        if link_has_async_ready(linkno).await {
+            loop {
+                let reply = aux_transact(aux_mutex, linkno, &Packet::RoutingRetrievePackets, timer).await;
+                if let Ok(packet) = reply {
+                    match packet {
+                        Packet::DmaPlaybackStatus {
+                            id,
+                            source,
+                            destination: 0,
+                            error,
+                            channel,
+                            timestamp,
+                        } => {
+                            remote_dma::playback_done(id, source, error, channel, timestamp).await;
+                        }
+                        Packet::SubkernelFinished {
+                            id,
+                            destination: 0,
+                            with_exception,
+                            exception_src,
+                        } => {
+                            subkernel::subkernel_finished(id, with_exception, exception_src).await;
+                        }
+                        Packet::SubkernelMessage {
+                            id,
+                            source,
+                            destination: 0,
+                            status,
+                            length,
+                            data,
+                        } => {
+                            subkernel::message_handle_incoming(id, status, length as usize, &data).await;
+                            // acknowledge receiving part of the message
+                            let _lock = aux_mutex.async_lock().await;
+                            drtioaux_async::send(linkno, &Packet::SubkernelMessageAck { destination: source })
+                                .await
+                                .unwrap();
+                            let mut countdown = timer.countdown();
+                            // give the satellites some time to process
+                            delay(&mut countdown, Milliseconds(10)).await;
+                        }
+                        // routable packets
+                        Packet::DmaAddTraceRequest { destination, .. }
+                        | Packet::DmaAddTraceReply { destination, .. }
+                        | Packet::DmaRemoveTraceRequest { destination, .. }
+                        | Packet::DmaRemoveTraceReply { destination, .. }
+                        | Packet::DmaPlaybackRequest { destination, .. }
+                        | Packet::DmaPlaybackReply { destination, .. }
+                        | Packet::SubkernelLoadRunRequest { destination, .. }
+                        | Packet::SubkernelLoadRunReply { destination, .. }
+                        | Packet::SubkernelMessage { destination, .. }
+                        | Packet::SubkernelMessageAck { destination, .. }
+                        | Packet::DmaPlaybackStatus { destination, .. }
+                        | Packet::SubkernelFinished { destination, .. } => {
+                            let dest_link = routing_table.0[destination as usize][0] - 1;
+                            if dest_link == linkno {
+                                warn!(
+                                    "[LINK#{}] Re-routed packet would return to the same link, dropping: {:?}",
+                                    linkno, packet
+                                );
+                            } else if destination == 0 {
+                                warn!("[LINK#{}] Received invalid routable packet: {:?}", linkno, packet)
+                            } else {
+                                drtioaux_async::send(dest_link, &packet).await.unwrap();
+                            }
+                        }
+
+                        Packet::RoutingNoPackets => break,
+
+                        other => warn!("[LINK#{}] Received an unroutable packet: {:?}", linkno, other),
+                    }
+                } else {
+                    warn!(
+                        "[LINK#{}] Error handling async packets ({})",
+                        linkno,
+                        reply.unwrap_err()
+                    );
+                    return;
+                }
             }
-            Packet::SubkernelFinished { id, with_exception } => {
-                subkernel::subkernel_finished(id, with_exception).await;
-                None
-            }
-            Packet::SubkernelMessage {
-                id,
-                destination: from,
-                status,
-                length,
-                data,
-            } => {
-                subkernel::message_handle_incoming(id, status, length as usize, &data).await;
-                // acknowledge receiving part of the message
-                let _lock = aux_mutex.async_lock().await;
-                drtioaux_async::send(linkno, &Packet::SubkernelMessageAck { destination: from })
-                    .await
-                    .unwrap();
-                None
-            }
-            other => Some(other),
         }
     }
 
@@ -210,11 +268,7 @@ pub mod drtio {
     async fn process_unsolicited_aux(aux_mutex: &Rc<Mutex<bool>>, linkno: u8) {
         let _lock = aux_mutex.async_lock().await;
         match drtioaux_async::recv(linkno).await {
-            Ok(Some(packet)) => {
-                if let Some(packet) = process_async_packets(aux_mutex, linkno, packet).await {
-                    warn!("[LINK#{}] unsolicited aux packet: {:?}", linkno, packet);
-                }
-            }
+            Ok(Some(packet)) => warn!("[LINK#{}] unsolicited aux packet: {:?}", linkno, packet),
             Ok(None) => (),
             Err(_) => warn!("[LINK#{}] aux packet error", linkno),
         }
@@ -283,67 +337,53 @@ pub mod drtio {
                 let linkno = hop - 1;
                 if destination_up(up_destinations, destination).await {
                     if up_links[linkno as usize] {
-                        loop {
-                            let reply = aux_transact(
-                                aux_mutex,
-                                linkno,
-                                &Packet::DestinationStatusRequest {
-                                    destination: destination,
-                                },
-                                timer,
-                            )
-                            .await;
-                            match reply {
-                                Ok(Packet::DestinationDownReply) => {
-                                    destination_set_up(routing_table, up_destinations, destination, false).await;
-                                    remote_dma::destination_changed(
-                                        aux_mutex,
-                                        routing_table,
-                                        timer,
-                                        destination,
-                                        false,
-                                    )
+                        let reply = aux_transact(
+                            aux_mutex,
+                            linkno,
+                            &Packet::DestinationStatusRequest {
+                                destination: destination,
+                            },
+                            timer,
+                        )
+                        .await;
+                        match reply {
+                            Ok(Packet::DestinationDownReply) => {
+                                destination_set_up(routing_table, up_destinations, destination, false).await;
+                                remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, false)
                                     .await;
-                                    subkernel::destination_changed(aux_mutex, routing_table, timer, destination, false)
-                                        .await;
-                                }
-                                Ok(Packet::DestinationOkReply) => (),
-                                Ok(Packet::DestinationSequenceErrorReply { channel }) => {
-                                    error!(
-                                        "[DEST#{}] RTIO sequence error involving channel 0x{:04x}:{}",
-                                        destination,
-                                        channel,
-                                        resolve_channel_name(channel as u32)
-                                    );
-                                    unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_SEQUENCE_ERROR };
-                                }
-                                Ok(Packet::DestinationCollisionReply { channel }) => {
-                                    error!(
-                                        "[DEST#{}] RTIO collision involving channel 0x{:04x}:{}",
-                                        destination,
-                                        channel,
-                                        resolve_channel_name(channel as u32)
-                                    );
-                                    unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_COLLISION };
-                                }
-                                Ok(Packet::DestinationBusyReply { channel }) => {
-                                    error!(
-                                        "[DEST#{}] RTIO busy error involving channel 0x{:04x}:{}",
-                                        destination,
-                                        channel,
-                                        resolve_channel_name(channel as u32)
-                                    );
-                                    unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_BUSY };
-                                }
-                                Ok(packet) => match process_async_packets(aux_mutex, linkno, packet).await {
-                                    Some(packet) => {
-                                        error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet)
-                                    }
-                                    None => continue,
-                                },
-                                Err(e) => error!("[DEST#{}] communication failed ({})", destination, e),
+                                subkernel::destination_changed(aux_mutex, routing_table, timer, destination, false)
+                                    .await;
                             }
-                            break;
+                            Ok(Packet::DestinationOkReply) => (),
+                            Ok(Packet::DestinationSequenceErrorReply { channel }) => {
+                                error!(
+                                    "[DEST#{}] RTIO sequence error involving channel 0x{:04x}:{}",
+                                    destination,
+                                    channel,
+                                    resolve_channel_name(channel as u32)
+                                );
+                                unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_SEQUENCE_ERROR };
+                            }
+                            Ok(Packet::DestinationCollisionReply { channel }) => {
+                                error!(
+                                    "[DEST#{}] RTIO collision involving channel 0x{:04x}:{}",
+                                    destination,
+                                    channel,
+                                    resolve_channel_name(channel as u32)
+                                );
+                                unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_COLLISION };
+                            }
+                            Ok(Packet::DestinationBusyReply { channel }) => {
+                                error!(
+                                    "[DEST#{}] RTIO busy error involving channel 0x{:04x}:{}",
+                                    destination,
+                                    channel,
+                                    resolve_channel_name(channel as u32)
+                                );
+                                unsafe { SEEN_ASYNC_ERRORS |= ASYNC_ERROR_BUSY };
+                            }
+                            Ok(packet) => error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet),
+                            Err(e) => error!("[DEST#{}] communication failed ({})", destination, e),
                         }
                     } else {
                         destination_set_up(routing_table, up_destinations, destination, false).await;
@@ -393,6 +433,7 @@ pub mod drtio {
                 if up_links[linkno as usize] {
                     /* link was previously up */
                     if link_rx_up(linkno).await {
+                        process_async_packets(aux_mutex, linkno, routing_table, timer).await;
                         process_unsolicited_aux(aux_mutex, linkno).await;
                         process_local_errors(linkno).await;
                     } else {
@@ -504,14 +545,21 @@ pub mod drtio {
             trace,
             |slice, status, len| Packet::DmaAddTraceRequest {
                 id: id,
+                source: 0,
                 destination: destination,
                 status: status,
                 length: len as u16,
                 trace: *slice,
             },
             |reply| match reply {
-                Packet::DmaAddTraceReply { succeeded: true } => Ok(()),
-                Packet::DmaAddTraceReply { succeeded: false } => Err("error adding trace on satellite"),
+                Packet::DmaAddTraceReply {
+                    destination: 0,
+                    succeeded: true,
+                } => Ok(()),
+                Packet::DmaAddTraceReply {
+                    destination: 0,
+                    succeeded: false,
+                } => Err("error adding trace on satellite"),
                 _ => Err("adding DMA trace failed, unexpected aux packet"),
             },
         )
@@ -531,14 +579,21 @@ pub mod drtio {
             linkno,
             &Packet::DmaRemoveTraceRequest {
                 id: id,
+                source: 0,
                 destination: destination,
             },
             timer,
         )
         .await;
         match reply {
-            Ok(Packet::DmaRemoveTraceReply { succeeded: true }) => Ok(()),
-            Ok(Packet::DmaRemoveTraceReply { succeeded: false }) => Err("satellite DMA erase error"),
+            Ok(Packet::DmaRemoveTraceReply {
+                destination: 0,
+                succeeded: true,
+            }) => Ok(()),
+            Ok(Packet::DmaRemoveTraceReply {
+                destination: 0,
+                succeeded: false,
+            }) => Err("satellite DMA erase error"),
             Ok(_) => Err("adding trace failed, unexpected aux packet"),
             Err(_) => Err("erasing trace failed, aux error"),
         }
@@ -558,6 +613,7 @@ pub mod drtio {
             linkno,
             &Packet::DmaPlaybackRequest {
                 id: id,
+                source: 0,
                 destination: destination,
                 timestamp: timestamp,
             },
@@ -565,8 +621,14 @@ pub mod drtio {
         )
         .await;
         match reply {
-            Ok(Packet::DmaPlaybackReply { succeeded: true }) => Ok(()),
-            Ok(Packet::DmaPlaybackReply { succeeded: false }) => Err("error on DMA playback request"),
+            Ok(Packet::DmaPlaybackReply {
+                destination: 0,
+                succeeded: true,
+            }) => Ok(()),
+            Ok(Packet::DmaPlaybackReply {
+                destination: 0,
+                succeeded: false,
+            }) => Err("error on DMA playback request"),
             Ok(_) => Err("received unexpected aux packet during DMA playback"),
             Err(_) => Err("aux error on DMA playback"),
         }
@@ -689,6 +751,7 @@ pub mod drtio {
             linkno,
             &Packet::SubkernelLoadRunRequest {
                 id: id,
+                source: 0,
                 destination: destination,
                 run: run,
             },
@@ -696,8 +759,14 @@ pub mod drtio {
         )
         .await?;
         match reply {
-            Packet::SubkernelLoadRunReply { succeeded: true } => return Ok(()),
-            Packet::SubkernelLoadRunReply { succeeded: false } => return Err("error on subkernel run request"),
+            Packet::SubkernelLoadRunReply {
+                destination: 0,
+                succeeded: true,
+            } => return Ok(()),
+            Packet::SubkernelLoadRunReply {
+                destination: 0,
+                succeeded: false,
+            } => return Err("error on subkernel run request"),
             _ => return Err("received unexpected aux packet during subkernel run"),
         }
     }
@@ -747,6 +816,7 @@ pub mod drtio {
             timer,
             message,
             |slice, status, len| Packet::SubkernelMessage {
+                source: 0,
                 destination: destination,
                 id: id,
                 status: status,
