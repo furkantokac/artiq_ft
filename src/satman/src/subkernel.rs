@@ -8,11 +8,14 @@ use core_io::{Error as IoError, Write};
 use cslice::AsCSlice;
 use io::{Cursor, ProtoWrite};
 use ksupport::{eh_artiq, kernel, rpc};
-use libboard_artiq::{drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE},
+use libboard_artiq::{drtio_routing::RoutingTable,
+                     drtioaux,
+                     drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE},
                      pl::csr};
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use libcortex_a9::sync_channel::Receiver;
 use log::warn;
+use routing::Router;
 
 #[derive(Debug, Clone, PartialEq)]
 enum KernelState {
@@ -21,6 +24,8 @@ enum KernelState {
     Running,
     MsgAwait(Milliseconds, Vec<u8>),
     MsgSending,
+    SubkernelAwaitLoad,
+    SubkernelAwaitFinish { max_time: Milliseconds, id: u32 },
 }
 
 #[derive(Debug)]
@@ -31,6 +36,7 @@ pub enum Error {
     NoMessage,
     AwaitingMessage,
     SubkernelIoError,
+    DrtioError,
     KernelException(Sliceable),
 }
 
@@ -52,6 +58,12 @@ impl From<()> for Error {
     }
 }
 
+impl From<drtioaux::Error> for Error {
+    fn from(_value: drtioaux::Error) -> Error {
+        Error::DrtioError
+    }
+}
+
 macro_rules! unexpected {
     ($($arg:tt)*) => (return Err(Error::Unexpected(format!($($arg)*))));
 }
@@ -61,6 +73,7 @@ macro_rules! unexpected {
 pub struct Sliceable {
     it: usize,
     data: Vec<u8>,
+    destination: u8,
 }
 
 /* represents interkernel messages */
@@ -72,7 +85,6 @@ struct Message {
 #[derive(PartialEq)]
 enum OutMessageState {
     NoMessage,
-    MessageReady,
     MessageBeingSent,
     MessageSent,
     MessageAcknowledged,
@@ -92,6 +104,8 @@ struct Session {
     kernel_state: KernelState,
     last_exception: Option<Sliceable>,
     messages: MessageManager,
+    source: u8, // which destination requested running the kernel
+    subkernels_finished: Vec<u32>,
 }
 
 impl Session {
@@ -101,13 +115,19 @@ impl Session {
             kernel_state: KernelState::Absent,
             last_exception: None,
             messages: MessageManager::new(),
+            source: 0,
+            subkernels_finished: Vec::new(),
         }
     }
 
     fn running(&self) -> bool {
         match self.kernel_state {
             KernelState::Absent | KernelState::Loaded => false,
-            KernelState::Running | KernelState::MsgAwait { .. } | KernelState::MsgSending => true,
+            KernelState::Running
+            | KernelState::MsgAwait { .. }
+            | KernelState::MsgSending
+            | KernelState::SubkernelAwaitLoad
+            | KernelState::SubkernelAwaitFinish { .. } => true,
         }
     }
 }
@@ -129,9 +149,12 @@ pub struct Manager<'a> {
 pub struct SubkernelFinished {
     pub id: u32,
     pub with_exception: bool,
+    pub exception_source: u8,
+    pub source: u8,
 }
 
 pub struct SliceMeta {
+    pub destination: u8,
     pub len: u16,
     pub status: PayloadStatus,
 }
@@ -148,6 +171,7 @@ macro_rules! get_slice_fn {
             self.it += len;
 
             SliceMeta {
+                destination: self.destination,
                 len: len as u16,
                 status: status,
             }
@@ -156,8 +180,12 @@ macro_rules! get_slice_fn {
 }
 
 impl Sliceable {
-    pub fn new(data: Vec<u8>) -> Sliceable {
-        Sliceable { it: 0, data: data }
+    pub fn new(destination: u8, data: Vec<u8>) -> Sliceable {
+        Sliceable {
+            it: 0,
+            data: data,
+            destination: destination,
+        }
     }
 
     get_slice_fn!(get_slice_sat, SAT_PAYLOAD_MAX_SIZE);
@@ -191,17 +219,6 @@ impl MessageManager {
         if status.is_last() {
             // when done, remove from working queue
             self.in_queue.push_back(self.in_buffer.take().unwrap());
-        }
-    }
-
-    pub fn is_outgoing_ready(&mut self) -> bool {
-        // called by main loop, to see if there's anything to send, will send it afterwards
-        match self.out_state {
-            OutMessageState::MessageReady => {
-                self.out_state = OutMessageState::MessageBeingSent;
-                true
-            }
-            _ => false,
         }
     }
 
@@ -244,10 +261,34 @@ impl MessageManager {
         }
     }
 
-    pub fn accept_outgoing(&mut self, message: Vec<u8>) -> Result<(), Error> {
-        // service tag skipped in kernel
-        self.out_message = Some(Sliceable::new(message));
-        self.out_state = OutMessageState::MessageReady;
+    pub fn accept_outgoing(
+        &mut self,
+        id: u32,
+        self_destination: u8,
+        destination: u8,
+        message: Vec<u8>,
+        routing_table: &RoutingTable,
+        rank: u8,
+        router: &mut Router,
+    ) -> Result<(), Error> {
+        self.out_message = Some(Sliceable::new(destination, message));
+
+        let mut data_slice: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
+        self.out_state = OutMessageState::MessageBeingSent;
+        let meta = self.get_outgoing_slice(&mut data_slice).unwrap();
+        router.route(
+            drtioaux::Packet::SubkernelMessage {
+                source: self_destination,
+                destination: destination,
+                id: id,
+                status: meta.status,
+                length: meta.len as u16,
+                data: data_slice,
+            },
+            routing_table,
+            rank,
+            self_destination,
+        );
         Ok(())
     }
 
@@ -313,12 +354,13 @@ impl<'a> Manager<'_> {
         }
     }
 
-    pub fn run(&mut self, id: u32) -> Result<(), Error> {
+    pub fn run(&mut self, source: u8, id: u32) -> Result<(), Error> {
         info!("starting subkernel #{}", id);
         if self.session.kernel_state != KernelState::Loaded || self.session.id != id {
             self.load(id)?;
         }
         self.session.kernel_state = KernelState::Running;
+        self.session.source = source;
         unsafe {
             csr::cri_con::selected_write(2);
         }
@@ -354,10 +396,6 @@ impl<'a> Manager<'_> {
         self.session.messages.ack_slice()
     }
 
-    pub fn message_is_ready(&mut self) -> bool {
-        self.session.messages.is_outgoing_ready()
-    }
-
     pub fn load(&mut self, id: u32) -> Result<(), Error> {
         if self.session.id == id && self.session.kernel_state == KernelState::Loaded {
             return Ok(());
@@ -386,14 +424,11 @@ impl<'a> Manager<'_> {
         match self.session.last_exception.as_mut() {
             Some(exception) => exception.get_slice_sat(data_slice),
             None => SliceMeta {
+                destination: 0,
                 len: 0,
                 status: PayloadStatus::FirstAndLast,
             },
         }
-    }
-
-    pub fn get_last_finished(&mut self) -> Option<SubkernelFinished> {
-        self.last_finished.take()
     }
 
     fn kernel_stop(&mut self) {
@@ -425,13 +460,38 @@ impl<'a> Manager<'_> {
             &[],
             0,
         ) {
-            Ok(_) => self.session.last_exception = Some(Sliceable::new(writer.into_inner())),
+            Ok(_) => self.session.last_exception = Some(Sliceable::new(0, writer.into_inner())),
             Err(_) => error!("Error writing exception data"),
         }
         self.kernel_stop();
     }
 
-    pub fn process_kern_requests(&mut self, rank: u8, timer: GlobalTimer) {
+    pub fn process_kern_requests(
+        &mut self,
+        router: &mut Router,
+        routing_table: &RoutingTable,
+        rank: u8,
+        destination: u8,
+        timer: &GlobalTimer,
+    ) {
+        if let Some(subkernel_finished) = self.last_finished.take() {
+            info!(
+                "subkernel {} finished, with exception: {}",
+                subkernel_finished.id, subkernel_finished.with_exception
+            );
+            router.route(
+                drtioaux::Packet::SubkernelFinished {
+                    destination: subkernel_finished.source,
+                    id: subkernel_finished.id,
+                    with_exception: subkernel_finished.with_exception,
+                    exception_src: subkernel_finished.exception_source,
+                },
+                &routing_table,
+                rank,
+                destination,
+            );
+        }
+
         if !self.running() {
             return;
         }
@@ -444,6 +504,8 @@ impl<'a> Manager<'_> {
                 self.last_finished = Some(SubkernelFinished {
                     id: self.session.id,
                     with_exception: true,
+                    exception_source: destination,
+                    source: self.session.source,
                 });
             }
             Err(e) => {
@@ -452,15 +514,19 @@ impl<'a> Manager<'_> {
                 self.last_finished = Some(SubkernelFinished {
                     id: self.session.id,
                     with_exception: true,
+                    exception_source: destination,
+                    source: self.session.source,
                 });
             }
         }
 
-        match self.process_kern_message(rank, timer) {
+        match self.process_kern_message(router, routing_table, rank, destination, timer) {
             Ok(true) => {
                 self.last_finished = Some(SubkernelFinished {
                     id: self.session.id,
                     with_exception: false,
+                    exception_source: 0,
+                    source: self.session.source,
                 });
             }
             Ok(false) | Err(Error::NoMessage) => (),
@@ -469,6 +535,8 @@ impl<'a> Manager<'_> {
                 self.last_finished = Some(SubkernelFinished {
                     id: self.session.id,
                     with_exception: true,
+                    exception_source: destination,
+                    source: self.session.source,
                 });
             }
             Err(e) => {
@@ -477,12 +545,46 @@ impl<'a> Manager<'_> {
                 self.last_finished = Some(SubkernelFinished {
                     id: self.session.id,
                     with_exception: true,
+                    exception_source: destination,
+                    source: self.session.source,
                 });
             }
         }
     }
 
-    fn process_kern_message(&mut self, rank: u8, timer: GlobalTimer) -> Result<bool, Error> {
+    pub fn subkernel_load_run_reply(&mut self, succeeded: bool) {
+        if self.session.kernel_state == KernelState::SubkernelAwaitLoad {
+            self.control
+                .tx
+                .send(kernel::Message::SubkernelLoadRunReply { succeeded: succeeded });
+            self.session.kernel_state = KernelState::Running;
+        } else {
+            warn!("received unsolicited SubkernelLoadRunReply");
+        }
+    }
+
+    pub fn remote_subkernel_finished(&mut self, id: u32, with_exception: bool, exception_source: u8) {
+        if with_exception {
+            self.kernel_stop();
+            self.last_finished = Some(SubkernelFinished {
+                source: self.session.source,
+                id: self.session.id,
+                with_exception: true,
+                exception_source: exception_source,
+            })
+        } else {
+            self.session.subkernels_finished.push(id);
+        }
+    }
+
+    fn process_kern_message(
+        &mut self,
+        router: &mut Router,
+        routing_table: &RoutingTable,
+        rank: u8,
+        self_destination: u8,
+        timer: &GlobalTimer,
+    ) -> Result<bool, Error> {
         let reply = self.control.rx.try_recv()?;
         match reply {
             kernel::Message::KernelFinished(_async_errors) => {
@@ -503,7 +605,7 @@ impl<'a> Manager<'_> {
                     Err(_) => error!("Error writing exception data"),
                 }
                 self.kernel_stop();
-                return Err(Error::KernelException(Sliceable::new(writer.into_inner())));
+                return Err(Error::KernelException(Sliceable::new(0, writer.into_inner())));
             }
             kernel::Message::CachePutRequest(key, value) => {
                 self.cache.insert(key, value);
@@ -513,18 +615,57 @@ impl<'a> Manager<'_> {
                 let value = self.cache.get(&key).unwrap_or(&DEFAULT).clone();
                 self.control.tx.send(kernel::Message::CacheGetReply(value));
             }
-            kernel::Message::SubkernelMsgSend { id: _, data } => {
-                self.session.messages.accept_outgoing(data)?;
+            kernel::Message::SubkernelMsgSend {
+                id: _id,
+                destination: msg_dest,
+                data,
+            } => {
+                let msg_dest = msg_dest.or(Some(self.session.source)).unwrap();
+                self.session.messages.accept_outgoing(
+                    self.session.id,
+                    self_destination,
+                    msg_dest,
+                    data,
+                    routing_table,
+                    rank,
+                    router,
+                )?;
                 self.session.kernel_state = KernelState::MsgSending;
             }
             kernel::Message::SubkernelMsgRecvRequest { id: _, timeout, tags } => {
                 let max_time = timer.get_time() + Milliseconds(timeout);
                 self.session.kernel_state = KernelState::MsgAwait(max_time, tags);
             }
+            kernel::Message::SubkernelLoadRunRequest {
+                id,
+                destination: sk_destination,
+                run,
+            } => {
+                self.session.kernel_state = KernelState::SubkernelAwaitLoad;
+                router.route(
+                    drtioaux::Packet::SubkernelLoadRunRequest {
+                        source: self_destination,
+                        destination: sk_destination,
+                        id: id,
+                        run: run,
+                    },
+                    routing_table,
+                    rank,
+                    self_destination,
+                );
+            }
+
+            kernel::Message::SubkernelAwaitFinishRequest { id, timeout } => {
+                let max_time = timer.get_time() + Milliseconds(timeout);
+                self.session.kernel_state = KernelState::SubkernelAwaitFinish {
+                    max_time: max_time,
+                    id: id,
+                };
+            }
             kernel::Message::UpDestinationsRequest(destination) => {
-                self.control
-                    .tx
-                    .send(kernel::Message::UpDestinationsReply(destination == (rank as i32)));
+                self.control.tx.send(kernel::Message::UpDestinationsReply(
+                    destination == (self_destination as i32),
+                ));
             }
             _ => {
                 unexpected!("unexpected message from core1 while kernel was running: {:?}", reply);
@@ -533,7 +674,7 @@ impl<'a> Manager<'_> {
         Ok(false)
     }
 
-    fn process_external_messages(&mut self, timer: GlobalTimer) -> Result<(), Error> {
+    fn process_external_messages(&mut self, timer: &GlobalTimer) -> Result<(), Error> {
         match &self.session.kernel_state {
             KernelState::MsgAwait(timeout, tags) => {
                 if timer.get_time() > *timeout {
@@ -565,11 +706,33 @@ impl<'a> Manager<'_> {
                     Err(Error::AwaitingMessage)
                 }
             }
+            KernelState::SubkernelAwaitFinish { max_time, id } => {
+                if timer.get_time() > *max_time {
+                    self.control.tx.send(kernel::Message::SubkernelAwaitFinishReply {
+                        status: kernel::SubkernelStatus::Timeout,
+                    });
+                    self.session.kernel_state = KernelState::Running;
+                } else {
+                    let mut i = 0;
+                    for status in &self.session.subkernels_finished {
+                        if *status == *id {
+                            self.control.tx.send(kernel::Message::SubkernelAwaitFinishReply {
+                                status: kernel::SubkernelStatus::NoError,
+                            });
+                            self.session.kernel_state = KernelState::Running;
+                            self.session.subkernels_finished.swap_remove(i);
+                            break;
+                        }
+                        i += 1;
+                    }
+                }
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
 
-    fn pass_message_to_kernel(&mut self, message: &Message, tags: Vec<u8>, timer: GlobalTimer) -> Result<(), Error> {
+    fn pass_message_to_kernel(&mut self, message: &Message, tags: Vec<u8>, timer: &GlobalTimer) -> Result<(), Error> {
         let mut reader = Cursor::new(&message.data);
         let mut current_tags: &[u8] = &tags;
         let mut i = message.count;
@@ -592,7 +755,7 @@ impl<'a> Manager<'_> {
                             let mut writer = Cursor::new(buf);
                             match write_exception(&mut writer, exceptions, stack_pointers, backtrace, async_errors) {
                                 Ok(()) => {
-                                    exception = Some(Sliceable::new(writer.into_inner()));
+                                    exception = Some(Sliceable::new(0, writer.into_inner()));
                                 }
                                 Err(_) => {
                                     unexpected = Some("Error writing exception data".to_string());
@@ -686,7 +849,7 @@ where
 
 fn recv_w_timeout(
     rx: &mut Receiver<'_, kernel::Message>,
-    timer: GlobalTimer,
+    timer: &GlobalTimer,
     timeout: u64,
 ) -> Result<kernel::Message, Error> {
     let max_time = timer.get_time() + Milliseconds(timeout);

@@ -53,7 +53,12 @@ pub mod drtio {
         async_ready
     }
 
-    async fn process_async_packets(aux_mutex: &Mutex<bool>, linkno: u8, routing_table: &drtio_routing::RoutingTable, timer: GlobalTimer) {
+    async fn process_async_packets(
+        aux_mutex: &Mutex<bool>,
+        linkno: u8,
+        routing_table: &drtio_routing::RoutingTable,
+        timer: GlobalTimer,
+    ) {
         if link_has_async_ready(linkno).await {
             loop {
                 let reply = aux_transact(aux_mutex, linkno, &Packet::RoutingRetrievePackets, timer).await;

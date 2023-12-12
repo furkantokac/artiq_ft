@@ -922,4 +922,39 @@ impl Packet {
         }
         Ok(())
     }
+
+    pub fn routable_destination(&self) -> Option<u8> {
+        // only for packets that could be re-routed, not only forwarded
+        match self {
+            Packet::DmaAddTraceRequest { destination, .. } => Some(*destination),
+            Packet::DmaAddTraceReply { destination, .. } => Some(*destination),
+            Packet::DmaRemoveTraceRequest { destination, .. } => Some(*destination),
+            Packet::DmaRemoveTraceReply { destination, .. } => Some(*destination),
+            Packet::DmaPlaybackRequest { destination, .. } => Some(*destination),
+            Packet::DmaPlaybackReply { destination, .. } => Some(*destination),
+            Packet::SubkernelLoadRunRequest { destination, .. } => Some(*destination),
+            Packet::SubkernelLoadRunReply { destination, .. } => Some(*destination),
+            Packet::SubkernelMessage { destination, .. } => Some(*destination),
+            Packet::SubkernelMessageAck { destination } => Some(*destination),
+            Packet::DmaPlaybackStatus { destination, .. } => Some(*destination),
+            Packet::SubkernelFinished { destination, .. } => Some(*destination),
+            _ => None,
+        }
+    }
+
+    pub fn expects_response(&self) -> bool {
+        // returns true if the routable packet should elicit a response
+        // e.g. reply, ACK packets end a conversation,
+        // and firmware should not wait for response
+        match self {
+            Packet::DmaAddTraceReply { .. }
+            | Packet::DmaRemoveTraceReply { .. }
+            | Packet::DmaPlaybackReply { .. }
+            | Packet::SubkernelLoadRunReply { .. }
+            | Packet::SubkernelMessageAck { .. }
+            | Packet::DmaPlaybackStatus { .. }
+            | Packet::SubkernelFinished { .. } => false,
+            _ => true,
+        }
+    }
 }

@@ -6,6 +6,7 @@ use libboard_artiq::{drtio_routing, drtioaux};
 #[cfg(has_drtio_routing)]
 use libboard_zynq::time::Milliseconds;
 use libboard_zynq::timer::GlobalTimer;
+use routing::Router;
 
 #[cfg(has_drtio_routing)]
 fn rep_link_rx_up(repno: u8) -> bool {
@@ -53,7 +54,14 @@ impl Repeater {
         self.state == RepeaterState::Up
     }
 
-    pub fn service(&mut self, routing_table: &drtio_routing::RoutingTable, rank: u8, timer: &mut GlobalTimer) {
+    pub fn service(
+        &mut self,
+        routing_table: &drtio_routing::RoutingTable,
+        rank: u8,
+        destination: u8,
+        router: &mut Router,
+        timer: &mut GlobalTimer,
+    ) {
         self.process_local_errors();
 
         match self.state {
@@ -116,6 +124,11 @@ impl Repeater {
                     info!("[REP#{}] link is down", self.repno);
                     self.state = RepeaterState::Down;
                 }
+                if self.async_messages_ready() {
+                    if let Err(e) = self.handle_async(routing_table, rank, destination, router, timer) {
+                        warn!("[REP#{}] Error handling async messages ({:?})", self.repno, e);
+                    }
+                }
             }
             RepeaterState::Failed => {
                 if !rep_link_rx_up(self.repno) {
@@ -173,6 +186,34 @@ impl Repeater {
         }
     }
 
+    fn async_messages_ready(&self) -> bool {
+        let async_rdy;
+        unsafe {
+            async_rdy = (csr::DRTIOREP[self.repno as usize].async_messages_ready_read)();
+            (csr::DRTIOREP[self.repno as usize].async_messages_ready_write)(0);
+        }
+        async_rdy == 1
+    }
+
+    fn handle_async(
+        &self,
+        routing_table: &drtio_routing::RoutingTable,
+        rank: u8,
+        self_destination: u8,
+        router: &mut Router,
+        timer: &mut GlobalTimer,
+    ) -> Result<(), drtioaux::Error> {
+        loop {
+            drtioaux::send(self.auxno, &drtioaux::Packet::RoutingRetrievePackets).unwrap();
+            let reply = self.recv_aux_timeout(200, timer)?;
+            match reply {
+                drtioaux::Packet::RoutingNoPackets => break,
+                packet => router.route(packet, routing_table, rank, self_destination),
+            }
+        }
+        Ok(())
+    }
+
     fn recv_aux_timeout(&self, timeout: u32, timer: &mut GlobalTimer) -> Result<drtioaux::Packet, drtioaux::Error> {
         let max_time = timer.get_time() + Milliseconds(timeout.into());
         loop {
@@ -191,13 +232,17 @@ impl Repeater {
     }
 
     pub fn aux_forward(&self, request: &drtioaux::Packet, timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
-        if self.state != RepeaterState::Up {
-            return Err(drtioaux::Error::LinkDown);
-        }
-        drtioaux::send(self.auxno, request).unwrap();
+        self.aux_send(request)?;
         let reply = self.recv_aux_timeout(200, timer)?;
         drtioaux::send(0, &reply).unwrap();
         Ok(())
+    }
+
+    pub fn aux_send(&self, request: &drtioaux::Packet) -> Result<(), drtioaux::Error> {
+        if self.state != RepeaterState::Up {
+            return Err(drtioaux::Error::LinkDown);
+        }
+        drtioaux::send(self.auxno, request)
     }
 
     pub fn sync_tsc(&self, timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
