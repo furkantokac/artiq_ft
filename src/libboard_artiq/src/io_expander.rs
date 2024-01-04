@@ -1,6 +1,7 @@
 use libboard_zynq::i2c;
 use log::info;
 
+#[cfg(has_virtual_leds)]
 use crate::pl::csr;
 
 // Only the bare minimum registers. Bits/IO connections equivalent between IC types.
@@ -19,11 +20,15 @@ const IODIR_OUT_SFP_LED: u8 = 0x40;
 const IODIR_OUT_SFP0_LED: u8 = 0x40;
 #[cfg(hw_rev = "v1.1")]
 const IODIR_OUT_SFP0_LED: u8 = 0x80;
+#[cfg(has_si549)]
+const IODIR_CLK_SEL: u8 = 0x80; // out
+#[cfg(has_si5324)]
+const IODIR_CLK_SEL: u8 = 0x00; // in
 
 //IO expander port direction
 const IODIR0: [u8; 2] = [
     0xFF & !IODIR_OUT_SFP_TX_DISABLE & !IODIR_OUT_SFP0_LED,
-    0xFF & !IODIR_OUT_SFP_TX_DISABLE & !IODIR_OUT_SFP_LED,
+    0xFF & !IODIR_OUT_SFP_TX_DISABLE & !IODIR_OUT_SFP_LED & !IODIR_CLK_SEL,
 ];
 
 const IODIR1: [u8; 2] = [
@@ -33,6 +38,7 @@ const IODIR1: [u8; 2] = [
 
 pub struct IoExpander {
     address: u8,
+    #[cfg(has_virtual_leds)]
     virtual_led_mapping: &'static [(u8, u8, u8)],
     iodir: [u8; 2],
     out_current: [u8; 2],
@@ -42,17 +48,18 @@ pub struct IoExpander {
 
 impl IoExpander {
     pub fn new(i2c: &mut i2c::I2c, index: u8) -> Result<Self, &'static str> {
-        #[cfg(hw_rev = "v1.0")]
+        #[cfg(all(hw_rev = "v1.0", has_virtual_leds))]
         const VIRTUAL_LED_MAPPING0: [(u8, u8, u8); 2] = [(0, 0, 6), (1, 1, 6)];
-        #[cfg(hw_rev = "v1.1")]
+        #[cfg(all(hw_rev = "v1.1", has_virtual_leds))]
         const VIRTUAL_LED_MAPPING0: [(u8, u8, u8); 2] = [(0, 0, 7), (1, 1, 6)];
-
+        #[cfg(has_virtual_leds)]
         const VIRTUAL_LED_MAPPING1: [(u8, u8, u8); 2] = [(2, 0, 6), (3, 1, 6)];
 
         // Both expanders on SHARED I2C bus
         let mut io_expander = match index {
             0 => IoExpander {
                 address: 0x40,
+                #[cfg(has_virtual_leds)]
                 virtual_led_mapping: &VIRTUAL_LED_MAPPING0,
                 iodir: IODIR0,
                 out_current: [0; 2],
@@ -66,6 +73,7 @@ impl IoExpander {
             },
             1 => IoExpander {
                 address: 0x42,
+                #[cfg(has_virtual_leds)]
                 virtual_led_mapping: &VIRTUAL_LED_MAPPING1,
                 iodir: IODIR1,
                 out_current: [0; 2],

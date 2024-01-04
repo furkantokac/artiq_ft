@@ -35,7 +35,8 @@ pub mod drtio_eem;
 pub mod grabber;
 #[cfg(has_si5324)]
 pub mod si5324;
-
+#[cfg(has_si549)]
+pub mod si549;
 use core::{cmp, str};
 
 pub fn identifier_read(buf: &mut [u8]) -> &str {
