@@ -483,13 +483,34 @@ fn process_aux_packet(
             let succeeded = dma_manager.add(source, id, status, &trace, length as usize).is_ok();
             router.send(
                 drtioaux::Packet::DmaAddTraceReply {
+                    source: *self_destination,
                     destination: source,
+                    id: id,
                     succeeded: succeeded,
                 },
                 _routing_table,
                 *rank,
                 *self_destination,
             )
+        }
+        drtioaux::Packet::DmaAddTraceReply {
+            source,
+            destination: _destination,
+            id,
+            succeeded,
+        } => {
+            forward!(_routing_table, _destination, *rank, _repeaters, &packet, timer);
+            dma_manager.ack_upload(
+                kernel_manager,
+                source,
+                id,
+                succeeded,
+                router,
+                *rank,
+                *self_destination,
+                _routing_table,
+            );
+            Ok(())
         }
         drtioaux::Packet::DmaRemoveTraceRequest {
             source,
@@ -507,6 +528,13 @@ fn process_aux_packet(
                 *rank,
                 *self_destination,
             )
+        }
+        drtioaux::Packet::DmaRemoveTraceReply {
+            destination: _destination,
+            succeeded: _,
+        } => {
+            forward!(_routing_table, _destination, *rank, _repeaters, &packet, timer);
+            Ok(())
         }
         drtioaux::Packet::DmaPlaybackRequest {
             source,
@@ -529,6 +557,28 @@ fn process_aux_packet(
                 *rank,
                 *self_destination,
             )
+        }
+        drtioaux::Packet::DmaPlaybackReply {
+            destination: _destination,
+            succeeded,
+        } => {
+            forward!(_routing_table, _destination, *rank, _repeaters, &packet, timer);
+            if !succeeded {
+                kernel_manager.ddma_nack();
+            }
+            Ok(())
+        }
+        drtioaux::Packet::DmaPlaybackStatus {
+            source: _,
+            destination: _destination,
+            id,
+            error,
+            channel,
+            timestamp,
+        } => {
+            forward!(_routing_table, _destination, *rank, _repeaters, &packet, timer);
+            dma_manager.remote_finished(kernel_manager, id, error, channel, timestamp);
+            Ok(())
         }
 
         drtioaux::Packet::SubkernelAddDataRequest {
@@ -649,8 +699,8 @@ fn process_aux_packet(
             Ok(())
         }
 
-        _ => {
-            warn!("received unexpected aux packet");
+        p => {
+            warn!("received unexpected aux packet: {:?}", p);
             Ok(())
         }
     }
@@ -949,8 +999,16 @@ pub extern "C" fn main_core0() -> i32 {
                 );
             }
 
-            kernel_manager.process_kern_requests(&mut router, &routing_table, rank, destination, &timer);
+            kernel_manager.process_kern_requests(
+                &mut router,
+                &routing_table,
+                rank,
+                destination,
+                &mut dma_manager,
+                &timer,
+            );
 
+            #[cfg(has_drtio_routing)]
             if let Some((repno, packet)) = router.get_downstream_packet() {
                 if let Err(e) = repeaters[repno].aux_send(&packet) {
                     warn!("[REP#{}] Error when sending packet to satellite ({:?})", repno, e)

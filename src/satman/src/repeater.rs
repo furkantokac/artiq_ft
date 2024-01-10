@@ -347,7 +347,15 @@ impl Repeater {
         Repeater::default()
     }
 
-    pub fn service(&self, _routing_table: &drtio_routing::RoutingTable, _rank: u8, _timer: &mut GlobalTimer) {}
+    pub fn service(
+        &self,
+        _routing_table: &drtio_routing::RoutingTable,
+        _rank: u8,
+        _destination: u8,
+        _router: &mut Router,
+        _timer: &mut GlobalTimer,
+    ) {
+    }
 
     pub fn sync_tsc(&self, _timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
         Ok(())

@@ -560,10 +560,12 @@ pub mod drtio {
                 Packet::DmaAddTraceReply {
                     destination: 0,
                     succeeded: true,
+                    ..
                 } => Ok(()),
                 Packet::DmaAddTraceReply {
                     destination: 0,
                     succeeded: false,
+                    ..
                 } => Err("error adding trace on satellite"),
                 _ => Err("adding DMA trace failed, unexpected aux packet"),
             },

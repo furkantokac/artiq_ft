@@ -142,9 +142,9 @@ pub mod remote_dma {
             }
         }
 
-        pub async fn playback_done(&mut self, destination: u8, error: u8, channel: u32, timestamp: u64) {
+        pub async fn playback_done(&mut self, source: u8, error: u8, channel: u32, timestamp: u64) {
             let mut traces_locked = self.traces.async_lock().await;
-            let mut trace = traces_locked.get_mut(&destination).unwrap();
+            let mut trace = traces_locked.get_mut(&source).unwrap();
             trace.state = RemoteState::PlaybackEnded {
                 error: error,
                 channel: channel,
