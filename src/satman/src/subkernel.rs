@@ -1,4 +1,4 @@
-use alloc::{collections::{BTreeMap, VecDeque},
+use alloc::{collections::BTreeMap,
             format,
             string::{String, ToString},
             vec::Vec};
@@ -23,11 +23,15 @@ enum KernelState {
     Absent,
     Loaded,
     Running,
-    MsgAwait(Milliseconds, Vec<u8>),
+    MsgAwait {
+        max_time: Option<Milliseconds>,
+        id: u32,
+        tags: Vec<u8>
+    },
     MsgSending,
     SubkernelAwaitLoad,
     SubkernelAwaitFinish {
-        max_time: Milliseconds,
+        max_time: Option<Milliseconds>,
         id: u32,
     },
     DmaUploading,
@@ -95,6 +99,7 @@ macro_rules! unexpected {
 /* represents interkernel messages */
 struct Message {
     count: u8,
+    id: u32,
     data: Vec<u8>,
 }
 
@@ -110,7 +115,7 @@ enum OutMessageState {
 struct MessageManager {
     out_message: Option<Sliceable>,
     out_state: OutMessageState,
-    in_queue: VecDeque<Message>,
+    in_queue: Vec<Message>,
     in_buffer: Option<Message>,
 }
 
@@ -170,12 +175,12 @@ impl MessageManager {
         MessageManager {
             out_message: None,
             out_state: OutMessageState::NoMessage,
-            in_queue: VecDeque::new(),
+            in_queue: Vec::new(),
             in_buffer: None,
         }
     }
 
-    pub fn handle_incoming(&mut self, status: PayloadStatus, length: usize, data: &[u8; MASTER_PAYLOAD_MAX_SIZE]) {
+    pub fn handle_incoming(&mut self, status: PayloadStatus, id: u32, length: usize, data: &[u8; MASTER_PAYLOAD_MAX_SIZE]) {
         // called when receiving a message from master
         if status.is_first() {
             self.in_buffer = None;
@@ -185,13 +190,14 @@ impl MessageManager {
             None => {
                 self.in_buffer = Some(Message {
                     count: data[0],
+                    id: id,
                     data: data[1..length].to_vec(),
                 });
             }
         };
         if status.is_last() {
             // when done, remove from working queue
-            self.in_queue.push_back(self.in_buffer.take().unwrap());
+            self.in_queue.push(self.in_buffer.take().unwrap());
         }
     }
 
@@ -265,8 +271,13 @@ impl MessageManager {
         Ok(())
     }
 
-    pub fn get_incoming(&mut self) -> Option<Message> {
-        self.in_queue.pop_front()
+    pub fn get_incoming(&mut self, id: u32) -> Option<Message> {
+        for i in 0..self.in_queue.len() {
+            if self.in_queue[i].id == id {
+                return Some(self.in_queue.remove(i));
+            }
+        }
+        None
     }
 }
 
@@ -344,13 +355,14 @@ impl<'a> Manager<'_> {
     pub fn message_handle_incoming(
         &mut self,
         status: PayloadStatus,
+        id: u32,
         length: usize,
         slice: &[u8; MASTER_PAYLOAD_MAX_SIZE],
     ) {
         if !self.running() {
             return;
         }
-        self.session.messages.handle_incoming(status, length, slice);
+        self.session.messages.handle_incoming(status, id, length, slice);
     }
 
     pub fn message_get_slice(&mut self, slice: &mut [u8; MASTER_PAYLOAD_MAX_SIZE]) -> Option<SliceMeta> {
@@ -707,9 +719,14 @@ impl<'a> Manager<'_> {
                 )?;
                 self.session.kernel_state = KernelState::MsgSending;
             }
-            kernel::Message::SubkernelMsgRecvRequest { id: _, timeout, tags } => {
-                let max_time = timer.get_time() + Milliseconds(timeout);
-                self.session.kernel_state = KernelState::MsgAwait(max_time, tags);
+            kernel::Message::SubkernelMsgRecvRequest { id, timeout, tags } => {
+                let id = if id == -1 { self.session.id } else { id as u32 };
+                let max_time = if timeout > 0 {
+                    Some(timer.get_time() + Milliseconds(timeout as u64))
+                } else {
+                    None
+                };
+                self.session.kernel_state = KernelState::MsgAwait { max_time: max_time, id:id, tags: tags };
             }
             kernel::Message::SubkernelLoadRunRequest {
                 id,
@@ -731,7 +748,11 @@ impl<'a> Manager<'_> {
             }
 
             kernel::Message::SubkernelAwaitFinishRequest { id, timeout } => {
-                let max_time = timer.get_time() + Milliseconds(timeout);
+                let max_time = if timeout > 0 {
+                    Some(timer.get_time() + Milliseconds(timeout as u64))
+                } else {
+                    None
+                };
                 self.session.kernel_state = KernelState::SubkernelAwaitFinish {
                     max_time: max_time,
                     id: id,
@@ -751,16 +772,18 @@ impl<'a> Manager<'_> {
 
     fn process_external_messages(&mut self, timer: &GlobalTimer) -> Result<(), Error> {
         match &self.session.kernel_state {
-            KernelState::MsgAwait(timeout, tags) => {
-                if timer.get_time() > *timeout {
-                    self.control.tx.send(kernel::Message::SubkernelMsgRecvReply {
-                        status: kernel::SubkernelStatus::Timeout,
-                        count: 0,
-                    });
-                    self.session.kernel_state = KernelState::Running;
-                    return Ok(());
+            KernelState::MsgAwait {max_time , id, tags } => {
+                if let Some(max_time) = *max_time {
+                    if timer.get_time() > max_time {
+                        self.control.tx.send(kernel::Message::SubkernelMsgRecvReply {
+                            status: kernel::SubkernelStatus::Timeout,
+                            count: 0,
+                        });
+                        self.session.kernel_state = KernelState::Running;
+                        return Ok(());
+                    }
                 }
-                if let Some(message) = self.session.messages.get_incoming() {
+                if let Some(message) = self.session.messages.get_incoming(*id) {
                     self.control.tx.send(kernel::Message::SubkernelMsgRecvReply {
                         status: kernel::SubkernelStatus::NoError,
                         count: message.count,
@@ -782,24 +805,26 @@ impl<'a> Manager<'_> {
                 }
             }
             KernelState::SubkernelAwaitFinish { max_time, id } => {
-                if timer.get_time() > *max_time {
-                    self.control.tx.send(kernel::Message::SubkernelAwaitFinishReply {
-                        status: kernel::SubkernelStatus::Timeout,
-                    });
-                    self.session.kernel_state = KernelState::Running;
-                } else {
-                    let mut i = 0;
-                    for status in &self.session.subkernels_finished {
-                        if *status == *id {
-                            self.control.tx.send(kernel::Message::SubkernelAwaitFinishReply {
-                                status: kernel::SubkernelStatus::NoError,
-                            });
-                            self.session.kernel_state = KernelState::Running;
-                            self.session.subkernels_finished.swap_remove(i);
-                            break;
-                        }
-                        i += 1;
+                if let Some(max_time) = *max_time {
+                    if timer.get_time() > max_time {
+                        self.control.tx.send(kernel::Message::SubkernelAwaitFinishReply {
+                            status: kernel::SubkernelStatus::Timeout,
+                        });
+                        self.session.kernel_state = KernelState::Running;
+                        return Ok(());
                     }
+                }
+                let mut i = 0;
+                for status in &self.session.subkernels_finished {
+                    if *status == *id {
+                        self.control.tx.send(kernel::Message::SubkernelAwaitFinishReply {
+                            status: kernel::SubkernelStatus::NoError,
+                        }); 
+                        self.session.kernel_state = KernelState::Running;
+                        self.session.subkernels_finished.swap_remove(i);
+                        break;
+                    }
+                    i += 1;
                 }
                 Ok(())
             }

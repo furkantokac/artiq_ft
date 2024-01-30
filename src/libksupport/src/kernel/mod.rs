@@ -87,7 +87,7 @@ pub enum Message {
     #[cfg(has_drtio)]
     SubkernelAwaitFinishRequest {
         id: u32,
-        timeout: u64,
+        timeout: i64,
     },
     #[cfg(has_drtio)]
     SubkernelAwaitFinishReply {
@@ -104,7 +104,7 @@ pub enum Message {
     #[cfg(has_drtio)]
     SubkernelMsgRecvRequest {
         id: u32,
-        timeout: u64,
+        timeout: i64,
         tags: Vec<u8>,
     },
     #[cfg(has_drtio)]

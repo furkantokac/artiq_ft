@@ -657,13 +657,13 @@ fn process_aux_packet(
         drtioaux::Packet::SubkernelMessage {
             source,
             destination: _destination,
-            id: _id,
+            id,
             status,
             length,
             data,
         } => {
             forward!(_routing_table, _destination, *rank, _repeaters, &packet, timer);
-            kernel_manager.message_handle_incoming(status, length as usize, &data);
+            kernel_manager.message_handle_incoming(status, id, length as usize, &data);
             router.send(
                 drtioaux::Packet::SubkernelMessageAck { destination: source },
                 _routing_table,

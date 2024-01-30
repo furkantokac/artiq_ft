@@ -25,7 +25,7 @@ pub extern "C" fn load_run(id: u32, destination: u8, run: bool) {
     }
 }
 
-pub extern "C" fn await_finish(id: u32, timeout: u64) {
+pub extern "C" fn await_finish(id: u32, timeout: i64) {
     unsafe {
         KERNEL_CHANNEL_1TO0
             .as_mut()
@@ -80,7 +80,7 @@ pub extern "C" fn send_message(
     }
 }
 
-pub extern "C" fn await_message(id: u32, timeout: u64, tags: &CSlice<u8>, min: u8, max: u8) {
+pub extern "C" fn await_message(id: i32, timeout: i64, tags: &CSlice<u8>, min: u8, max: u8) {
     unsafe {
         KERNEL_CHANNEL_1TO0
             .as_mut()

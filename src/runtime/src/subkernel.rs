@@ -5,7 +5,7 @@ use libboard_artiq::{drtio_routing::RoutingTable,
                      drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE}};
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use libcortex_a9::mutex::Mutex;
-use log::error;
+use log::{error, warn};
 
 use crate::rtio_mgt::drtio;
 
@@ -169,25 +169,34 @@ pub async fn await_finish(
     routing_table: &RoutingTable,
     timer: GlobalTimer,
     id: u32,
-    timeout: u64,
+    timeout: i64,
 ) -> Result<SubkernelFinished, Error> {
     match SUBKERNELS.async_lock().await.get(&id).unwrap().state {
         SubkernelState::Running | SubkernelState::Finished { .. } => (),
         _ => return Err(Error::IncorrectState),
     }
-    let max_time = timer.get_time() + Milliseconds(timeout);
-    while timer.get_time() < max_time {
-        {
+    if timeout > 0 {
+        let max_time = timer.get_time() + Milliseconds(timeout as u64);
+        while timer.get_time() < max_time {
             match SUBKERNELS.async_lock().await.get(&id).unwrap().state {
                 SubkernelState::Finished { .. } => break,
                 _ => (),
             };
+            task::r#yield().await;
         }
-        task::r#yield().await;
-    }
-    if timer.get_time() >= max_time {
-        error!("Remote subkernel finish await timed out");
-        return Err(Error::Timeout);
+        if timer.get_time() >= max_time {
+            error!("Remote subkernel finish await timed out");
+            return Err(Error::Timeout);
+        }
+    } else {
+        // no timeout, wait forever
+        loop {
+            match SUBKERNELS.async_lock().await.get(&id).unwrap().state {
+                SubkernelState::Finished { .. } => break,
+                _ => (),
+            };
+            task::r#yield().await;
+        }
     }
     if let Some(subkernel) = SUBKERNELS.async_lock().await.get_mut(&id) {
         match subkernel.state {
@@ -231,8 +240,9 @@ pub async fn message_handle_incoming(
     {
         let subkernel_lock = SUBKERNELS.async_lock().await;
         let subkernel = subkernel_lock.get(&id);
-        if subkernel.is_none() || subkernel.unwrap().state != SubkernelState::Running {
-            // do not add messages for non-existing or deleted subkernels
+        if subkernel.is_some() && subkernel.unwrap().state != SubkernelState::Running {
+            // do not add messages for non-running or deleted subkernels
+            warn!("received a message for a non-running subkernel #{}", id);
             return;
         }
     }
@@ -264,16 +274,19 @@ pub async fn message_handle_incoming(
     }
 }
 
-pub async fn message_await(id: u32, timeout: u64, timer: GlobalTimer) -> Result<Message, Error> {
-    match SUBKERNELS.async_lock().await.get(&id).unwrap().state {
-        SubkernelState::Finished {
-            status: FinishStatus::CommLost,
-        } => return Err(Error::CommLost),
-        SubkernelState::Running | SubkernelState::Finished { .. } => (),
-        _ => return Err(Error::IncorrectState),
+pub async fn message_await(id: u32, timeout: i64, timer: GlobalTimer) -> Result<Message, Error> {
+    let is_subkernel = SUBKERNELS.async_lock().await.get(&id).is_some();
+    if is_subkernel {
+        match SUBKERNELS.async_lock().await.get(&id).unwrap().state {
+            SubkernelState::Finished {
+                status: FinishStatus::CommLost,
+            } => return Err(Error::CommLost),
+            SubkernelState::Running | SubkernelState::Finished { .. } => (),
+            _ => return Err(Error::IncorrectState),
+        }
     }
-    let max_time = timer.get_time() + Milliseconds(timeout);
-    while timer.get_time() < max_time {
+    let max_time = timer.get_time() + Milliseconds(timeout as u64);
+    while timeout < 0 || (timeout > 0 && timer.get_time() < max_time) {
         {
             let mut message_queue = MESSAGE_QUEUE.async_lock().await;
             for i in 0..message_queue.len() {
@@ -284,14 +297,16 @@ pub async fn message_await(id: u32, timeout: u64, timer: GlobalTimer) -> Result<
                 }
             }
         }
-        match SUBKERNELS.async_lock().await.get(&id).unwrap().state {
-            SubkernelState::Finished {
-                status: FinishStatus::CommLost,
-            } => return Err(Error::CommLost),
-            SubkernelState::Finished {
-                status: FinishStatus::Exception(_),
-            } => return Err(Error::SubkernelException),
-            _ => (),
+        if is_subkernel {
+            match SUBKERNELS.async_lock().await.get(&id).unwrap().state {
+                SubkernelState::Finished {
+                    status: FinishStatus::CommLost,
+                } => return Err(Error::CommLost),
+                SubkernelState::Finished {
+                    status: FinishStatus::Exception(_),
+                } => return Err(Error::SubkernelException),
+                _ => (),
+            }
         }
         task::r#yield().await;
     }
@@ -303,9 +318,8 @@ pub async fn message_send<'a>(
     routing_table: &RoutingTable,
     timer: GlobalTimer,
     id: u32,
+    destination: u8,
     message: Vec<u8>,
 ) -> Result<(), Error> {
-    let destination = SUBKERNELS.async_lock().await.get(&id).unwrap().destination;
-    // rpc data prepared by the kernel core already
     Ok(drtio::subkernel_send_message(aux_mutex, routing_table, timer, id, destination, &message).await?)
 }
