@@ -471,7 +471,7 @@ async fn handle_run_kernel(
             }
             #[cfg(has_drtio)]
             kernel::Message::SubkernelMsgRecvRequest { id, timeout, tags } => {
-                let message_received = subkernel::message_await(id, timeout, timer).await;
+                let message_received = subkernel::message_await(id as u32, timeout, timer).await;
                 let (status, count) = match message_received {
                     Ok(ref message) => (kernel::SubkernelStatus::NoError, message.count),
                     Err(SubkernelError::Timeout) => (kernel::SubkernelStatus::Timeout, 0),
@@ -480,7 +480,7 @@ async fn handle_run_kernel(
                     Err(SubkernelError::SubkernelException) => {
                         error!("Exception in subkernel");
                         // just retrieve the exception
-                        let status = subkernel::await_finish(aux_mutex, routing_table, timer, id, timeout)
+                        let status = subkernel::await_finish(aux_mutex, routing_table, timer, id as u32, timeout)
                             .await
                             .unwrap();
                         match stream {
