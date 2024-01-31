@@ -170,6 +170,7 @@ pub extern "C" fn dma_playback(timestamp: i64, ptr: i32, _uses_ddma: bool) {
         csr::rtio_dma::base_address_write(ptr as u32);
         csr::rtio_dma::time_offset_write(timestamp as u64);
 
+        let old_cri_master = csr::cri_con::selected_read();
         csr::cri_con::selected_write(1);
         csr::rtio_dma::enable_write(1);
         #[cfg(has_drtio)]
@@ -183,7 +184,7 @@ pub extern "C" fn dma_playback(timestamp: i64, ptr: i32, _uses_ddma: bool) {
                 });
         }
         while csr::rtio_dma::enable_read() != 0 {}
-        csr::cri_con::selected_write(0);
+        csr::cri_con::selected_write(old_cri_master);
 
         let error = csr::rtio_dma::error_read();
         if error != 0 {
