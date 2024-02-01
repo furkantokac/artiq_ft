@@ -26,7 +26,7 @@ enum KernelState {
     MsgAwait {
         max_time: Option<Milliseconds>,
         id: u32,
-        tags: Vec<u8>
+        tags: Vec<u8>,
     },
     MsgSending,
     SubkernelAwaitLoad,
@@ -180,7 +180,13 @@ impl MessageManager {
         }
     }
 
-    pub fn handle_incoming(&mut self, status: PayloadStatus, id: u32, length: usize, data: &[u8; MASTER_PAYLOAD_MAX_SIZE]) {
+    pub fn handle_incoming(
+        &mut self,
+        status: PayloadStatus,
+        id: u32,
+        length: usize,
+        data: &[u8; MASTER_PAYLOAD_MAX_SIZE],
+    ) {
         // called when receiving a message from master
         if status.is_first() {
             self.in_buffer = None;
@@ -726,7 +732,11 @@ impl<'a> Manager<'_> {
                 } else {
                     None
                 };
-                self.session.kernel_state = KernelState::MsgAwait { max_time: max_time, id:id, tags: tags };
+                self.session.kernel_state = KernelState::MsgAwait {
+                    max_time: max_time,
+                    id: id,
+                    tags: tags,
+                };
             }
             kernel::Message::SubkernelLoadRunRequest {
                 id,
@@ -772,7 +782,7 @@ impl<'a> Manager<'_> {
 
     fn process_external_messages(&mut self, timer: &GlobalTimer) -> Result<(), Error> {
         match &self.session.kernel_state {
-            KernelState::MsgAwait {max_time , id, tags } => {
+            KernelState::MsgAwait { max_time, id, tags } => {
                 if let Some(max_time) = *max_time {
                     if timer.get_time() > max_time {
                         self.control.tx.send(kernel::Message::SubkernelMsgRecvReply {
@@ -819,7 +829,7 @@ impl<'a> Manager<'_> {
                     if *status == *id {
                         self.control.tx.send(kernel::Message::SubkernelAwaitFinishReply {
                             status: kernel::SubkernelStatus::NoError,
-                        }); 
+                        });
                         self.session.kernel_state = KernelState::Running;
                         self.session.subkernels_finished.swap_remove(i);
                         break;

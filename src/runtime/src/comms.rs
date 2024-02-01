@@ -451,12 +451,9 @@ async fn handle_run_kernel(
                     .await;
             }
             #[cfg(has_drtio)]
-            kernel::Message::SubkernelMsgSend {
-                id,
-                destination,
-                data,
-            } => {
-                let res = subkernel::message_send(aux_mutex, routing_table, timer, id, destination.unwrap(), data).await;
+            kernel::Message::SubkernelMsgSend { id, destination, data } => {
+                let res =
+                    subkernel::message_send(aux_mutex, routing_table, timer, id, destination.unwrap(), data).await;
                 match res {
                     Ok(_) => (),
                     Err(e) => {
