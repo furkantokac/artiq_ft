@@ -26,6 +26,7 @@ import analyzer
 import acpki
 import drtio_aux_controller
 import zynq_clocking
+import wrpll
 from config import write_csr_file, write_mem_file, write_rustc_cfg_file
 
 eem_iostandard_dict = {
@@ -108,6 +109,7 @@ class GenericStandalone(SoCCore):
     def __init__(self, description, acpki=False):
         self.acpki = acpki
         clk_freq = description["rtio_frequency"]
+        with_wrpll = description["enable_wrpll"]
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
@@ -119,13 +121,6 @@ class GenericStandalone(SoCCore):
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
 
         self.config["HW_REV"] = description["hw_rev"]
-        
-
-        self.submodules += SMAClkinForward(self.platform)
-
-        self.config["HAS_SI5324"] = None
-        self.config["SI5324_SOFT_RESET"] = None
-
         clk_synth = platform.request("cdr_clk_clean_fabric")
         clk_synth_se = Signal()
         clk_synth_se_buf = Signal()
@@ -148,6 +143,23 @@ class GenericStandalone(SoCCore):
         self.csr_devices.append("sys_crg")
         self.crg = self.ps7 # HACK for eem_7series to find the clock
         self.crg.cd_sys = self.sys_crg.cd_sys
+
+        if with_wrpll:
+            self.submodules.wrpll_refclk = wrpll.SMAFrequencyMultiplier(platform.request("sma_clkin"))
+            self.submodules.wrpll = wrpll.WRPLL(
+                platform=self.platform,
+                cd_ref=self.wrpll_refclk.cd_ref,
+                main_clk_se=clk_synth_se)
+            self.csr_devices.append("wrpll_refclk")
+            self.csr_devices.append("wrpll")
+            self.comb += self.ps7.core.core0.nfiq.eq(self.wrpll.ev.irq)
+            self.config["HAS_SI549"] = None
+            self.config["WRPLL_REF_CLK"] = "SMA_CLKIN"
+        else:
+            self.submodules += SMAClkinForward(self.platform)
+            self.config["HAS_SI5324"] = None
+            self.config["SI5324_SOFT_RESET"] = None
+
 
         self.rtio_channels = []
         has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
@@ -207,6 +219,7 @@ class GenericStandalone(SoCCore):
 class GenericMaster(SoCCore):
     def __init__(self, description, acpki=False):
         clk_freq = description["rtio_frequency"]
+        with_wrpll = description["enable_wrpll"]
 
         has_drtio_over_eem = any(peripheral["type"] == "shuttler" for peripheral in description["peripherals"])
         self.acpki = acpki
@@ -221,8 +234,6 @@ class GenericMaster(SoCCore):
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
 
         self.config["HW_REV"] = description["hw_rev"]
-
-        self.submodules += SMAClkinForward(self.platform)
 
         data_pads = [platform.request("sfp", i) for i in range(4)]
 
@@ -257,8 +268,25 @@ class GenericMaster(SoCCore):
         self.comb += ext_async_rst.eq(self.sys_crg.clk_sw_fsm.o_clk_sw & ~gtx0.tx_init.done)
         self.specials += MultiReg(self.sys_crg.clk_sw_fsm.o_clk_sw & self.sys_crg.mmcm_locked, self.gt_drtio.clk_path_ready, odomain="bootstrap")
 
-        self.config["HAS_SI5324"] = None
-        self.config["SI5324_SOFT_RESET"] = None
+        if with_wrpll:
+            clk_synth = platform.request("cdr_clk_clean_fabric")
+            clk_synth_se = Signal()
+            platform.add_period_constraint(clk_synth.p, 8.0)
+            self.specials += Instance("IBUFGDS", p_DIFF_TERM="TRUE", p_IBUF_LOW_PWR="FALSE", i_I=clk_synth.p, i_IB=clk_synth.n, o_O=clk_synth_se)
+            self.submodules.wrpll_refclk = wrpll.SMAFrequencyMultiplier(platform.request("sma_clkin"))
+            self.submodules.wrpll = wrpll.WRPLL(
+                platform=self.platform,
+                cd_ref=self.wrpll_refclk.cd_ref,
+                main_clk_se=clk_synth_se)
+            self.csr_devices.append("wrpll_refclk")
+            self.csr_devices.append("wrpll")
+            self.comb += self.ps7.core.core0.nfiq.eq(self.wrpll.ev.irq)
+            self.config["HAS_SI549"] = None
+            self.config["WRPLL_REF_CLK"] = "SMA_CLKIN"
+        else:
+            self.submodules += SMAClkinForward(self.platform)
+            self.config["HAS_SI5324"] = None
+            self.config["SI5324_SOFT_RESET"] = None
 
         self.rtio_channels = []
         has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
@@ -400,6 +428,7 @@ class GenericMaster(SoCCore):
 class GenericSatellite(SoCCore):
     def __init__(self, description, acpki=False):
         clk_freq = description["rtio_frequency"]
+        with_wrpll = description["enable_wrpll"]
 
         self.acpki = acpki
 
@@ -551,14 +580,30 @@ class GenericSatellite(SoCCore):
         self.config["RTIO_FREQUENCY"] = str(clk_freq/1e6)
         self.config["CLOCK_FREQUENCY"] = int(clk_freq)
 
-        self.submodules.siphaser = SiPhaser7Series(
-            si5324_clkin=platform.request("cdr_clk"),
-            rx_synchronizer=self.rx_synchronizer,
-            ultrascale=False,
-            rtio_clk_freq=self.gt_drtio.rtio_clk_freq)
-        self.csr_devices.append("siphaser")
-        self.config["HAS_SI5324"] = None
-        self.config["SI5324_SOFT_RESET"] = None
+        if with_wrpll:
+            clk_synth = platform.request("cdr_clk_clean_fabric")
+            clk_synth_se = Signal()
+            platform.add_period_constraint(clk_synth.p, 8.0)
+            self.specials += Instance("IBUFGDS", p_DIFF_TERM="TRUE", p_IBUF_LOW_PWR="FALSE", i_I=clk_synth.p, i_IB=clk_synth.n, o_O=clk_synth_se)
+            self.submodules.wrpll = wrpll.WRPLL(
+                platform=self.platform,
+                cd_ref=self.gt_drtio.cd_rtio_rx0,
+                main_clk_se=clk_synth_se)
+            self.submodules.wrpll_skewtester = wrpll.SkewTester(self.rx_synchronizer)
+            self.csr_devices.append("wrpll_skewtester")
+            self.csr_devices.append("wrpll")
+            self.comb += self.ps7.core.core0.nfiq.eq(self.wrpll.ev.irq)
+            self.config["HAS_SI549"] = None
+            self.config["WRPLL_REF_CLK"] = "GT_CDR"
+        else:
+            self.submodules.siphaser = SiPhaser7Series(
+                si5324_clkin=platform.request("cdr_clk"),
+                rx_synchronizer=self.rx_synchronizer,
+                ultrascale=False,
+                rtio_clk_freq=self.gt_drtio.rtio_clk_freq)
+            self.csr_devices.append("siphaser")
+            self.config["HAS_SI5324"] = None
+            self.config["SI5324_SOFT_RESET"] = None
 
         gtx0 = self.gt_drtio.gtxs[0]
         platform.add_false_path_constraints(
