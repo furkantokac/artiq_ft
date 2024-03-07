@@ -38,7 +38,7 @@ use libboard_zynq::error_led::ErrorLED;
 use libboard_zynq::{i2c::I2c, print, println, time::Milliseconds, timer::GlobalTimer};
 use libcortex_a9::{l2c::enable_l2_cache, regs::MPIDR};
 use libregister::RegisterR;
-use libsupport_zynq::ram;
+use libsupport_zynq::{exception_vectors, ram};
 use routing::Router;
 use subkernel::Manager as KernelManager;
 
@@ -47,6 +47,11 @@ mod dma;
 mod repeater;
 mod routing;
 mod subkernel;
+
+// linker symbols
+extern "C" {
+    static __exceptions_start: u32;
+}
 
 fn drtiosat_reset(reset: bool) {
     unsafe {
@@ -827,6 +832,9 @@ static mut LOG_BUFFER: [u8; 1 << 17] = [0; 1 << 17];
 
 #[no_mangle]
 pub extern "C" fn main_core0() -> i32 {
+    unsafe {
+        exception_vectors::set_vector_table(&__exceptions_start as *const u32 as u32);
+    }
     enable_l2_cache(0x8);
 
     let mut timer = GlobalTimer::start();

@@ -21,7 +21,7 @@ use libboard_artiq::{identifier_read, logger, pl};
 use libboard_zynq::{gic, mpcore, timer::GlobalTimer};
 use libconfig::Config;
 use libcortex_a9::l2c::enable_l2_cache;
-use libsupport_zynq::ram;
+use libsupport_zynq::{exception_vectors, ram};
 use log::{info, warn};
 
 mod analyzer;
@@ -37,6 +37,11 @@ mod rtio_dma;
 mod rtio_mgt;
 #[cfg(has_drtio)]
 mod subkernel;
+
+// linker symbols
+extern "C" {
+    static __exceptions_start: u32;
+}
 
 #[cfg(all(feature = "target_kasli_soc", has_drtio))]
 async fn io_expanders_service(
@@ -77,6 +82,9 @@ static mut LOG_BUFFER: [u8; 1 << 17] = [0; 1 << 17];
 
 #[no_mangle]
 pub fn main_core0() {
+    unsafe {
+        exception_vectors::set_vector_table(&__exceptions_start as *const u32 as u32);
+    }
     enable_l2_cache(0x8);
     let mut timer = GlobalTimer::start();
 

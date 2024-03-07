@@ -10,7 +10,9 @@ SECTIONS
     __text_start = .;
     .text :
     {
+        __exceptions_start = .;
         KEEP(*(.text.exceptions));
+        __exceptions_end = .;
         *(.text.boot);
         *(.text .text.*);
     } > SDRAM
