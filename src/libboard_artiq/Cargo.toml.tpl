@@ -25,7 +25,7 @@ void = { version = "1", default-features = false }
 
 io = { path = "../libio", features = ["byteorder"] }
 libboard_zynq = { path = "@@ZYNQ_RS@@/libboard_zynq" }
-libsupport_zynq = { path = "@@ZYNQ_RS@@/libsupport_zynq", default-features = false, features = ["alloc_core"] }
+libsupport_zynq = { path = "@@ZYNQ_RS@@/libsupport_zynq", default-features = false, features = ["alloc_core", "dummy_fiq_handler"] }
 libregister = { path = "@@ZYNQ_RS@@/libregister" }
 libconfig = { path = "@@ZYNQ_RS@@/libconfig", features = ["fat_lfn"] }
 libcortex_a9 = { path = "@@ZYNQ_RS@@/libcortex_a9" }
