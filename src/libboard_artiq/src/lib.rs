@@ -22,7 +22,7 @@ pub mod drtioaux;
 pub mod drtioaux_async;
 pub mod drtioaux_proto;
 pub mod fiq;
-#[cfg(all(feature = "target_kasli_soc", has_drtio))]
+#[cfg(feature = "target_kasli_soc")]
 pub mod io_expander;
 pub mod logger;
 #[cfg(has_drtio)]

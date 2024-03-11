@@ -8,14 +8,14 @@
 #[macro_use]
 extern crate alloc;
 
-#[cfg(all(feature = "target_kasli_soc", has_drtio))]
+#[cfg(all(feature = "target_kasli_soc", has_virtual_leds))]
 use core::cell::RefCell;
 
 use ksupport;
 use libasync::task;
 #[cfg(has_drtio_eem)]
 use libboard_artiq::drtio_eem;
-#[cfg(all(feature = "target_kasli_soc", has_drtio))]
+#[cfg(feature = "target_kasli_soc")]
 use libboard_artiq::io_expander;
 use libboard_artiq::{identifier_read, logger, pl};
 use libboard_zynq::{gic, mpcore, timer::GlobalTimer};
@@ -43,7 +43,7 @@ extern "C" {
     static __exceptions_start: u32;
 }
 
-#[cfg(all(feature = "target_kasli_soc", has_drtio))]
+#[cfg(all(feature = "target_kasli_soc", has_virtual_leds))]
 async fn io_expanders_service(
     i2c_bus: RefCell<&mut libboard_zynq::i2c::I2c>,
     io_expander0: RefCell<io_expander::IoExpander>,
@@ -101,7 +101,7 @@ pub fn main_core0() {
     info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
     ksupport::i2c::init();
-    #[cfg(all(feature = "target_kasli_soc", has_drtio))]
+    #[cfg(feature = "target_kasli_soc")]
     {
         let i2c_bus = unsafe { (ksupport::i2c::I2C_BUS).as_mut().unwrap() };
         let mut io_expander0 = io_expander::IoExpander::new(i2c_bus, 0).unwrap();
@@ -112,6 +112,11 @@ pub fn main_core0() {
         io_expander1
             .init(i2c_bus)
             .expect("I2C I/O expander #1 initialization failed");
+
+        // Drive CLK_SEL to true
+        #[cfg(has_si549)]
+        io_expander0.set(1, 7, true);
+
         // Drive TX_DISABLE to false on SFP0..3
         io_expander0.set(0, 1, false);
         io_expander1.set(0, 1, false);
@@ -119,6 +124,7 @@ pub fn main_core0() {
         io_expander1.set(1, 1, false);
         io_expander0.service(i2c_bus).unwrap();
         io_expander1.service(i2c_bus).unwrap();
+        #[cfg(has_virtual_leds)]
         task::spawn(io_expanders_service(
             RefCell::new(i2c_bus),
             RefCell::new(io_expander0),

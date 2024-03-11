@@ -4,6 +4,8 @@ use ksupport::i2c;
 use libboard_artiq::pl;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
+#[cfg(has_si549)]
+use libboard_artiq::si549;
 #[cfg(has_si5324)]
 use libboard_zynq::i2c::I2c;
 use libboard_zynq::timer::GlobalTimer;
@@ -260,6 +262,150 @@ fn setup_si5324(i2c: &mut I2c, timer: &mut GlobalTimer, clk: RtioClock) {
     si5324::setup(i2c, &si5324_settings, si5324_ref_input, timer).expect("cannot initialize Si5324");
 }
 
+#[cfg(all(has_si549, has_wrpll))]
+fn wrpll_setup(timer: &mut GlobalTimer, clk: RtioClock, si549_settings: &si549::FrequencySetting) {
+    // register values are directly copied from preconfigured mmcm
+    let (mmcm_setting, mmcm_bypass) = match clk {
+        RtioClock::Ext0_Synth0_10to125 => (
+            si549::wrpll_refclk::MmcmSetting {
+                // CLKFBOUT_MULT = 62.5, DIVCLK_DIVIDE = 1 , CLKOUT0_DIVIDE = 5
+                clkout0_reg1: 0x1083,
+                clkout0_reg2: 0x0080,
+                clkfbout_reg1: 0x179e,
+                clkfbout_reg2: 0x4c00,
+                div_reg: 0x1041,
+                lock_reg1: 0x00fa,
+                lock_reg2: 0x7c01,
+                lock_reg3: 0xffe9,
+                power_reg: 0x9900,
+                filt_reg1: 0x0808,
+                filt_reg2: 0x0800,
+            },
+            false,
+        ),
+        RtioClock::Ext0_Synth0_80to125 => (
+            si549::wrpll_refclk::MmcmSetting {
+                // CLKFBOUT_MULT = 15.625, DIVCLK_DIVIDE = 1 , CLKOUT0_DIVIDE = 10
+                clkout0_reg1: 0x1145,
+                clkout0_reg2: 0x0000,
+                clkfbout_reg1: 0x11c7,
+                clkfbout_reg2: 0x5880,
+                div_reg: 0x1041,
+                lock_reg1: 0x028a,
+                lock_reg2: 0x7c01,
+                lock_reg3: 0xffe9,
+                power_reg: 0x9900,
+                filt_reg1: 0x0808,
+                filt_reg2: 0x9800,
+            },
+            false,
+        ),
+        RtioClock::Ext0_Synth0_100to125 => (
+            si549::wrpll_refclk::MmcmSetting {
+                // CLKFBOUT_MULT = 12.5, DIVCLK_DIVIDE = 1 , CLKOUT0_DIVIDE = 10
+                clkout0_reg1: 0x1145,
+                clkout0_reg2: 0x0000,
+                clkfbout_reg1: 0x1145,
+                clkfbout_reg2: 0x4c00,
+                div_reg: 0x1041,
+                lock_reg1: 0x0339,
+                lock_reg2: 0x7c01,
+                lock_reg3: 0xffe9,
+                power_reg: 0x9900,
+                filt_reg1: 0x0808,
+                filt_reg2: 0x9800,
+            },
+            false,
+        ),
+        RtioClock::Ext0_Synth0_125to125 => (
+            si549::wrpll_refclk::MmcmSetting {
+                // CLKFBOUT_MULT = 10, DIVCLK_DIVIDE = 1 , CLKOUT0_DIVIDE = 10
+                clkout0_reg1: 0x1145,
+                clkout0_reg2: 0x0000,
+                clkfbout_reg1: 0x1145,
+                clkfbout_reg2: 0x0000,
+                div_reg: 0x1041,
+                lock_reg1: 0x03e8,
+                lock_reg2: 0x7001,
+                lock_reg3: 0xf3e9,
+                power_reg: 0x0100,
+                filt_reg1: 0x0808,
+                filt_reg2: 0x1100,
+            },
+            true,
+        ),
+        _ => unreachable!(),
+    };
+
+    si549::helper_setup(timer, &si549_settings).expect("cannot initialize helper Si549");
+    si549::wrpll_refclk::setup(timer, mmcm_setting, mmcm_bypass).expect("cannot initialize ref clk for wrpll");
+    si549::wrpll::select_recovered_clock(true, timer);
+}
+
+#[cfg(has_si549)]
+fn get_si549_setting(clk: RtioClock) -> si549::FrequencySetting {
+    match clk {
+        RtioClock::Ext0_Synth0_10to125 => {
+            info!("using 10MHz reference to make 125MHz RTIO clock with WRPLL");
+        }
+        RtioClock::Ext0_Synth0_80to125 => {
+            info!("using 80MHz reference to make 125MHz RTIO clock with WRPLL");
+        }
+        RtioClock::Ext0_Synth0_100to125 => {
+            info!("using 100MHz reference to make 125MHz RTIO clock with WRPLL");
+        }
+        RtioClock::Ext0_Synth0_125to125 => {
+            info!("using 125MHz reference to make 125MHz RTIO clock with WRPLL");
+        }
+        RtioClock::Int_100 => {
+            info!("using internal 100MHz RTIO clock");
+        }
+        RtioClock::Int_125 => {
+            info!("using internal 125MHz RTIO clock");
+        }
+        _ => {
+            warn!(
+                "rtio_clock setting '{:?}' is unsupported. Falling back to default internal 125MHz RTIO clock.",
+                clk
+            );
+        }
+    };
+
+    match clk {
+        RtioClock::Int_100 => {
+            si549::FrequencySetting {
+                main: si549::DividerConfig {
+                    hsdiv: 0x06C,
+                    lsdiv: 0,
+                    fbdiv: 0x046C5F49797,
+                },
+                helper: si549::DividerConfig {
+                    // 100MHz*32767/32768
+                    hsdiv: 0x06C,
+                    lsdiv: 0,
+                    fbdiv: 0x046C5670BBD,
+                },
+            }
+        }
+        _ => {
+            // Everything else use 125MHz
+            si549::FrequencySetting {
+                main: si549::DividerConfig {
+                    hsdiv: 0x058,
+                    lsdiv: 0,
+                    fbdiv: 0x04815791F25,
+                },
+                helper: si549::DividerConfig {
+                    // 125MHz*32767/32768
+                    hsdiv: 0x058,
+                    lsdiv: 0,
+                    fbdiv: 0x04814E8F442,
+                },
+            }
+        }
+    }
+}
+
 pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
     let clk = get_rtio_clock_cfg(cfg);
     #[cfg(has_si5324)]
@@ -274,9 +420,29 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
         }
     }
 
+    #[cfg(has_si549)]
+    let si549_settings = get_si549_setting(clk);
+
+    #[cfg(has_si549)]
+    si549::main_setup(timer, &si549_settings).expect("cannot initialize main Si549");
+
     #[cfg(has_drtio)]
     init_drtio(timer);
 
     #[cfg(not(has_drtio))]
     init_rtio(timer);
+
+    #[cfg(all(has_si549, has_wrpll))]
+    {
+        // SYS CLK switch will reset CSRs that are used by WRPLL
+        match clk {
+            RtioClock::Ext0_Synth0_10to125
+            | RtioClock::Ext0_Synth0_80to125
+            | RtioClock::Ext0_Synth0_100to125
+            | RtioClock::Ext0_Synth0_125to125 => {
+                wrpll_setup(timer, clk, &si549_settings);
+            }
+            _ => {}
+        }
+    }
 }
