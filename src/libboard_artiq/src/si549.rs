@@ -355,6 +355,10 @@ pub mod wrpll {
     mod tag_collector {
         use super::*;
 
+        #[cfg(wrpll_ref_clk = "GT_CDR")]
+        static mut TAG_OFFSET: u32 = 19050;
+        #[cfg(wrpll_ref_clk = "SMA_CLKIN")]
+        static mut TAG_OFFSET: u32 = 0;
         static mut REF_TAG: u32 = 0;
         static mut REF_TAG_READY: bool = false;
         static mut MAIN_TAG: u32 = 0;
@@ -392,6 +396,18 @@ pub mod wrpll {
             unsafe { REF_TAG_READY && MAIN_TAG_READY }
         }
 
+        #[cfg(feature = "calibrate_wrpll_skew")]
+        pub fn set_tag_offset(offset: u32) {
+            unsafe {
+                TAG_OFFSET = offset;
+            }
+        }
+
+        #[cfg(feature = "calibrate_wrpll_skew")]
+        pub fn get_tag_offset() -> u32 {
+            unsafe { TAG_OFFSET }
+        }
+
         pub fn get_period_error() -> i32 {
             // n * BEATING_PERIOD - REF_TAG(n) mod BEATING_PERIOD
             let mut period_error = unsafe { REF_TAG.overflowing_neg().0.rem_euclid(BEATING_PERIOD as u32) as i32 };
@@ -403,9 +419,13 @@ pub mod wrpll {
         }
 
         pub fn get_phase_error() -> i32 {
-            // MAIN_TAG(n) - REF_TAG(n) mod BEATING_PERIOD
-            let mut phase_error =
-                unsafe { MAIN_TAG.overflowing_sub(REF_TAG).0.rem_euclid(BEATING_PERIOD as u32) as i32 };
+            // MAIN_TAG(n) - REF_TAG(n) - TAG_OFFSET mod BEATING_PERIOD
+            let mut phase_error = unsafe {
+                MAIN_TAG
+                    .overflowing_sub(REF_TAG + TAG_OFFSET)
+                    .0
+                    .rem_euclid(BEATING_PERIOD as u32) as i32
+            };
 
             // mapping tags from [0, 2π] -> [-π, π]
             if phase_error > BEATING_HALFPERIOD {
@@ -520,6 +540,113 @@ pub mod wrpll {
         Ok(())
     }
 
+    #[cfg(wrpll_ref_clk = "GT_CDR")]
+    fn test_skew(timer: &mut GlobalTimer) -> Result<(), &'static str> {
+        // wait for PLL to stabilize
+        timer.delay_us(20_000);
+
+        info!("testing the skew of SYS CLK...");
+        if has_timing_error(timer) {
+            return Err("the skew cannot satisfy setup/hold time constraint of RX synchronizer");
+        }
+        info!("the skew of SYS CLK met the timing constraint");
+        Ok(())
+    }
+
+    #[cfg(wrpll_ref_clk = "GT_CDR")]
+    fn has_timing_error(timer: &mut GlobalTimer) -> bool {
+        unsafe {
+            csr::wrpll_skewtester::error_write(1);
+        }
+        timer.delay_us(5_000);
+        unsafe { csr::wrpll_skewtester::error_read() == 1 }
+    }
+
+    #[cfg(feature = "calibrate_wrpll_skew")]
+    fn find_edge(target: bool, timer: &mut GlobalTimer) -> Result<u32, &'static str> {
+        const STEP: u32 = 8;
+        const STABLE_THRESHOLD: u32 = 10;
+
+        enum FSM {
+            Init,
+            WaitEdge,
+            GotEdge,
+        }
+
+        let mut state: FSM = FSM::Init;
+        let mut offset: u32 = tag_collector::get_tag_offset();
+        let mut median_edge: u32 = 0;
+        let mut stable_counter: u32 = 0;
+
+        for _ in 0..(BEATING_PERIOD as u32 / STEP) as usize {
+            tag_collector::set_tag_offset(offset);
+            offset += STEP;
+            // wait for PLL to stabilize
+            timer.delay_us(20_000);
+
+            let error = has_timing_error(timer);
+            // A median edge deglitcher
+            match state {
+                FSM::Init => {
+                    if error != target {
+                        stable_counter += 1;
+                    } else {
+                        stable_counter = 0;
+                    }
+
+                    if stable_counter >= STABLE_THRESHOLD {
+                        state = FSM::WaitEdge;
+                        stable_counter = 0;
+                    }
+                }
+                FSM::WaitEdge => {
+                    if error == target {
+                        state = FSM::GotEdge;
+                        median_edge = offset;
+                    }
+                }
+                FSM::GotEdge => {
+                    if error != target {
+                        median_edge += STEP;
+                        stable_counter = 0;
+                    } else {
+                        stable_counter += 1;
+                    }
+
+                    if stable_counter >= STABLE_THRESHOLD {
+                        return Ok(median_edge);
+                    }
+                }
+            }
+        }
+        return Err("failed to find timing error edge");
+    }
+
+    #[cfg(feature = "calibrate_wrpll_skew")]
+    fn calibrate_skew(timer: &mut GlobalTimer) -> Result<(), &'static str> {
+        info!("calibrating skew to meet timing constraint...");
+
+        // clear calibrated value
+        tag_collector::set_tag_offset(0);
+        let rising = find_edge(true, timer)? as i32;
+        let falling = find_edge(false, timer)? as i32;
+
+        let width = BEATING_PERIOD - (falling - rising);
+        let result = falling + width / 2;
+        tag_collector::set_tag_offset(result as u32);
+
+        info!(
+            "calibration successful, error zone: {} -> {}, width: {} ({}deg), middle of working region: {}",
+            rising,
+            falling,
+            width,
+            360 * width / BEATING_PERIOD,
+            result,
+        );
+
+        Ok(())
+    }
+
     pub fn select_recovered_clock(rc: bool, timer: &mut GlobalTimer) {
         set_isr(false);
 
@@ -537,6 +664,12 @@ pub mod wrpll {
             // use nFIQ to avoid IRQ being disabled by mutex lock and mess up PLL
             set_isr(true);
             info!("WRPLL interrupt enabled");
+
+            #[cfg(feature = "calibrate_wrpll_skew")]
+            calibrate_skew(timer).expect("failed to set the correct skew");
+
+            #[cfg(wrpll_ref_clk = "GT_CDR")]
+            test_skew(timer).expect("skew test failed");
         }
     }
 }

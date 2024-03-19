@@ -7,6 +7,7 @@ build = "build.rs"
 [features]
 target_zc706 = ["libboard_zynq/target_zc706", "libsupport_zynq/target_zc706", "libconfig/target_zc706", "libboard_artiq/target_zc706"]
 target_kasli_soc = ["libboard_zynq/target_kasli_soc", "libsupport_zynq/target_kasli_soc", "libconfig/target_kasli_soc", "libboard_artiq/target_kasli_soc"]
+calibrate_wrpll_skew = ["libboard_artiq/calibrate_wrpll_skew"]
 default = ["target_zc706", ]
 
 [build-dependencies]

@@ -10,6 +10,7 @@ name = "libboard_artiq"
 [features]
 target_zc706 = ["libboard_zynq/target_zc706", "libconfig/target_zc706"]
 target_kasli_soc = ["libboard_zynq/target_kasli_soc", "libconfig/target_kasli_soc"]
+calibrate_wrpll_skew = []
 
 [build-dependencies]
 build_zynq = { path = "../libbuild_zynq" }
