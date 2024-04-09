@@ -1,5 +1,7 @@
 #![no_std]
 #![feature(never_type)]
+#![feature(naked_functions)]
+#![feature(asm)]
 
 extern crate core_io;
 extern crate crc;
@@ -19,6 +21,7 @@ pub mod drtioaux;
 #[cfg(has_drtio)]
 pub mod drtioaux_async;
 pub mod drtioaux_proto;
+pub mod fiq;
 #[cfg(all(feature = "target_kasli_soc", has_drtio))]
 pub mod io_expander;
 pub mod logger;

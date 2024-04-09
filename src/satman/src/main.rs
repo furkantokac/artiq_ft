@@ -29,6 +29,8 @@ use libboard_artiq::grabber;
 use libboard_artiq::io_expander;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
+#[cfg(has_si549)]
+use libboard_artiq::si549;
 use libboard_artiq::{drtio_routing, drtioaux,
                      drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE},
                      identifier_read, logger,
@@ -828,6 +830,36 @@ const SI5324_SETTINGS: si5324::FrequencySettings = si5324::FrequencySettings {
     crystal_as_ckin2: true,
 };
 
+#[cfg(all(has_si549, rtio_frequency = "125.0"))]
+const SI549_SETTINGS: si549::FrequencySetting = si549::FrequencySetting {
+    main: si549::DividerConfig {
+        hsdiv: 0x058,
+        lsdiv: 0,
+        fbdiv: 0x04815791F25,
+    },
+    helper: si549::DividerConfig {
+        // 125MHz*32767/32768
+        hsdiv: 0x058,
+        lsdiv: 0,
+        fbdiv: 0x04814E8F442,
+    },
+};
+
+#[cfg(all(has_si549, rtio_frequency = "100.0"))]
+const SI549_SETTINGS: si549::FrequencySetting = si549::FrequencySetting {
+    main: si549::DividerConfig {
+        hsdiv: 0x06C,
+        lsdiv: 0,
+        fbdiv: 0x046C5F49797,
+    },
+    helper: si549::DividerConfig {
+        // 100MHz*32767/32768
+        hsdiv: 0x06C,
+        lsdiv: 0,
+        fbdiv: 0x046C5670BBD,
+    },
+};
+
 static mut LOG_BUFFER: [u8; 1 << 17] = [0; 1 << 17];
 
 #[no_mangle]
@@ -864,6 +896,11 @@ pub extern "C" fn main_core0() -> i32 {
         io_expander1
             .init(&mut i2c)
             .expect("I2C I/O expander #1 initialization failed");
+
+        // Drive CLK_SEL to true
+        #[cfg(has_si549)]
+        io_expander0.set(1, 7, true);
+
         // Drive TX_DISABLE to false on SFP0..3
         io_expander0.set(0, 1, false);
         io_expander1.set(0, 1, false);
@@ -875,6 +912,8 @@ pub extern "C" fn main_core0() -> i32 {
 
     #[cfg(has_si5324)]
     si5324::setup(&mut i2c, &SI5324_SETTINGS, si5324::Input::Ckin1, &mut timer).expect("cannot initialize Si5324");
+    #[cfg(has_si549)]
+    si549::main_setup(&mut timer, &SI549_SETTINGS).expect("cannot initialize main Si549");
 
     timer.delay_us(100_000);
     info!("Switching SYS clocks...");
@@ -892,6 +931,8 @@ pub extern "C" fn main_core0() -> i32 {
     unsafe {
         csr::gt_drtio::txenable_write(0xffffffffu32 as _);
     }
+    #[cfg(has_si549)]
+    si549::helper_setup(&mut timer, &SI549_SETTINGS).expect("cannot initialize helper Si549");
 
     #[cfg(has_drtio_routing)]
     let mut repeaters = [repeater::Repeater::default(); csr::DRTIOREP.len()];
@@ -936,6 +977,9 @@ pub extern "C" fn main_core0() -> i32 {
             si5324::siphaser::select_recovered_clock(&mut i2c, true, &mut timer).expect("failed to switch clocks");
             si5324::siphaser::calibrate_skew(&mut timer).expect("failed to calibrate skew");
         }
+
+        #[cfg(has_wrpll)]
+        si549::wrpll::select_recovered_clock(true, &mut timer);
 
         // Various managers created here, so when link is dropped, all DMA traces
         // are cleared out for a clean slate on subsequent connections,
@@ -1034,6 +1078,8 @@ pub extern "C" fn main_core0() -> i32 {
         info!("uplink is down, switching to local oscillator clock");
         #[cfg(has_siphaser)]
         si5324::siphaser::select_recovered_clock(&mut i2c, false, &mut timer).expect("failed to switch clocks");
+        #[cfg(has_wrpll)]
+        si549::wrpll::select_recovered_clock(false, &mut timer);
     }
 }
 

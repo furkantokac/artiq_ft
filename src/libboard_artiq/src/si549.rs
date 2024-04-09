@@ -324,3 +324,219 @@ fn set_adpll(dcxo: i2c::DCXO, adpll: i32) -> Result<(), &'static str> {
 
     Ok(())
 }
+
+#[cfg(has_wrpll)]
+pub mod wrpll {
+
+    use super::*;
+
+    const BEATING_PERIOD: i32 = 0x8000;
+    const BEATING_HALFPERIOD: i32 = 0x4000;
+    const COUNTER_WIDTH: u32 = 24;
+    const DIV_WIDTH: u32 = 2;
+
+    const KP: i32 = 6;
+    const KI: i32 = 2;
+    // 4 ppm capture range
+    const ADPLL_LIM: i32 = (4.0 / 0.0001164) as i32;
+
+    static mut BASE_ADPLL: i32 = 0;
+    static mut H_LAST_ADPLL: i32 = 0;
+    static mut LAST_PERIOD_ERR: i32 = 0;
+    static mut M_LAST_ADPLL: i32 = 0;
+    static mut LAST_PHASE_ERR: i32 = 0;
+
+    #[derive(Clone, Copy)]
+    pub enum ISR {
+        RefTag,
+        MainTag,
+    }
+
+    mod tag_collector {
+        use super::*;
+
+        static mut REF_TAG: u32 = 0;
+        static mut REF_TAG_READY: bool = false;
+        static mut MAIN_TAG: u32 = 0;
+        static mut MAIN_TAG_READY: bool = false;
+
+        pub fn reset() {
+            clear_phase_diff_ready();
+            unsafe {
+                REF_TAG = 0;
+                MAIN_TAG = 0;
+            }
+        }
+
+        pub fn clear_phase_diff_ready() {
+            unsafe {
+                REF_TAG_READY = false;
+                MAIN_TAG_READY = false;
+            }
+        }
+
+        pub fn collect_tags(interrupt: ISR) {
+            match interrupt {
+                ISR::RefTag => unsafe {
+                    REF_TAG = csr::wrpll::ref_tag_read();
+                    REF_TAG_READY = true;
+                },
+                ISR::MainTag => unsafe {
+                    MAIN_TAG = csr::wrpll::main_tag_read();
+                    MAIN_TAG_READY = true;
+                },
+            }
+        }
+
+        pub fn phase_diff_ready() -> bool {
+            unsafe { REF_TAG_READY && MAIN_TAG_READY }
+        }
+
+        pub fn get_period_error() -> i32 {
+            // n * BEATING_PERIOD - REF_TAG(n) mod BEATING_PERIOD
+            let mut period_error = unsafe { REF_TAG.overflowing_neg().0.rem_euclid(BEATING_PERIOD as u32) as i32 };
+            // mapping tags from [0, 2π] -> [-π, π]
+            if period_error > BEATING_HALFPERIOD {
+                period_error -= BEATING_PERIOD
+            }
+            period_error
+        }
+
+        pub fn get_phase_error() -> i32 {
+            // MAIN_TAG(n) - REF_TAG(n) mod BEATING_PERIOD
+            let mut phase_error =
+                unsafe { MAIN_TAG.overflowing_sub(REF_TAG).0.rem_euclid(BEATING_PERIOD as u32) as i32 };
+
+            // mapping tags from [0, 2π] -> [-π, π]
+            if phase_error > BEATING_HALFPERIOD {
+                phase_error -= BEATING_PERIOD
+            }
+            phase_error
+        }
+    }
+
+    fn set_isr(en: bool) {
+        let val = if en { 1 } else { 0 };
+        unsafe {
+            csr::wrpll::ref_tag_ev_enable_write(val);
+            csr::wrpll::main_tag_ev_enable_write(val);
+        }
+    }
+
+    fn set_base_adpll() -> Result<(), &'static str> {
+        let count2adpll =
+            |error: i32| ((error as f64 * 1e6) / (0.0001164 * (1 << (COUNTER_WIDTH - DIV_WIDTH)) as f64)) as i32;
+
+        let (ref_count, main_count) = get_freq_counts();
+        unsafe {
+            BASE_ADPLL = count2adpll(ref_count as i32 - main_count as i32);
+            set_adpll(i2c::DCXO::Main, BASE_ADPLL)?;
+            set_adpll(i2c::DCXO::Helper, BASE_ADPLL)?;
+        }
+        Ok(())
+    }
+
+    fn get_freq_counts() -> (u32, u32) {
+        unsafe {
+            csr::wrpll::frequency_counter_update_write(1);
+            while csr::wrpll::frequency_counter_busy_read() == 1 {}
+            #[cfg(wrpll_ref_clk = "GT_CDR")]
+            let ref_count = csr::wrpll::frequency_counter_counter_rtio_rx0_read();
+            #[cfg(wrpll_ref_clk = "SMA_CLKIN")]
+            let ref_count = csr::wrpll::frequency_counter_counter_ref_read();
+            let main_count = csr::wrpll::frequency_counter_counter_sys_read();
+
+            (ref_count, main_count)
+        }
+    }
+
+    fn reset_plls(timer: &mut GlobalTimer) -> Result<(), &'static str> {
+        unsafe {
+            H_LAST_ADPLL = 0;
+            LAST_PERIOD_ERR = 0;
+            M_LAST_ADPLL = 0;
+            LAST_PHASE_ERR = 0;
+        }
+        set_adpll(i2c::DCXO::Main, 0)?;
+        set_adpll(i2c::DCXO::Helper, 0)?;
+        // wait for adpll to transfer and DCXO to settle
+        timer.delay_us(200);
+        Ok(())
+    }
+
+    fn clear_pending(interrupt: ISR) {
+        match interrupt {
+            ISR::RefTag => unsafe { csr::wrpll::ref_tag_ev_pending_write(1) },
+            ISR::MainTag => unsafe { csr::wrpll::main_tag_ev_pending_write(1) },
+        };
+    }
+
+    fn is_pending(interrupt: ISR) -> bool {
+        match interrupt {
+            ISR::RefTag => unsafe { csr::wrpll::ref_tag_ev_pending_read() == 1 },
+            ISR::MainTag => unsafe { csr::wrpll::main_tag_ev_pending_read() == 1 },
+        }
+    }
+
+    pub fn interrupt_handler() {
+        if is_pending(ISR::RefTag) {
+            tag_collector::collect_tags(ISR::RefTag);
+            clear_pending(ISR::RefTag);
+            helper_pll().expect("failed to run helper DCXO PLL");
+        }
+
+        if is_pending(ISR::MainTag) {
+            tag_collector::collect_tags(ISR::MainTag);
+            clear_pending(ISR::MainTag);
+        }
+
+        if tag_collector::phase_diff_ready() {
+            main_pll().expect("failed to run main DCXO PLL");
+            tag_collector::clear_phase_diff_ready();
+        }
+    }
+
+    fn helper_pll() -> Result<(), &'static str> {
+        let period_err = tag_collector::get_period_error();
+        unsafe {
+            // Based on https://hackmd.io/IACbwcOTSt6Adj3_F9bKuw?view#Integral-wind-up-and-output-limiting
+            let adpll = (H_LAST_ADPLL + (KP + KI) * period_err - KP * LAST_PERIOD_ERR).clamp(-ADPLL_LIM, ADPLL_LIM);
+            set_adpll(i2c::DCXO::Helper, BASE_ADPLL + adpll)?;
+            H_LAST_ADPLL = adpll;
+            LAST_PERIOD_ERR = period_err;
+        };
+        Ok(())
+    }
+
+    fn main_pll() -> Result<(), &'static str> {
+        let phase_err = tag_collector::get_phase_error();
+        unsafe {
+            // Based on https://hackmd.io/IACbwcOTSt6Adj3_F9bKuw?view#Integral-wind-up-and-output-limiting
+            let adpll = (M_LAST_ADPLL + (KP + KI) * phase_err - KP * LAST_PHASE_ERR).clamp(-ADPLL_LIM, ADPLL_LIM);
+            set_adpll(i2c::DCXO::Main, BASE_ADPLL + adpll)?;
+            M_LAST_ADPLL = adpll;
+            LAST_PHASE_ERR = phase_err;
+        };
+        Ok(())
+    }
+
+    pub fn select_recovered_clock(rc: bool, timer: &mut GlobalTimer) {
+        set_isr(false);
+
+        if rc {
+            tag_collector::reset();
+            reset_plls(timer).expect("failed to reset main and helper PLL");
+
+            // get within capture range
+            set_base_adpll().expect("failed to set base adpll");
+
+            // clear gateware pending flag
+            clear_pending(ISR::RefTag);
+            clear_pending(ISR::MainTag);
+
+            // use nFIQ to avoid IRQ being disabled by mutex lock and mess up PLL
+            set_isr(true);
+            info!("WRPLL interrupt enabled");
+        }
+    }
+}
