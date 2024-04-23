@@ -113,7 +113,7 @@
       "nist_clock_satellite" "nist_qc2_satellite" "acpki_nist_clock_satellite" "acpki_nist_qc2_satellite" 
       "nist_clock_satellite_100mhz" "nist_qc2_satellite_100mhz" "acpki_nist_clock_satellite_100mhz" "acpki_nist_qc2_satellite_100mhz"
     ];
-    build = { target, variant, json ? null }: let
+    board-package-set = { target, variant, json ? null }: let
       szl = zynqpkgs."${target}-szl";
       fsbl = zynqpkgs."${target}-fsbl";
       fwtype = if builtins.elem variant sat_variants then "satman" else "runtime";
@@ -273,7 +273,7 @@
     };
 
     # for hitl-tests
-    zc706-nist_qc2 = (build { target = "zc706"; variant = "nist_qc2"; });
+    zc706-nist_qc2 = (board-package-set { target = "zc706"; variant = "nist_qc2"; });
     zc706-hitl-tests = pkgs.stdenv.mkDerivation {
       name = "zc706-hitl-tests";
 
@@ -340,29 +340,29 @@
       {
         inherit fastnumbers artiq-netboot ramda migen-axi binutils-arm;
       } //
-      (build { target = "zc706"; variant = "nist_clock"; }) //
-      (build { target = "zc706"; variant = "nist_clock_master"; }) //
-      (build { target = "zc706"; variant = "nist_clock_master_100mhz"; }) //
-      (build { target = "zc706"; variant = "nist_clock_satellite"; }) //
-      (build { target = "zc706"; variant = "nist_clock_satellite_100mhz"; }) //
-      (build { target = "zc706"; variant = "nist_qc2"; }) //
-      (build { target = "zc706"; variant = "nist_qc2_master"; }) //
-      (build { target = "zc706"; variant = "nist_qc2_master_100mhz"; }) //
-      (build { target = "zc706"; variant = "nist_qc2_satellite"; }) //
-      (build { target = "zc706"; variant = "nist_qc2_satellite_100mhz"; }) //
-      (build { target = "zc706"; variant = "acpki_nist_clock"; }) //
-      (build { target = "zc706"; variant = "acpki_nist_clock_master"; }) //
-      (build { target = "zc706"; variant = "acpki_nist_clock_master_100mhz"; }) //
-      (build { target = "zc706"; variant = "acpki_nist_clock_satellite"; }) //
-      (build { target = "zc706"; variant = "acpki_nist_clock_satellite_100mhz"; }) //
-      (build { target = "zc706"; variant = "acpki_nist_qc2"; }) //
-      (build { target = "zc706"; variant = "acpki_nist_qc2_master"; }) //
-      (build { target = "zc706"; variant = "acpki_nist_qc2_master_100mhz"; }) //
-      (build { target = "zc706"; variant = "acpki_nist_qc2_satellite"; }) //
-      (build { target = "zc706"; variant = "acpki_nist_qc2_satellite_100mhz"; }) //
-      (build { target = "kasli_soc"; variant = "demo"; json = ./demo.json; }) //
-      (build { target = "kasli_soc"; variant = "master"; json = ./kasli-soc-master.json; }) //
-      (build { target = "kasli_soc"; variant = "satellite"; json = ./kasli-soc-satellite.json; });
+      (board-package-set { target = "zc706"; variant = "nist_clock"; }) //
+      (board-package-set { target = "zc706"; variant = "nist_clock_master"; }) //
+      (board-package-set { target = "zc706"; variant = "nist_clock_master_100mhz"; }) //
+      (board-package-set { target = "zc706"; variant = "nist_clock_satellite"; }) //
+      (board-package-set { target = "zc706"; variant = "nist_clock_satellite_100mhz"; }) //
+      (board-package-set { target = "zc706"; variant = "nist_qc2"; }) //
+      (board-package-set { target = "zc706"; variant = "nist_qc2_master"; }) //
+      (board-package-set { target = "zc706"; variant = "nist_qc2_master_100mhz"; }) //
+      (board-package-set { target = "zc706"; variant = "nist_qc2_satellite"; }) //
+      (board-package-set { target = "zc706"; variant = "nist_qc2_satellite_100mhz"; }) //
+      (board-package-set { target = "zc706"; variant = "acpki_nist_clock"; }) //
+      (board-package-set { target = "zc706"; variant = "acpki_nist_clock_master"; }) //
+      (board-package-set { target = "zc706"; variant = "acpki_nist_clock_master_100mhz"; }) //
+      (board-package-set { target = "zc706"; variant = "acpki_nist_clock_satellite"; }) //
+      (board-package-set { target = "zc706"; variant = "acpki_nist_clock_satellite_100mhz"; }) //
+      (board-package-set { target = "zc706"; variant = "acpki_nist_qc2"; }) //
+      (board-package-set { target = "zc706"; variant = "acpki_nist_qc2_master"; }) //
+      (board-package-set { target = "zc706"; variant = "acpki_nist_qc2_master_100mhz"; }) //
+      (board-package-set { target = "zc706"; variant = "acpki_nist_qc2_satellite"; }) //
+      (board-package-set { target = "zc706"; variant = "acpki_nist_qc2_satellite_100mhz"; }) //
+      (board-package-set { target = "kasli_soc"; variant = "demo"; json = ./demo.json; }) //
+      (board-package-set { target = "kasli_soc"; variant = "master"; json = ./kasli-soc-master.json; }) //
+      (board-package-set { target = "kasli_soc"; variant = "satellite"; json = ./kasli-soc-satellite.json; });
 
     hydraJobs = packages.x86_64-linux // { inherit zc706-hitl-tests; inherit gateware-sim; inherit fmt-check; };
 
@@ -390,7 +390,7 @@
       SZL = "${zynqpkgs.szl}";
     };
 
-    makeArtiqZynqPackage = build;
+    makeArtiqZynqPackage = board-package-set;
 
   };
 }
