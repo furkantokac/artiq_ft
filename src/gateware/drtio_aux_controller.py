@@ -1,12 +1,12 @@
 """Auxiliary controller, common to satellite and master"""
 
-from artiq.gateware.drtio.aux_controller import Transmitter, Receiver
+from artiq.gateware.drtio.aux_controller import (max_packet, aux_buffer_count,
+    Transmitter, Receiver)
 from migen.fhdl.simplify import FullMemoryWE
 from misoc.interconnect.csr import *
 from migen_axi.interconnect.sram import SRAM
 from migen_axi.interconnect import axi
 
-max_packet = 1024
 
 class _DRTIOAuxControllerBase(Module):
     def __init__(self, link_layer):
@@ -27,12 +27,12 @@ class DRTIOAuxControllerAxi(_DRTIOAuxControllerBase):
         tx_sdram_if = SRAM(self.transmitter.mem, read_only=False)
         rx_sdram_if = SRAM(self.receiver.mem, read_only=True)
         aw_decoder = axi.AddressDecoder(self.bus.aw,
-            [(lambda a: a[log2_int(max_packet)] == 0, tx_sdram_if.bus.aw),
-             (lambda a: a[log2_int(max_packet)] == 1, rx_sdram_if.bus.aw)],
+            [(lambda a: a[log2_int(max_packet*aux_buffer_count)] == 0, tx_sdram_if.bus.aw),
+             (lambda a: a[log2_int(max_packet*aux_buffer_count)] == 1, rx_sdram_if.bus.aw)],
             register=True)
         ar_decoder = axi.AddressDecoder(self.bus.ar,
-            [(lambda a: a[log2_int(max_packet)] == 0, tx_sdram_if.bus.ar),
-             (lambda a: a[log2_int(max_packet)] == 1, rx_sdram_if.bus.ar)],
+            [(lambda a: a[log2_int(max_packet*aux_buffer_count)] == 0, tx_sdram_if.bus.ar),
+             (lambda a: a[log2_int(max_packet*aux_buffer_count)] == 1, rx_sdram_if.bus.ar)],
             register=True)
         # unlike wb, axi address decoder only connects ar/aw lanes,
         # the rest must also be connected!
@@ -82,4 +82,4 @@ class DRTIOAuxControllerBare(_DRTIOAuxControllerBase):
         return self.receiver.mem.get_port(write_capable=False)
 
     def get_mem_size(self):
-        return max_packet
+        return max_packet*aux_buffer_count
