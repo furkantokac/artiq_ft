@@ -60,7 +60,7 @@ pub mod remote_analyzer {
         routing_table: &drtio_routing::RoutingTable,
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
         timer: GlobalTimer,
-    ) -> Result<RemoteBuffer, &'static str> {
+    ) -> Result<RemoteBuffer, drtio::Error> {
         // gets data from satellites and returns consolidated data
         let mut remote_data: Vec<u8> = Vec::new();
         let mut remote_error = false;

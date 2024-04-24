@@ -38,8 +38,8 @@ where F: FnOnce(&[u8]) -> Result<T, Error> {
     let linkidx = linkno as usize;
     unsafe {
         if (DRTIOAUX[linkidx].aux_rx_present_read)() == 1 {
-            let cpu_ptr = (DRTIOAUX[linkidx].aux_read_pointer_read)() as usize;
-            let ptr = (DRTIOAUX_MEM[linkidx].base + DRTIOAUX_MEM[linkidx].size / 2 + cpu_ptr * 0x400) as *mut u32;
+            let read_ptr = (DRTIOAUX[linkidx].aux_read_pointer_read)() as usize;
+            let ptr = (DRTIOAUX_MEM[linkidx].base + DRTIOAUX_MEM[linkidx].size / 2 + read_ptr * 0x400) as *mut u32;
             // work buffer to accomodate axi burst reads
             // buffer at maximum proto packet size, not maximum gateware supported size
             // to minimize required copying time
@@ -106,10 +106,9 @@ where F: FnOnce(&mut [u8]) -> Result<usize, Error> {
     unsafe {
         let _ = block_async!(tx_ready(linkno)).await;
         let ptr = DRTIOAUX_MEM[linkno].base as *mut u32;
-        let len = DRTIOAUX_MEM[linkno].size / 2;
         // work buffer, works with unaligned mem access
         let mut buf: [u8; 1024] = [0; 1024];
-        let len = f(&mut buf[0..len])?;
+        let len = f(&mut buf)?;
         copy_work_buffer(buf.as_mut_ptr() as *mut u32, ptr, len as isize);
         (DRTIOAUX[linkno].aux_tx_length_write)(len as u16);
         (DRTIOAUX[linkno].aux_tx_write)(1);

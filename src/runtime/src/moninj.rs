@@ -58,10 +58,11 @@ mod remote_moninj {
     use log::error;
 
     use super::*;
-    use crate::rtio_mgt::drtio;
+    use crate::rtio_mgt::{drtio, drtio::Error as DrtioError};
 
     pub async fn read_probe(
         aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &drtio_routing::RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -71,6 +72,7 @@ mod remote_moninj {
         let reply = drtio::aux_transact(
             aux_mutex,
             linkno,
+            routing_table,
             &drtioaux_async::Packet::MonitorRequest {
                 destination: destination,
                 channel: channel as _,
@@ -82,8 +84,8 @@ mod remote_moninj {
         match reply {
             Ok(drtioaux_async::Packet::MonitorReply { value }) => return value as i64,
             Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
-            Err("link went down") => {
-                debug!("link is down");
+            Err(DrtioError::LinkDown) => {
+                warn!("link is down");
             }
             Err(e) => error!("aux packet error ({})", e),
         }
@@ -92,6 +94,7 @@ mod remote_moninj {
 
     pub async fn inject(
         aux_mutex: &Rc<Mutex<bool>>,
+        _routing_table: &drtio_routing::RoutingTable,
         _timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -115,6 +118,7 @@ mod remote_moninj {
 
     pub async fn read_injection_status(
         aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &drtio_routing::RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -124,6 +128,7 @@ mod remote_moninj {
         let reply = drtio::aux_transact(
             aux_mutex,
             linkno,
+            routing_table,
             &drtioaux_async::Packet::InjectionStatusRequest {
                 destination: destination,
                 channel: channel as _,
@@ -135,8 +140,8 @@ mod remote_moninj {
         match reply {
             Ok(drtioaux_async::Packet::InjectionStatusReply { value }) => return value as i8,
             Ok(packet) => error!("received unexpected aux packet: {:?}", packet),
-            Err("link went down") => {
-                debug!("link is down");
+            Err(DrtioError::LinkDown) => {
+                warn!("link is down");
             }
             Err(e) => error!("aux packet error ({})", e),
         }
@@ -183,7 +188,7 @@ macro_rules! dispatch {
             local_moninj::$func(channel.into(), $($param, )*)
         } else {
             let linkno = hop - 1 as u8;
-            remote_moninj::$func($aux_mutex, $timer, linkno, destination, channel, $($param, )*).await
+            remote_moninj::$func($aux_mutex, $routing_table, $timer, linkno, destination, channel, $($param, )*).await
         }
     }}
 }

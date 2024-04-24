@@ -7,7 +7,7 @@ use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use libcortex_a9::mutex::Mutex;
 use log::{error, warn};
 
-use crate::rtio_mgt::drtio;
+use crate::rtio_mgt::{drtio, drtio::Error as DrtioError};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum FinishStatus {
@@ -31,11 +31,11 @@ pub enum Error {
     SubkernelNotFound,
     SubkernelException,
     CommLost,
-    DrtioError(&'static str),
+    DrtioError(DrtioError),
 }
 
-impl From<&'static str> for Error {
-    fn from(value: &'static str) -> Error {
+impl From<DrtioError> for Error {
+    fn from(value: DrtioError) -> Error {
         Error::DrtioError(value)
     }
 }
