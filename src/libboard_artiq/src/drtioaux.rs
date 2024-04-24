@@ -74,12 +74,15 @@ where F: FnOnce(&[u8]) -> Result<T, Error> {
     let linkidx = linkno as usize;
     unsafe {
         if (DRTIOAUX[linkidx].aux_rx_present_read)() == 1 {
-            let ptr = (DRTIOAUX_MEM[linkidx].base + DRTIOAUX_MEM[linkidx].size / 2) as *mut u32;
-            let len = (DRTIOAUX[linkidx].aux_rx_length_read)() as usize;
+            let cpu_ptr = (DRTIOAUX[linkidx].aux_read_pointer_read)() as usize;
+            let ptr = (DRTIOAUX_MEM[linkidx].base + DRTIOAUX_MEM[linkidx].size / 2 + cpu_ptr * 0x400) as *mut u32;
             // work buffer to accomodate axi burst reads
-            let mut buf: [u8; 1024] = [0; 1024];
-            copy_work_buffer(ptr, buf.as_mut_ptr() as *mut u32, len as isize);
-            let result = f(&buf[0..len]);
+            // buffer at maximum proto packet size, not maximum gateware supported size
+            // to minimize copying time
+            const LEN: usize = 512;
+            let mut buf: [u8; LEN] = [0; LEN];
+            copy_work_buffer(ptr, buf.as_mut_ptr() as *mut u32, LEN as isize);
+            let result = f(&buf);
             (DRTIOAUX[linkidx].aux_rx_present_write)(1);
             Ok(Some(result?))
         } else {
@@ -100,15 +103,15 @@ pub fn recv(linkno: u8) -> Result<Option<Packet>, Error> {
 
         let mut reader = Cursor::new(buffer);
 
-        let checksum_at = buffer.len() - 4;
+        let packet = Packet::read_from(&mut reader)?;
+        let padding = (12 - (reader.position() % 8)) % 8;
+        let checksum_at = reader.position() + padding;
         let checksum = crc::crc32::checksum_ieee(&reader.get_ref()[0..checksum_at]);
         reader.set_position(checksum_at);
         if reader.read_u32()? != checksum {
             return Err(Error::CorruptedPacket);
         }
-        reader.set_position(0);
-
-        Ok(Packet::read_from(&mut reader)?)
+        Ok(packet)
     })
 }
 
