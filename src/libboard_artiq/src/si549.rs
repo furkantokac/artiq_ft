@@ -356,7 +356,7 @@ pub mod wrpll {
         use super::*;
 
         #[cfg(wrpll_ref_clk = "GT_CDR")]
-        static mut TAG_OFFSET: u32 = 19050;
+        static mut TAG_OFFSET: u32 = 8382;
         #[cfg(wrpll_ref_clk = "SMA_CLKIN")]
         static mut TAG_OFFSET: u32 = 0;
         static mut REF_TAG: u32 = 0;
