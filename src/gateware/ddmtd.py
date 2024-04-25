@@ -10,18 +10,44 @@ class DDMTDSampler(Module):
 
         # # #
 
-        ref_beating_FF = Signal()
-        main_beating_FF = Signal()
-        self.specials += [
-            # Two back to back FFs are used to prevent metastability
-            Instance("FD", i_C=ClockSignal("helper"),
-                     i_D=cd_ref.clk, o_Q=ref_beating_FF),
-            Instance("FD", i_C=ClockSignal("helper"),
-                     i_D=ref_beating_FF, o_Q=self.ref_beating),
-            Instance("FD", i_C=ClockSignal("helper"),
-                     i_D=main_clk_se, o_Q=main_beating_FF),
-            Instance("FD", i_C=ClockSignal("helper"),
-                     i_D=main_beating_FF, o_Q=self.main_beating)
+        ref_clk = Signal()
+        self.specials +=[
+            # ISERDESE2 can only be driven from fabric via IDELAYE2 (see UG471)
+            Instance("IDELAYE2",
+                    p_DELAY_SRC="DATAIN",
+                    p_HIGH_PERFORMANCE_MODE="TRUE",
+                    p_REFCLK_FREQUENCY=208.3,   # REFCLK frequency from IDELAYCTRL
+                    p_IDELAY_VALUE=0,
+
+                    i_DATAIN=cd_ref.clk,
+
+                    o_DATAOUT=ref_clk
+            ),
+            Instance("ISERDESE2",
+                    p_IOBDELAY="IFD",   # use DDLY as input
+                    p_DATA_RATE="SDR",
+                    p_DATA_WIDTH=2,     # min is 2
+                    p_NUM_CE=1,
+
+                    i_DDLY=ref_clk,
+                    i_CE1=1,
+                    i_CLK=ClockSignal("helper"),
+                    i_CLKDIV=ClockSignal("helper"),
+
+                    o_Q1=self.ref_beating
+            ),
+            Instance("ISERDESE2",
+                    p_DATA_RATE="SDR",
+                    p_DATA_WIDTH=2,     # min is 2
+                    p_NUM_CE=1,
+
+                    i_D=main_clk_se,
+                    i_CE1=1,
+                    i_CLK=ClockSignal("helper"),
+                    i_CLKDIV=ClockSignal("helper"),
+
+                    o_Q1=self.main_beating,
+            ),
         ]
 
 
