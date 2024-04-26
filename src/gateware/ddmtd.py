@@ -51,26 +51,52 @@ class DDMTDSampler(Module):
         ]
 
 
-class DDMTDDeglitcherFirstEdge(Module):
-    def __init__(self, input_signal, blind_period=400):
+class DDMTDDeglitcherMedianEdge(Module):
+    def __init__(self, counter, input_signal, stable_0_period=100, stable_1_period=100):
+        self.tag = Signal(len(counter))
         self.detect = Signal()
-        rising = Signal()
-        input_signal_r = Signal()
+
+        stable_0_counter = Signal(reset=stable_0_period - 1, max=stable_0_period)
+        stable_1_counter = Signal(reset=stable_1_period - 1, max=stable_1_period)
 
         # # #
 
-        self.sync.helper += [
-            input_signal_r.eq(input_signal),
-            rising.eq(input_signal & ~input_signal_r)
-        ]
+        # Based on CERN's median edge deglitcher FSM
+        # https://white-rabbit.web.cern.ch/documents/Precise_time_and_frequency_transfer_in_a_White_Rabbit_network.pdf (p.72)
+        fsm = ClockDomainsRenamer("helper")(FSM(reset_state="WAIT_STABLE_0"))
+        self.submodules += fsm
 
-        blind_counter = Signal(max=blind_period)
-        self.sync.helper += [
-            If(blind_counter != 0, blind_counter.eq(blind_counter - 1)),
-            If(input_signal_r, blind_counter.eq(blind_period - 1)),
-            self.detect.eq(rising & (blind_counter == 0))
-        ]
-
+        fsm.act("WAIT_STABLE_0",
+            If(stable_0_counter != 0,
+                NextValue(stable_0_counter, stable_0_counter - 1)
+            ).Else(
+                NextValue(stable_0_counter, stable_0_period - 1),
+                NextState("WAIT_EDGE")
+            ),
+            If(input_signal,
+                NextValue(stable_0_counter, stable_0_period - 1)
+            ),
+        )
+        fsm.act("WAIT_EDGE",
+            If(input_signal,
+                NextValue(self.tag, counter),
+                NextState("GOT_EDGE")
+            )
+        )
+        fsm.act("GOT_EDGE",
+            If(stable_1_counter != 0,
+                NextValue(stable_1_counter, stable_1_counter - 1)
+            ).Else(
+                NextValue(stable_1_counter, stable_1_period - 1),
+                self.detect.eq(1),
+                NextState("WAIT_STABLE_0")
+            ),
+            If(~input_signal,
+                NextValue(self.tag, self.tag + 1),
+                NextValue(stable_1_counter, stable_1_period - 1)
+            ),
+        )
+        
 
 class DDMTD(Module):
     def __init__(self, counter, input_signal):
@@ -81,13 +107,13 @@ class DDMTD(Module):
 
         # # #
 
-        deglitcher = DDMTDDeglitcherFirstEdge(input_signal)
+        deglitcher = DDMTDDeglitcherMedianEdge(counter, input_signal)
         self.submodules += deglitcher
 
         self.sync.helper += [
             self.h_tag_update.eq(0),
             If(deglitcher.detect,
                 self.h_tag_update.eq(1),
-                self.h_tag.eq(counter)
+                self.h_tag.eq(deglitcher.tag)
                )
         ]
