@@ -203,7 +203,7 @@ class SMAFrequencyMultiplier(Module, AutoCSR):
             # MMCME2 is capable to accept 10MHz input while PLLE2 only support down to 19MHz input (DS191)
             # The MMCME2 can be reconfiged during runtime using the Dynamic Reconfiguration Ports
             Instance("MMCME2_ADV",
-                p_BANDWIDTH="LOW",  # lower jitter
+                p_BANDWIDTH="HIGH",  # lower output jitter (see https://support.xilinx.com/s/question/0D52E00006iHqRqSAK)
                 o_LOCKED=self.mmcm_locked.status,
                 i_RST=self.mmcm_reset.storage,
                 
