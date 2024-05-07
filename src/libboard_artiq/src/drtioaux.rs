@@ -1,9 +1,10 @@
+use core::slice;
+
 use core_io::{Error as IoError, ErrorKind as IoErrorKind};
 use crc;
 use io::{proto::{ProtoRead, ProtoWrite},
          Cursor};
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
-use libcortex_a9::asm::dmb;
 
 pub use crate::drtioaux_proto::Packet;
 use crate::{drtioaux_proto::Error as ProtocolError, mem::mem::DRTIOAUX_MEM, pl::csr::DRTIOAUX};
@@ -56,19 +57,6 @@ pub fn has_rx_error(linkno: u8) -> bool {
     }
 }
 
-pub fn copy_work_buffer(src: *mut u32, dst: *mut u32, len: isize) {
-    // AXI writes must be 4-byte aligned (drtio proto doesn't care for that),
-    // and AXI burst reads/writes are not implemented yet in gateware
-    // thus the need for a work buffer for transmitting and copying it over
-    unsafe {
-        for i in 0..(len / 4) {
-            *dst.offset(i) = *src.offset(i);
-            //data memory barrier to prevent bursts
-            dmb();
-        }
-    }
-}
-
 fn receive<F, T>(linkno: u8, f: F) -> Result<Option<T>, Error>
 where F: FnOnce(&[u8]) -> Result<T, Error> {
     let linkidx = linkno as usize;
@@ -76,13 +64,7 @@ where F: FnOnce(&[u8]) -> Result<T, Error> {
         if (DRTIOAUX[linkidx].aux_rx_present_read)() == 1 {
             let read_ptr = (DRTIOAUX[linkidx].aux_read_pointer_read)() as usize;
             let ptr = (DRTIOAUX_MEM[linkidx].base + DRTIOAUX_MEM[linkidx].size / 2 + read_ptr * 0x400) as *mut u32;
-            // work buffer to accomodate axi burst reads
-            // buffer at maximum proto packet size, not maximum gateware supported size
-            // to minimize copying time
-            const LEN: usize = 512;
-            let mut buf: [u8; LEN] = [0; LEN];
-            copy_work_buffer(ptr, buf.as_mut_ptr() as *mut u32, LEN as isize);
-            let result = f(&buf);
+            let result = f(slice::from_raw_parts(ptr as *mut u8, 0x400 as usize));
             (DRTIOAUX[linkidx].aux_rx_present_write)(1);
             Ok(Some(result?))
         } else {
@@ -133,10 +115,7 @@ where F: FnOnce(&mut [u8]) -> Result<usize, Error> {
     unsafe {
         while (DRTIOAUX[linkno].aux_tx_read)() != 0 {}
         let ptr = DRTIOAUX_MEM[linkno].base as *mut u32;
-        // work buffer, works with unaligned mem access
-        let mut buf: [u8; 1024] = [0; 1024];
-        let len = f(&mut buf)?;
-        copy_work_buffer(buf.as_mut_ptr() as *mut u32, ptr, len as isize);
+        let len = f(slice::from_raw_parts_mut(ptr as *mut u8, 0x400 as usize))?;
         (DRTIOAUX[linkno].aux_tx_length_write)(len as u16);
         (DRTIOAUX[linkno].aux_tx_write)(1);
         Ok(())

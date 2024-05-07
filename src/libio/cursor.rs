@@ -45,7 +45,10 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
         let data = &self.inner.as_ref()[self.pos..];
         let len = buf.len().min(data.len());
-        buf[..len].copy_from_slice(&data[..len]);
+        // ``copy_from_slice`` generates AXI bursts, use a regular loop instead
+        for i in 0..len {
+            buf[i] = data[i];
+        }
         self.pos += len;
         Ok(len)
     }
@@ -55,7 +58,9 @@ impl Write for Cursor<&mut [u8]> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         let data = &mut self.inner[self.pos..];
         let len = buf.len().min(data.len());
-        data[..len].copy_from_slice(&buf[..len]);
+        for i in 0..len {
+            data[i] = buf[i];
+        }
         self.pos += len;
         Ok(len)
     }
@@ -68,7 +73,6 @@ impl Write for Cursor<&mut [u8]> {
 
 #[cfg(feature = "alloc")]
 impl Write for Cursor<Vec<u8>> {
-    #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         self.inner.extend_from_slice(buf);
         Ok(buf.len())

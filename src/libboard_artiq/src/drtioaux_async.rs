@@ -1,3 +1,5 @@
+use core::slice;
+
 use core_io::{Error as IoError, ErrorKind as IoErrorKind};
 use crc;
 use io::{proto::{ProtoRead, ProtoWrite},
@@ -8,7 +10,7 @@ use nb;
 use void::Void;
 
 pub use crate::drtioaux_proto::Packet;
-use crate::{drtioaux::{copy_work_buffer, has_rx_error, Error},
+use crate::{drtioaux::{has_rx_error, Error},
             mem::mem::DRTIOAUX_MEM,
             pl::csr::DRTIOAUX};
 
@@ -40,13 +42,7 @@ where F: FnOnce(&[u8]) -> Result<T, Error> {
         if (DRTIOAUX[linkidx].aux_rx_present_read)() == 1 {
             let read_ptr = (DRTIOAUX[linkidx].aux_read_pointer_read)() as usize;
             let ptr = (DRTIOAUX_MEM[linkidx].base + DRTIOAUX_MEM[linkidx].size / 2 + read_ptr * 0x400) as *mut u32;
-            // work buffer to accomodate axi burst reads
-            // buffer at maximum proto packet size, not maximum gateware supported size
-            // to minimize required copying time
-            const LEN: usize = 512;
-            let mut buf: [u8; LEN] = [0; LEN];
-            copy_work_buffer(ptr, buf.as_mut_ptr() as *mut u32, LEN as isize);
-            let result = f(&buf);
+            let result = f(slice::from_raw_parts(ptr as *mut u8, 0x400 as usize));
             (DRTIOAUX[linkidx].aux_rx_present_write)(1);
             Ok(Some(result?))
         } else {
@@ -106,10 +102,7 @@ where F: FnOnce(&mut [u8]) -> Result<usize, Error> {
     unsafe {
         let _ = block_async!(tx_ready(linkno)).await;
         let ptr = DRTIOAUX_MEM[linkno].base as *mut u32;
-        // work buffer, works with unaligned mem access
-        let mut buf: [u8; 1024] = [0; 1024];
-        let len = f(&mut buf)?;
-        copy_work_buffer(buf.as_mut_ptr() as *mut u32, ptr, len as isize);
+        let len = f(slice::from_raw_parts_mut(ptr as *mut u8, 0x400 as usize))?;
         (DRTIOAUX[linkno].aux_tx_length_write)(len as u16);
         (DRTIOAUX[linkno].aux_tx_write)(1);
         Ok(())
