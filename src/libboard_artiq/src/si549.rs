@@ -337,8 +337,6 @@ pub mod wrpll {
 
     const KP: i32 = 6;
     const KI: i32 = 2;
-    // 4 ppm capture range
-    const ADPLL_LIM: i32 = (4.0 / 0.0001164) as i32;
 
     static mut BASE_ADPLL: i32 = 0;
     static mut H_LAST_ADPLL: i32 = 0;
@@ -520,7 +518,7 @@ pub mod wrpll {
         let period_err = tag_collector::get_period_error();
         unsafe {
             // Based on https://hackmd.io/IACbwcOTSt6Adj3_F9bKuw?view#Integral-wind-up-and-output-limiting
-            let adpll = (H_LAST_ADPLL + (KP + KI) * period_err - KP * LAST_PERIOD_ERR).clamp(-ADPLL_LIM, ADPLL_LIM);
+            let adpll = H_LAST_ADPLL + (KP + KI) * period_err - KP * LAST_PERIOD_ERR;
             set_adpll(i2c::DCXO::Helper, BASE_ADPLL + adpll)?;
             H_LAST_ADPLL = adpll;
             LAST_PERIOD_ERR = period_err;
@@ -532,7 +530,7 @@ pub mod wrpll {
         let phase_err = tag_collector::get_phase_error();
         unsafe {
             // Based on https://hackmd.io/IACbwcOTSt6Adj3_F9bKuw?view#Integral-wind-up-and-output-limiting
-            let adpll = (M_LAST_ADPLL + (KP + KI) * phase_err - KP * LAST_PHASE_ERR).clamp(-ADPLL_LIM, ADPLL_LIM);
+            let adpll = M_LAST_ADPLL + (KP + KI) * phase_err - KP * LAST_PHASE_ERR;
             set_adpll(i2c::DCXO::Main, BASE_ADPLL + adpll)?;
             M_LAST_ADPLL = adpll;
             LAST_PHASE_ERR = phase_err;
