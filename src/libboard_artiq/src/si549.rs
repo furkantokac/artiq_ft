@@ -344,6 +344,16 @@ pub mod wrpll {
         pub a2: f64,
     }
 
+    #[cfg(rtio_frequency = "100.0")]
+    const LPF: FilterParameters = FilterParameters {
+        b0: 0.03967479060647884,
+        b1: 0.07934958121295768,
+        b2: 0.03967479060647884,
+        a1: -1.3865593741228928,
+        a2: 0.5452585365488082,
+    };
+
+    #[cfg(rtio_frequency = "125.0")]
     const LPF: FilterParameters = FilterParameters {
         b0: 0.07209205036273991,
         b1: 0.14418410072547982,
