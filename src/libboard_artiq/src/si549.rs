@@ -335,14 +335,34 @@ pub mod wrpll {
     const COUNTER_WIDTH: u32 = 24;
     const DIV_WIDTH: u32 = 2;
 
-    const KP: i32 = 6;
-    const KI: i32 = 2;
+    // y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
+    struct FilterParameters {
+        pub b0: f64,
+        pub b1: f64,
+        pub b2: f64,
+        pub a1: f64,
+        pub a2: f64,
+    }
+
+    const LPF: FilterParameters = FilterParameters {
+        b0: 0.07209205036273991,
+        b1: 0.14418410072547982,
+        b2: 0.07209205036273991,
+        a1: -0.6114078511562919,
+        a2: -0.10022394739274834,
+    };
+
+    static mut H_ADPLL1: i32 = 0;
+    static mut H_ADPLL2: i32 = 0;
+    static mut PERIOD_ERR1: i32 = 0;
+    static mut PERIOD_ERR2: i32 = 0;
+
+    static mut M_ADPLL1: i32 = 0;
+    static mut M_ADPLL2: i32 = 0;
+    static mut PHASE_ERR1: i32 = 0;
+    static mut PHASE_ERR2: i32 = 0;
 
     static mut BASE_ADPLL: i32 = 0;
-    static mut H_LAST_ADPLL: i32 = 0;
-    static mut LAST_PERIOD_ERR: i32 = 0;
-    static mut M_LAST_ADPLL: i32 = 0;
-    static mut LAST_PHASE_ERR: i32 = 0;
 
     #[derive(Clone, Copy)]
     pub enum ISR {
@@ -470,10 +490,14 @@ pub mod wrpll {
 
     fn reset_plls(timer: &mut GlobalTimer) -> Result<(), &'static str> {
         unsafe {
-            H_LAST_ADPLL = 0;
-            LAST_PERIOD_ERR = 0;
-            M_LAST_ADPLL = 0;
-            LAST_PHASE_ERR = 0;
+            H_ADPLL1 = 0;
+            H_ADPLL2 = 0;
+            PERIOD_ERR1 = 0;
+            PERIOD_ERR2 = 0;
+            M_ADPLL1 = 0;
+            M_ADPLL2 = 0;
+            PHASE_ERR1 = 0;
+            PHASE_ERR2 = 0;
         }
         set_adpll(i2c::DCXO::Main, 0)?;
         set_adpll(i2c::DCXO::Helper, 0)?;
@@ -517,11 +541,14 @@ pub mod wrpll {
     fn helper_pll() -> Result<(), &'static str> {
         let period_err = tag_collector::get_period_error();
         unsafe {
-            // Based on https://hackmd.io/IACbwcOTSt6Adj3_F9bKuw?view#Integral-wind-up-and-output-limiting
-            let adpll = H_LAST_ADPLL + (KP + KI) * period_err - KP * LAST_PERIOD_ERR;
+            let adpll = ((LPF.b0 * period_err as f64) + (LPF.b1 * PERIOD_ERR1 as f64) + (LPF.b2 * PERIOD_ERR2 as f64)
+                - (LPF.a1 * H_ADPLL1 as f64)
+                - (LPF.a2 * H_ADPLL2 as f64)) as i32;
             set_adpll(i2c::DCXO::Helper, BASE_ADPLL + adpll)?;
-            H_LAST_ADPLL = adpll;
-            LAST_PERIOD_ERR = period_err;
+            H_ADPLL2 = H_ADPLL1;
+            PERIOD_ERR2 = PERIOD_ERR1;
+            H_ADPLL1 = adpll;
+            PERIOD_ERR1 = period_err;
         };
         Ok(())
     }
@@ -529,11 +556,14 @@ pub mod wrpll {
     fn main_pll() -> Result<(), &'static str> {
         let phase_err = tag_collector::get_phase_error();
         unsafe {
-            // Based on https://hackmd.io/IACbwcOTSt6Adj3_F9bKuw?view#Integral-wind-up-and-output-limiting
-            let adpll = M_LAST_ADPLL + (KP + KI) * phase_err - KP * LAST_PHASE_ERR;
+            let adpll = ((LPF.b0 * phase_err as f64) + (LPF.b1 * PHASE_ERR1 as f64) + (LPF.b2 * PHASE_ERR2 as f64)
+                - (LPF.a1 * M_ADPLL1 as f64)
+                - (LPF.a2 * M_ADPLL2 as f64)) as i32;
             set_adpll(i2c::DCXO::Main, BASE_ADPLL + adpll)?;
-            M_LAST_ADPLL = adpll;
-            LAST_PHASE_ERR = phase_err;
+            M_ADPLL2 = M_ADPLL1;
+            PHASE_ERR2 = PHASE_ERR1;
+            M_ADPLL1 = adpll;
+            PHASE_ERR1 = phase_err;
         };
         Ok(())
     }
