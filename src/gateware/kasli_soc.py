@@ -135,6 +135,7 @@ class GenericStandalone(SoCCore):
         ]
         fix_serdes_timing_path(platform)
         self.submodules.bootstrap = GTPBootstrapClock(self.platform, clk_freq)
+        self.config["RTIO_FREQUENCY"] = str(clk_freq/1e6)
         self.config["CLOCK_FREQUENCY"] = int(clk_freq)
 
         self.submodules.sys_crg = zynq_clocking.SYSCRG(self.platform, self.ps7, clk_synth_se_buf)
@@ -242,6 +243,7 @@ class GenericMaster(SoCCore):
             pads=data_pads,
             clk_freq=clk_freq)
         self.csr_devices.append("gt_drtio")
+        self.config["RTIO_FREQUENCY"] = str(clk_freq/1e6)
         self.config["CLOCK_FREQUENCY"] = int(clk_freq)
 
         txout_buf = Signal()
