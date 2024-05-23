@@ -11,6 +11,7 @@
     pkgs = import artiq.inputs.nixpkgs { system = "x86_64-linux"; overlays = [ (import mozilla-overlay) ]; };
     zynqpkgs = zynq-rs.packages.x86_64-linux;
     artiqpkgs = artiq.packages.x86_64-linux;
+    llvmPackages_11 = zynq-rs.llvmPackages_11;
 
     rust = zynq-rs.rust;
     rustPlatform = zynq-rs.rustPlatform;
@@ -132,12 +133,12 @@
           pkgs.gnumake
           (pkgs.python3.withPackages(ps: [ ps.jsonschema artiqpkgs.migen migen-axi artiqpkgs.misoc artiqpkgs.artiq ]))
           zynqpkgs.cargo-xbuild
-          pkgs.llvmPackages_14.llvm
-          pkgs.llvmPackages_14.clang-unwrapped
+          llvmPackages_11.llvm
+          llvmPackages_11.clang-unwrapped
         ];
         buildPhase = ''
           export XARGO_RUST_SRC="${rust}/lib/rustlib/src/rust/library"
-          export CLANG_EXTRA_INCLUDE_DIR="${pkgs.llvmPackages_14.clang-unwrapped.lib}/lib/clang/14.0.6/include"
+          export CLANG_EXTRA_INCLUDE_DIR="${llvmPackages_11.clang-unwrapped.lib}/lib/clang/11.1.0/include"
           export CARGO_HOME=$(mktemp -d cargo-home.XXX)
           export ZYNQ_RS=${zynq-rs}
           make TARGET=${target} GWARGS="${if json == null then "-V ${variant}" else json}" ${fwtype}
@@ -370,8 +371,8 @@
       name = "artiq-zynq-dev-shell";
       buildInputs = with pkgs; [
         rust
-        llvmPackages_14.llvm
-        llvmPackages_14.clang-unwrapped
+        llvmPackages_11.llvm
+        llvmPackages_11.clang-unwrapped
         gnumake
         cacert
         zynqpkgs.cargo-xbuild
@@ -384,7 +385,7 @@
         binutils-arm
       ];
       XARGO_RUST_SRC = "${rust}/lib/rustlib/src/rust/library";
-      CLANG_EXTRA_INCLUDE_DIR = "${pkgs.llvmPackages_14.clang-unwrapped.lib}/lib/clang/14.0.6/include";
+      CLANG_EXTRA_INCLUDE_DIR = "${llvmPackages_11.clang-unwrapped.lib}/lib/clang/11.1.0/include";
       ZYNQ_RS = "${zynq-rs}";
       OPENOCD_ZYNQ = "${zynq-rs}/openocd";
       SZL = "${zynqpkgs.szl}";
