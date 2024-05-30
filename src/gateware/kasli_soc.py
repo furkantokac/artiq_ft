@@ -20,13 +20,13 @@ from artiq.gateware.drtio.transceiver import gtx_7series, eem_serdes
 from artiq.gateware.drtio.siphaser import SiPhaser7Series
 from artiq.gateware.drtio.rx_synchronizer import XilinxRXSynchronizer
 from artiq.gateware.drtio import *
+from artiq.gateware.wrpll import wrpll
 
 import dma
 import analyzer
 import acpki
 import drtio_aux_controller
 import zynq_clocking
-import wrpll
 from config import write_csr_file, write_mem_file, write_rustc_cfg_file
 
 eem_iostandard_dict = {
@@ -146,7 +146,7 @@ class GenericStandalone(SoCCore):
         self.crg.cd_sys = self.sys_crg.cd_sys
 
         if with_wrpll:
-            self.submodules.wrpll_refclk = wrpll.SMAFrequencyMultiplier(platform.request("sma_clkin"))
+            self.submodules.wrpll_refclk = wrpll.FrequencyMultiplier(platform.request("sma_clkin"))
             self.submodules.wrpll = wrpll.WRPLL(
                 platform=self.platform,
                 cd_ref=self.wrpll_refclk.cd_ref,
@@ -275,7 +275,7 @@ class GenericMaster(SoCCore):
             clk_synth_se = Signal()
             platform.add_period_constraint(clk_synth.p, 8.0)
             self.specials += Instance("IBUFGDS", p_DIFF_TERM="TRUE", p_IBUF_LOW_PWR="FALSE", i_I=clk_synth.p, i_IB=clk_synth.n, o_O=clk_synth_se)
-            self.submodules.wrpll_refclk = wrpll.SMAFrequencyMultiplier(platform.request("sma_clkin"))
+            self.submodules.wrpll_refclk = wrpll.FrequencyMultiplier(platform.request("sma_clkin"))
             self.submodules.wrpll = wrpll.WRPLL(
                 platform=self.platform,
                 cd_ref=self.wrpll_refclk.cd_ref,
