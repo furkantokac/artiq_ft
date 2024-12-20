@@ -11,11 +11,11 @@
         "src-pythonparser": "src-pythonparser"
       },
       "locked": {
-        "lastModified": 1732066765,
-        "narHash": "sha256-N5lcIzDpwMSJgCb6+2eM5mfPwhYeIGbZPHYZs3aV9Cg=",
+        "lastModified": 1734418881,
+        "narHash": "sha256-h5OCxE0mPHa0GzipT3Q9YRk6pPtUkCLKvNoUZgNGx0k=",
         "ref": "release-8",
-        "rev": "8ca2adcadac72f1f70d9fab269eaf9a7cc698a73",
-        "revCount": 8977,
+        "rev": "4a2bc0c005ba23ec78b82e08b900c1e126fa3b2e",
+        "revCount": 8991,
         "type": "git",
         "url": "https://github.com/m-labs/artiq.git"
       },
@@ -72,43 +72,11 @@
     "mozilla-overlay": {
       "flake": false,
       "locked": {
-        "lastModified": 1704373101,
-        "narHash": "sha256-+gi59LRWRQmwROrmE1E2b3mtocwueCQqZ60CwLG+gbg=",
+        "lastModified": 1733136220,
+        "narHash": "sha256-Ga8AP/YPsKDVF5LcNN8v3RiLgnEeW7zBk9GyX7wa9Ug=",
         "owner": "mozilla",
         "repo": "nixpkgs-mozilla",
-        "rev": "9b11a87c0cc54e308fa83aac5b4ee1816d5418a2",
-        "type": "github"
-      },
-      "original": {
-        "owner": "mozilla",
-        "repo": "nixpkgs-mozilla",
-        "type": "github"
-      }
-    },
-    "mozilla-overlay_2": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1704373101,
-        "narHash": "sha256-+gi59LRWRQmwROrmE1E2b3mtocwueCQqZ60CwLG+gbg=",
-        "owner": "mozilla",
-        "repo": "nixpkgs-mozilla",
-        "rev": "9b11a87c0cc54e308fa83aac5b4ee1816d5418a2",
-        "type": "github"
-      },
-      "original": {
-        "owner": "mozilla",
-        "repo": "nixpkgs-mozilla",
-        "type": "github"
-      }
-    },
-    "mozilla-overlay_3": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1704373101,
-        "narHash": "sha256-+gi59LRWRQmwROrmE1E2b3mtocwueCQqZ60CwLG+gbg=",
-        "owner": "mozilla",
-        "repo": "nixpkgs-mozilla",
-        "rev": "9b11a87c0cc54e308fa83aac5b4ee1816d5418a2",
+        "rev": "ad7af231a95acf65ccc4afa0c766f5c0674ad3f1",
         "type": "github"
       },
       "original": {
@@ -119,16 +87,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1730137625,
-        "narHash": "sha256-9z8oOgFZiaguj+bbi3k4QhAD6JabWrnv7fscC/mt0KE=",
+        "lastModified": 1733550349,
+        "narHash": "sha256-NcGumB4Lr6KSDq+nIqXtNA8QwAQKDSZT7N9OTGWbTrs=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "64b80bfb316b57cdb8919a9110ef63393d74382a",
+        "rev": "e2605d0744c2417b09f8bf850dfca42fcf537d34",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "nixos-24.05",
+        "ref": "nixos-24.11",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -136,8 +104,29 @@
     "root": {
       "inputs": {
         "artiq": "artiq",
-        "mozilla-overlay": "mozilla-overlay_2",
         "zynq-rs": "zynq-rs"
+      }
+    },
+    "rust-overlay": {
+      "inputs": {
+        "nixpkgs": [
+          "zynq-rs",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1719454714,
+        "narHash": "sha256-MojqG0lyUINkEk0b3kM2drsU5vyaF8DFZe/FAlZVOGs=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "d1c527659cf076ecc4b96a91c702d080b213801e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "ref": "snapshot/2024-08-01",
+        "repo": "rust-overlay",
+        "type": "github"
       }
     },
     "sipyco": {
@@ -148,11 +137,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1728371104,
-        "narHash": "sha256-PPnAyDedUQ7Og/Cby9x5OT9wMkNGTP8GS53V6N/dk4w=",
+        "lastModified": 1733319649,
+        "narHash": "sha256-ATJV2UV9FXEiTF6/1BvZ2HmB0goF5TZ2ytgRBwD/BGg=",
         "owner": "m-labs",
         "repo": "sipyco",
-        "rev": "094a6cd63ffa980ef63698920170e50dc9ba77fd",
+        "rev": "27312727bdb8a182bd6e222e4cbdd3f39ae41d4e",
         "type": "github"
       },
       "original": {
@@ -228,22 +217,23 @@
     },
     "zynq-rs": {
       "inputs": {
-        "mozilla-overlay": "mozilla-overlay_3",
         "nixpkgs": [
           "artiq",
           "nixpkgs"
-        ]
+        ],
+        "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1720537402,
-        "narHash": "sha256-ybvaQ48SVBqYVqgYmGUdefGZkni7PJ90qYQPHnFOwDs=",
-        "ref": "refs/heads/master",
-        "rev": "b2b3e5c933cbc4b7cb14adde480d7561a3ae71ee",
-        "revCount": 648,
+        "lastModified": 1731749494,
+        "narHash": "sha256-WGigAhvVCGN5YZ1dHPyvoqAh47W1Gtph036O1aKFlLE=",
+        "ref": "release-8",
+        "rev": "12975de2e110d7948bf47b768559f727d0abc8fc",
+        "revCount": 655,
         "type": "git",
         "url": "https://git.m-labs.hk/m-labs/zynq-rs"
       },
       "original": {
+        "ref": "release-8",
         "type": "git",
         "url": "https://git.m-labs.hk/m-labs/zynq-rs"
       }

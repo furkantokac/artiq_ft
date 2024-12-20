@@ -2,13 +2,12 @@
   description = "ARTIQ port to the Zynq-7000 platform";
 
   inputs.artiq.url = git+https://github.com/m-labs/artiq.git?ref=release-8;
-  inputs.mozilla-overlay = { url = github:mozilla/nixpkgs-mozilla; flake = false; };
-  inputs.zynq-rs.url = git+https://git.m-labs.hk/m-labs/zynq-rs;
+  inputs.zynq-rs.url = git+https://git.m-labs.hk/m-labs/zynq-rs?ref=release-8;
   inputs.zynq-rs.inputs.nixpkgs.follows = "artiq/nixpkgs";
 
-  outputs = { self, mozilla-overlay, zynq-rs, artiq }:
+  outputs = { self, zynq-rs, artiq }:
   let
-    pkgs = import artiq.inputs.nixpkgs { system = "x86_64-linux"; overlays = [ (import mozilla-overlay) ]; };
+    pkgs = import artiq.inputs.nixpkgs { system = "x86_64-linux"; overlays = [ (import zynq-rs.inputs.rust-overlay) ]; };
     zynqpkgs = zynq-rs.packages.x86_64-linux;
     artiqpkgs = artiq.packages.x86_64-linux;
     llvmPackages_11 = zynq-rs.llvmPackages_11;
