@@ -1,6 +1,6 @@
 use embedded_hal::blocking::delay::DelayMs;
 #[cfg(has_si5324)]
-use ksupport::i2c;
+use ksupport::kernel::i2c;
 use libboard_artiq::pl;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;

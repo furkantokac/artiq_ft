@@ -100,10 +100,10 @@ pub fn main_core0() {
 
     info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
-    ksupport::i2c::init();
+    ksupport::kernel::i2c::init();
     #[cfg(feature = "target_kasli_soc")]
     {
-        let i2c_bus = unsafe { (ksupport::i2c::I2C_BUS).as_mut().unwrap() };
+        let i2c_bus = unsafe { (ksupport::kernel::i2c::I2C_BUS).as_mut().unwrap() };
         let mut io_expander0 = io_expander::IoExpander::new(i2c_bus, 0).unwrap();
         let mut io_expander1 = io_expander::IoExpander::new(i2c_bus, 1).unwrap();
         io_expander0
