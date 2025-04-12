@@ -12,6 +12,7 @@ use super::{cache,
             dma, i2c,
             rpc::{rpc_recv, rpc_send, rpc_send_async},
             rtio};
+use crate::eh_artiq;
 
 extern "C" {
     fn vsnprintf_(buffer: *mut c_char, count: size_t, format: *const c_char, va: VaList) -> c_int;
