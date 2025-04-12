@@ -525,7 +525,7 @@ pub mod drtio {
 
         for linkno in 0..csr::DRTIO.len() {
             let linkno = linkno as u8;
-            if link_rx_up(linkno, &mut timer).await {
+            if link_rx_up(linkno).await {
                 let reply = aux_transact(&aux_mutex, linkno, routing_table, &Packet::ResetRequest, timer).await;
                 match reply {
                     Ok(Packet::ResetAck) => (),
