@@ -847,7 +847,9 @@ impl<'a> Manager<'_> {
                 ));
             }
             /* core.reset() on satellites only affects the satellite, ignore the request */
-            kernel::Message::RtioInitRequest => {}
+            kernel::Message::RtioInitRequest => {
+                self.control.tx.send(kernel::Message::RtioInitReply);
+            }
             _ => {
                 unexpected!("unexpected message from core1 while kernel was running: {:?}", reply);
             }

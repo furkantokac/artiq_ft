@@ -560,6 +560,7 @@ async fn handle_run_kernel(
             #[cfg(has_drtio)]
             kernel::Message::RtioInitRequest => {
                 rtio_mgt::drtio::reset(aux_mutex, routing_table, timer).await;
+                control.borrow_mut().tx.async_send(kernel::Message::RtioInitReply).await;
             }
             _ => {
                 panic!("unexpected message from core1 while kernel was running: {:?}", reply);
