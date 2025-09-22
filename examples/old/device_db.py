@@ -6,7 +6,7 @@ device_db = {
         "module": "artiq.coredevice.core",
         "class": "Core",
         "arguments": {
-            "host": "192.168.1.52",
+            "host": "192.168.107.67",
             "ref_period": 1e-9,
             "ref_multiplier": 8,
             "target": "cortexa9"
