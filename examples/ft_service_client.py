@@ -13,7 +13,6 @@ class DDSControlGUI(QMainWindow):
         self.init_ui()
 
     def connect_to_server(self):
-        """Connect to RPC server"""
         try:
             self.client = Client("localhost", 3250, "urukul", timeout=5)
             print("Connected to server successfully")
@@ -22,7 +21,6 @@ class DDSControlGUI(QMainWindow):
             self.client = None
 
     def init_ui(self):
-        """Initialize UI with tabs for Urukul and Mirny"""
         self.setWindowTitle('DDS Control - Urukul & Mirny')
 
         # Main widget with tabs
@@ -68,7 +66,6 @@ class DDSControlGUI(QMainWindow):
             self.refresh_mirny_state()
 
     def setup_urukul_tab(self, layout):
-        """Setup Urukul controls"""
         # All channels control buttons
         all_controls = QHBoxLayout(self)
 
@@ -86,8 +83,8 @@ class DDSControlGUI(QMainWindow):
 
         layout.addLayout(all_controls)
 
-        # Create 4 channel controls
-        self.urukul_channels = []
+        # Create 4 ch controls
+        self.urukul_chs = []
         for ch in range(4):
             group = QGroupBox(f"Urukul Channel {ch}")
             ch_layout = QGridLayout()
@@ -104,15 +101,12 @@ class DDSControlGUI(QMainWindow):
             freq_label = QLabel("100 MHz")
             freq_label.setMinimumWidth(80)
 
-            #freq_slider.valueChanged.connect(
-            #    lambda v, l=freq_label: l.setText(f"{v} MHz")
-            #)
             freq_slider.valueChanged.connect(
-                lambda c=ch, s=freq_slider: self.urukul_changed(c, s.value())
+                lambda s, c=ch: self.urukul_freq_changed(c, s)
             )
-            freq_slider.sliderReleased.connect(
-                lambda c=ch, s=freq_slider: self.urukul_freq_released(c, s.value())
-            )
+            #freq_slider.sliderReleased.connect(
+            #    lambda s=freq_slider, c=ch: self.urukul_freq_changed(c, s)
+            #)
 
             ch_layout.addWidget(freq_slider, 0, 1)
             ch_layout.addWidget(freq_label, 0, 2)
@@ -120,24 +114,24 @@ class DDSControlGUI(QMainWindow):
             # Amplitude slider (0-100%)
             ch_layout.addWidget(QLabel("Amplitude:"), 1, 0)
 
-            amp_slider = QSlider(Qt.Horizontal)
-            amp_slider.setRange(0, 100)
-            amp_slider.setValue(100)
-            amp_slider.setTickPosition(QSlider.TicksBelow)
-            amp_slider.setTickInterval(25)
+            ampl_slider = QSlider(Qt.Horizontal)
+            ampl_slider.setRange(0, 100)
+            ampl_slider.setValue(100)
+            ampl_slider.setTickPosition(QSlider.TicksBelow)
+            ampl_slider.setTickInterval(25)
 
-            amp_label = QLabel("100%")
-            amp_label.setMinimumWidth(80)
+            ampl_label = QLabel("100%")
+            ampl_label.setMinimumWidth(80)
 
-            amp_slider.valueChanged.connect(
-                lambda v, l=amp_label: l.setText(f"{v}%")
+            ampl_slider.valueChanged.connect(
+                lambda v, l=ampl_label: l.setText(f"{v}%")
             )
-            amp_slider.sliderReleased.connect(
-                lambda c=ch, s=amp_slider: self.urukul_amp_released(c, s.value())
+            ampl_slider.sliderReleased.connect(
+                lambda c=ch, s=ampl_slider: self.urukul_ampl_released(c, s.value())
             )
 
-            ch_layout.addWidget(amp_slider, 1, 1)
-            ch_layout.addWidget(amp_label, 1, 2)
+            ch_layout.addWidget(ampl_slider, 1, 1)
+            ch_layout.addWidget(ampl_label, 1, 2)
 
             # RF on/off button
             rf_btn = QPushButton("RF OFF")
@@ -155,29 +149,16 @@ class DDSControlGUI(QMainWindow):
             group.setLayout(ch_layout)
             layout.addWidget(group)
 
-            self.urukul_channels.append({
+            self.urukul_chs.append({
                 'freq_slider': freq_slider,
                 'freq_label': freq_label,
-                'amp_slider': amp_slider,
-                'amp_label': amp_label,
+                'ampl_slider': ampl_slider,
+                'ampl_label': ampl_label,
                 'rf_btn': rf_btn,
                 'status': status_label
             })
 
-    def urukul_changed(self, channel, value):
-        self.client.set_frequency(0, value)
-        return
-        if not self.client:
-            return
-        try:
-            result = self.client.set_frequency(channel, value)
-            self.urukul_channels[channel]['status'].setText(result)
-            self.debug_text.append(result)
-        except Exception as e:
-            self.urukul_channels[channel]['status'].setText(f"Error: {str(e)}")
-
     def setup_mirny_tab(self, layout):
-        """Setup Mirny controls"""
         # All channels control buttons
         all_controls = QHBoxLayout()
 
@@ -196,7 +177,7 @@ class DDSControlGUI(QMainWindow):
         layout.addLayout(all_controls)
 
         # Create 4 channel controls
-        self.mirny_channels = []
+        self.mirny_chs = []
         for ch in range(4):
             group = QGroupBox(f"Mirny Channel {ch}")
             ch_layout = QGridLayout()
@@ -268,7 +249,7 @@ class DDSControlGUI(QMainWindow):
             group.setLayout(ch_layout)
             layout.addWidget(group)
 
-            self.mirny_channels.append({
+            self.mirny_chs.append({
                 'freq_spin': freq_spin,
                 'power_combo': power_combo,
                 'att_slider': att_slider,
@@ -278,58 +259,60 @@ class DDSControlGUI(QMainWindow):
             })
 
     # ========== URUKUL METHODS ==========
-    def urukul_freq_released(self, channel, value):
+    def urukul_freq_changed(self, ch, val):
         if not self.client:
             return
         try:
-            result = self.client.set_frequency(channel, value)
-            self.urukul_channels[channel]['status'].setText(result)
+            result = self.client.set_urukul_freq(int(ch), val)
+            self.urukul_chs[ch]['status'].setText(result)
             self.debug_text.append(result)
         except Exception as e:
-            self.urukul_channels[channel]['status'].setText(f"Error: {str(e)}")
+            self.urukul_chs[ch]['status'].setText(f"Error: {str(e)}")
 
-    def urukul_amp_released(self, channel, value):
+        self.urukul_chs[ch]['freq_label'].setText(f"{val} MHz")
+
+    def urukul_ampl_released(self, ch, val):
         if not self.client:
             return
         try:
-            result = self.client.set_amplitude(channel, value / 100.0)
-            self.urukul_channels[channel]['status'].setText(result)
+            result = self.client.set_urukul_ampl(ch, val / 100.0)
+            self.urukul_chs[ch]['status'].setText(result)
             self.debug_text.append(result)
         except Exception as e:
-            self.urukul_channels[channel]['status'].setText(f"Error: {str(e)}")
+            self.urukul_chs[ch]['status'].setText(f"Error: {str(e)}")
 
-    def toggle_urukul_rf(self, channel, checked, button):
+    def toggle_urukul_rf(self, ch, checked, button):
         if not self.client:
             return
         try:
             if checked:
-                result = self.client.rf_on(channel)
+                result = self.client.urukul_rf_on(ch)
                 button.setText("RF ON")
             else:
-                result = self.client.rf_off(channel)
+                result = self.client.urukul_rf_off(ch)
                 button.setText("RF OFF")
-            self.urukul_channels[channel]['status'].setText(result)
+            self.urukul_chs[ch]['status'].setText(result)
             self.debug_text.append(result)
         except Exception as e:
-            self.urukul_channels[channel]['status'].setText(f"Error: {str(e)}")
+            self.urukul_chs[ch]['status'].setText(f"Error: {str(e)}")
 
     def all_urukul_on(self):
         for ch in range(4):
             try:
-                result = self.client.rf_on(ch)
-                self.urukul_channels[ch]['rf_btn'].setChecked(True)
-                self.urukul_channels[ch]['rf_btn'].setText("RF ON")
-                self.urukul_channels[ch]['status'].setText(result)
+                result = self.client.urukul_rf_on(ch)
+                self.urukul_chs[ch]['rf_btn'].setChecked(True)
+                self.urukul_chs[ch]['rf_btn'].setText("RF ON")
+                self.urukul_chs[ch]['status'].setText(result)
             except Exception as e:
                 self.debug_text.append(f"Error CH{ch}: {str(e)}")
 
     def all_urukul_off(self):
         for ch in range(4):
             try:
-                result = self.client.rf_off(ch)
-                self.urukul_channels[ch]['rf_btn'].setChecked(False)
-                self.urukul_channels[ch]['rf_btn'].setText("RF OFF")
-                self.urukul_channels[ch]['status'].setText(result)
+                result = self.client.urukul_rf_off(ch)
+                self.urukul_chs[ch]['rf_btn'].setChecked(False)
+                self.urukul_chs[ch]['rf_btn'].setText("RF OFF")
+                self.urukul_chs[ch]['status'].setText(result)
             except Exception as e:
                 self.debug_text.append(f"Error CH{ch}: {str(e)}")
 
@@ -342,68 +325,68 @@ class DDSControlGUI(QMainWindow):
                 if ch in state:
                     ch_state = state[ch]
                     # Update UI
-                    self.urukul_channels[ch]['freq_slider'].setValue(int(ch_state['freq_mhz']))
-                    self.urukul_channels[ch]['freq_label'].setText(f"{int(ch_state['freq_mhz'])} MHz")
-                    self.urukul_channels[ch]['amp_slider'].setValue(int(ch_state['amplitude'] * 100))
-                    self.urukul_channels[ch]['amp_label'].setText(f"{int(ch_state['amplitude'] * 100)}%")
-                    self.urukul_channels[ch]['rf_btn'].setChecked(ch_state['on'])
-                    self.urukul_channels[ch]['rf_btn'].setText("RF ON" if ch_state['on'] else "RF OFF")
+                    self.urukul_chs[ch]['freq_slider'].setValue(int(ch_state['freq_mhz']))
+                    self.urukul_chs[ch]['freq_label'].setText(f"{int(ch_state['freq_mhz'])} MHz")
+                    self.urukul_chs[ch]['ampl_slider'].setValue(int(ch_state['ampl'] * 100))
+                    self.urukul_chs[ch]['ampl_label'].setText(f"{int(ch_state['ampl'] * 100)}%")
+                    self.urukul_chs[ch]['rf_btn'].setChecked(ch_state['on'])
+                    self.urukul_chs[ch]['rf_btn'].setText("RF ON" if ch_state['on'] else "RF OFF")
         except Exception as e:
             self.debug_text.append(f"Error refreshing Urukul state: {str(e)}")
 
     # ========== MIRNY METHODS ==========
-    def mirny_freq_changed(self, channel, value):
+    def mirny_freq_changed(self, ch, val):
         if not self.client:
             return
         try:
-            result = self.client.mirny_set_frequency(channel, value)
-            self.mirny_channels[channel]['status'].setText(result)
+            result = self.client.mirny_set_freq(ch, val)
+            self.mirny_chs[ch]['status'].setText(result)
             self.debug_text.append(result)
         except Exception as e:
-            self.mirny_channels[channel]['status'].setText(f"Error: {str(e)}")
+            self.mirny_chs[ch]['status'].setText(f"Error: {str(e)}")
 
-    def mirny_power_changed(self, channel, value):
+    def mirny_power_changed(self, ch, val):
         if not self.client:
             return
         try:
-            result = self.client.mirny_set_power(channel, value)
-            self.mirny_channels[channel]['status'].setText(result)
+            result = self.client.mirny_set_power(ch, val)
+            self.mirny_chs[ch]['status'].setText(result)
             self.debug_text.append(result)
         except Exception as e:
-            self.mirny_channels[channel]['status'].setText(f"Error: {str(e)}")
+            self.mirny_chs[ch]['status'].setText(f"Error: {str(e)}")
 
-    def mirny_att_released(self, channel, value):
+    def mirny_att_released(self, ch, val):
         if not self.client:
             return
         try:
-            result = self.client.mirny_set_attenuation(channel, value)
-            self.mirny_channels[channel]['status'].setText(result)
+            result = self.client.mirny_set_attenuation(ch, val)
+            self.mirny_chs[ch]['status'].setText(result)
             self.debug_text.append(result)
         except Exception as e:
-            self.mirny_channels[channel]['status'].setText(f"Error: {str(e)}")
+            self.mirny_chs[ch]['status'].setText(f"Error: {str(e)}")
 
-    def toggle_mirny_rf(self, channel, checked, button):
+    def toggle_mirny_rf(self, ch, checked, button):
         if not self.client:
             return
         try:
             if checked:
-                result = self.client.mirny_rf_on(channel)
+                result = self.client.mirny_rf_on(ch)
                 button.setText("RF ON")
             else:
-                result = self.client.mirny_rf_off(channel)
+                result = self.client.mirny_rf_off(ch)
                 button.setText("RF OFF")
-            self.mirny_channels[channel]['status'].setText(result)
+            self.mirny_chs[ch]['status'].setText(result)
             self.debug_text.append(result)
         except Exception as e:
-            self.mirny_channels[channel]['status'].setText(f"Error: {str(e)}")
+            self.mirny_chs[ch]['status'].setText(f"Error: {str(e)}")
 
     def all_mirny_on(self):
         for ch in range(4):
             try:
                 result = self.client.mirny_rf_on(ch)
-                self.mirny_channels[ch]['rf_btn'].setChecked(True)
-                self.mirny_channels[ch]['rf_btn'].setText("RF ON")
-                self.mirny_channels[ch]['status'].setText(result)
+                self.mirny_chs[ch]['rf_btn'].setChecked(True)
+                self.mirny_chs[ch]['rf_btn'].setText("RF ON")
+                self.mirny_chs[ch]['status'].setText(result)
             except Exception as e:
                 self.debug_text.append(f"Error CH{ch}: {str(e)}")
 
@@ -411,9 +394,9 @@ class DDSControlGUI(QMainWindow):
         for ch in range(4):
             try:
                 result = self.client.mirny_rf_off(ch)
-                self.mirny_channels[ch]['rf_btn'].setChecked(False)
-                self.mirny_channels[ch]['rf_btn'].setText("RF OFF")
-                self.mirny_channels[ch]['status'].setText(result)
+                self.mirny_chs[ch]['rf_btn'].setChecked(False)
+                self.mirny_chs[ch]['rf_btn'].setText("RF OFF")
+                self.mirny_chs[ch]['status'].setText(result)
             except Exception as e:
                 self.debug_text.append(f"Error CH{ch}: {str(e)}")
 
@@ -426,17 +409,16 @@ class DDSControlGUI(QMainWindow):
                 if ch in state:
                     ch_state = state[ch]
                     # Update UI
-                    self.mirny_channels[ch]['freq_spin'].setValue(ch_state['freq_ghz'])
-                    self.mirny_channels[ch]['power_combo'].setCurrentIndex(ch_state['power'])
-                    self.mirny_channels[ch]['att_slider'].setValue(int(ch_state['att'] * 10))
-                    self.mirny_channels[ch]['att_label'].setText(f"{ch_state['att']:.1f} dB")
-                    self.mirny_channels[ch]['rf_btn'].setChecked(ch_state['on'])
-                    self.mirny_channels[ch]['rf_btn'].setText("RF ON" if ch_state['on'] else "RF OFF")
+                    self.mirny_chs[ch]['freq_spin'].setValue(ch_state['freq_ghz'])
+                    self.mirny_chs[ch]['power_combo'].setCurrentIndex(ch_state['power'])
+                    self.mirny_chs[ch]['att_slider'].setValue(int(ch_state['att'] * 10))
+                    self.mirny_chs[ch]['att_label'].setText(f"{ch_state['att']:.1f} dB")
+                    self.mirny_chs[ch]['rf_btn'].setChecked(ch_state['on'])
+                    self.mirny_chs[ch]['rf_btn'].setText("RF ON" if ch_state['on'] else "RF OFF")
         except Exception as e:
             self.debug_text.append(f"Error refreshing Mirny state: {str(e)}")
 
     def closeEvent(self, event):
-        """Clean up on close"""
         if self.client:
             try:
                 self.client.close_rpc()

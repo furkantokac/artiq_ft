@@ -1,5 +1,9 @@
 result
 examples/*.elf
+examples/*.mdb-lock
+
+*.mdb-lock
+
 __pycache__
 
 build

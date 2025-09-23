@@ -4,17 +4,18 @@ def add_leds():
             "type": "local",
             "module": "artiq.coredevice.ttl",
             "class": "TTLOut",
-            "arguments": {"channel": 0x12+i},
-        } for i in range(4)
+            "arguments": {"channel": 0x15+i},
+        } for i in range(2)
     })
 
+    return
     device_db.update({
         "led" + str(i+4): {
             "type": "local",
             "module": "artiq.coredevice.ttl",
             "class": "TTLOut",
-            "arguments": {"channel": 0xe+i},
-        } for i in range(4)
+            "arguments": {"channel": 0x000035+i},
+        } for i in range(1)
     })
 
 def add_urukul_1():
